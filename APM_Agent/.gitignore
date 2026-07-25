@@ -1,0 +1,4 @@
+build/
+build-static/
+certs/*.key
+certs/*.crt

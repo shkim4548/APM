@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!-- 정적 파일(wwwroot)을 도메인 DLL에 내장할 때, 파일명에 점이 여러 개 있으면
+         (예: chart.umd.js) 기본 리소스 이름 규칙(점으로 경로 구분)이 모호해짐 -
+         빌드 시점에 실제 상대 경로를 기록한 매니페스트를 따로 생성해서 이 문제를 피함. -->
+    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\..\..\ApmConsole.Contracts\ApmConsole.Contracts.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.10" />
+    <PackageReference Include="Google.Protobuf" Version="3.28.2" />
+    <PackageReference Include="Grpc.Tools" Version="2.66.0" PrivateAssets="All" />
+    <!-- GenerateEmbeddedFilesManifest가 실제로 매니페스트를 생성하려면 이 패키지의 빌드
+         타겟이 필요함 - FrameworkReference(런타임 어셈블리만 제공)만으론 부족했음(실측 확인). -->
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="8.0.10" />
+  </ItemGroup>
+
+  <!-- wwwroot 아래 파일을 어셈블리에 그대로 내장 - LogicalName을 슬래시 경로로 명시해서
+       위 매니페스트가 정확한 상대 경로("wwwroot/lib/chartjs/chart.umd.js")를 기록하게 함
+       (LogicalName 없이 두면 기본 규칙이 점으로 경로를 이어붙여서 다중 확장자 파일명과 충돌). -->
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot\**\*">
+      <LogicalName>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!-- APM_Agent의 .proto를 그대로 참조 - C++/C# 양쪽이 같은 스키마 정의 하나를 공유
+       (복사해서 따로 관리하면 나중에 스키마가 갈라질 위험). GrpcServices="None": gRPC
+       서비스 스텁은 안 씀, Protobuf 메시지 클래스(직렬화/역직렬화)만 코드젠. -->
+  <ItemGroup>
+    <Protobuf Include="..\..\..\..\..\APM_Agent\Protocol\Metric.proto"
+              ProtoRoot="..\..\..\..\..\APM_Agent\Protocol"
+              GrpcServices="None" />
+  </ItemGroup>
+
+  <!-- 빌드 산출물을 Host의 Modules/ 폴더로 복사 - 배포 시 appsettings의 EnabledDomains만
+       바꾸면 재빌드 없이 도메인을 켜고 끌 수 있게 하기 위함(설계 문서 참고).
+       $(MSBuildThisFileDirectory) 기준 상대 경로 사용 - $(SolutionDir)은 .sln을 거치지 않고
+       csproj 단독 빌드 시 비어있을 수 있어 신뢰 불가. <Copy> 태스크는 MSBuild 내장 기능이라
+       Windows/Linux 양쪽에서 셸 명령 차이 없이 동일하게 동작함(xcopy/cp 같은 OS별 명령 안 씀). -->
+  <Target Name="CopyToHostModules" AfterTargets="Build">
+    <ItemGroup>
+      <OutputFiles Include="$(TargetDir)**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OutputFiles)"
+          DestinationFolder="$(MSBuildThisFileDirectory)..\..\..\ApmConsole.Host\bin\$(Configuration)\net8.0\Modules\Apm\%(RecursiveDir)" />
+  </Target>
+
+</Project>

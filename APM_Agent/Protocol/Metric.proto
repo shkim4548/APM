@@ -1,0 +1,18 @@
+syntax = "proto3";
+package apm;
+
+message Metric
+{
+    double cpu_usage_percent = 1;
+    uint64 mem_used_bytes = 2;
+    uint64 mem_total_bytes = 3;
+    uint64 disk_used_bytes = 4;
+    uint64 disk_total_bytes = 5;
+    uint64 net_rx_bytes_per_sec = 6;
+    uint64 net_tx_bytes_per_sec = 7;
+    uint32 tcp_rtt_us = 8;
+    uint32 tcp_rtt_var_us = 9;
+    uint32 tcp_retransmits = 10;
+    uint32 tcp_total_retrans = 11;
+    uint32 tcp_snd_cwnd = 12;
+}

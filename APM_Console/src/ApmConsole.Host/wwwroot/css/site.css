@@ -1,0 +1,141 @@
+/* GameServerAdmin 공용 대시보드 스타일 - 여러 도메인이 공유하는 기반 스타일이라
+   Host의 물리 wwwroot에 위치(signalr.min.js와 같은 이유 - 도메인 전용 임베디드 아님). */
+
+:root {
+    --bg: #F3F2EE;
+    --surface: #FFFFFF;
+    --text: #201E1A;
+    --text-dim: #6B675E;
+    --border: #DDD9CF;
+    --accent: #3D6B8F;
+    --accent-dim: #E7EFF4;
+    --success: #2E7D4F;
+    --success-dim: #E4F3EA;
+    --danger: #B23A3A;
+    --danger-dim: #F8E9E9;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, "SF Mono", monospace;
+    --sans: -apple-system, "Segoe UI", ui-sans-serif, Roboto, "Malgun Gothic", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #1A1815;
+        --surface: #221F1B;
+        --text: #EDEAE2;
+        --text-dim: #A39D8E;
+        --border: #38342C;
+        --accent: #7EAFD1;
+        --accent-dim: #22323D;
+        --success: #6FCB94;
+        --success-dim: #1E3327;
+        --danger: #E08080;
+        --danger-dim: #3A2323;
+    }
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+}
+
+.dashboard {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+
+.dashboard h1 {
+    font-size: 24px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    margin: 0;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    width: fit-content;
+    background: var(--border);
+    color: var(--text-dim);
+}
+.status-pill::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+}
+.status-pill.status-connected { background: var(--success-dim); color: var(--success); }
+.status-pill.status-error { background: var(--danger-dim); color: var(--danger); }
+
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    overflow-x: auto;
+}
+
+.chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 20px;
+}
+
+.chart-wrap {
+    position: relative;
+    height: 220px;
+}
+
+.card h2 {
+    font-size: 13px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    margin: 0 0 16px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    font-variant-numeric: tabular-nums;
+}
+
+thead th {
+    text-align: left;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+tbody td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+tbody tr:hover {
+    background: var(--accent-dim);
+}
+
+.empty-state {
+    color: var(--text-dim);
+    font-size: 14px;
+}

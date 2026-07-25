@@ -1,0 +1,18 @@
+# C++ (APM_Agent, GW2_CrossPlatformCore)
+build/
+build-static/
+*.obj
+*.pdb
+
+# .NET (APM_Console)
+bin/
+obj/
+*.user
+
+# 비밀키/인증서 (테스트용이라도 커밋하지 않음 - 각 certs/generate_*.sh로 로컬 생성)
+certs/*.key
+certs/*.crt
+certs/*.pem
+
+# 로컬 실행 산출물
+*.db

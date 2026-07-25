@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROJECT_TECHNICAL_REVIEW — APM Agent &amp; Console 기술 복습 문서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0D1117;
+    --card:      #161B22;
+    --card2:     #1C2230;
+    --border:    #30363D;
+    --border-2:  #21262D;
+    --accent:    #58A6FF;
+    --success:   #3FB950;
+    --warning:   #D29922;
+    --danger:    #F85149;
+    --violet:    #A371F7;
+    --text-1:    #E6EDF3;
+    --text-2:    #8B949E;
+    --text-3:    #6E7681;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text-1);
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  a { color: var(--accent); }
+  code { font-family: 'Fira Code', monospace; }
+
+  /* ── LAYOUT ── */
+  .shell { display: flex; max-width: 1400px; margin: 0 auto; }
+  nav.toc {
+    position: sticky; top: 0; align-self: flex-start;
+    width: 260px; flex-shrink: 0;
+    height: 100vh; overflow-y: auto;
+    padding: 1.5rem 1rem;
+    border-right: 1px solid var(--border-2);
+    background: rgba(13,17,23,0.9);
+  }
+  nav.toc .toc-title {
+    font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.85rem;
+    color: var(--accent); margin-bottom: 1rem; padding: 0 0.5rem;
+  }
+  nav.toc a {
+    display: block; padding: 0.35rem 0.5rem; border-radius: 6px;
+    color: var(--text-2); text-decoration: none; font-size: 0.82rem;
+  }
+  nav.toc a:hover { background: var(--card); color: var(--text-1); }
+  nav.toc a.q-link { font-size: 0.74rem; color: var(--text-3); padding-left: 1.1rem; }
+  main { flex: 1; min-width: 0; padding: 2.5rem 3rem 6rem; max-width: 900px; }
+
+  /* ── HEADER ── */
+  .doc-title { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 1.9rem; margin-bottom: 0.6rem; }
+  .doc-sub { color: var(--text-2); font-size: 0.95rem; max-width: 700px; margin-bottom: 0.4rem; }
+  .doc-meta { font-family: 'Fira Code'; font-size: 0.78rem; color: var(--text-3); margin-bottom: 2.5rem; }
+
+  section.sec { padding-top: 3.2rem; border-top: 1px solid var(--border-2); margin-top: 3.2rem; }
+  section.sec:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+  .sec-label { font-family: 'Fira Code'; font-size: 0.75rem; color: var(--text-3); margin-bottom: 0.4rem; }
+  h2 { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 1.5rem; margin-bottom: 1rem; scroll-margin-top: 1rem; }
+  h3 { font-family: 'JetBrains Mono'; font-weight: 600; font-size: 1.08rem; margin: 2rem 0 0.8rem; color: var(--text-1); scroll-margin-top: 1rem; }
+  h3 .num { color: var(--accent); margin-right: 0.4rem; }
+  p { margin-bottom: 0.9rem; color: var(--text-2); }
+  p strong, li strong { color: var(--text-1); }
+  ul, ol { margin: 0 0 1rem 1.3rem; color: var(--text-2); }
+  li { margin-bottom: 0.4rem; }
+
+  /* ── CODE ── */
+  .code-block {
+    background: var(--card2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 1rem 1.25rem; font-family: 'Fira Code'; font-size: 0.8rem;
+    line-height: 1.7; overflow-x: auto; margin: 0.9rem 0;
+  }
+  .code-block pre { margin: 0; white-space: pre; }
+  .c-comment { color: #6E7681; } .c-key { color: #FF7B72; } .c-type { color: #79C0FF; }
+  .c-fn { color: #D2A8FF; } .c-num { color: #79C0FF; } .c-str { color: #A5D6FF; }
+  code.inline {
+    background: var(--card2); border: 1px solid var(--border); border-radius: 4px;
+    padding: 0.1rem 0.35rem; font-size: 0.85em; color: var(--text-1);
+  }
+
+  /* ── CALLOUTS ── */
+  .callout {
+    border-radius: 8px; padding: 1.1rem 1.3rem; margin: 1rem 0; font-size: 0.88rem;
+  }
+  .callout.warn { background: rgba(210,153,34,0.08); border: 1px solid rgba(210,153,34,0.4); color: var(--warning); }
+  .callout.info { background: rgba(88,166,255,0.06); border: 1px solid rgba(88,166,255,0.35); color: var(--text-2); }
+  .callout.info strong { color: var(--accent); }
+  .callout.note { background: var(--card); border: 1px solid var(--border); color: var(--text-2); }
+
+  /* ── Q&A ── */
+  .qa-box {
+    background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 6px; padding: 0.9rem 1.1rem; margin: 0.7rem 0; scroll-margin-top: 1rem;
+  }
+  .qa-q { font-family: 'JetBrains Mono'; font-weight: 600; font-size: 0.87rem; color: var(--text-1); margin-bottom: 0.5rem; }
+  .qa-q::before { content: "Q. "; color: var(--accent); }
+  .qa-a { font-size: 0.85rem; color: var(--text-2); }
+  .qa-a::before { content: "→ "; color: var(--success); }
+
+  /* ── TABLE ── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 1rem 0 1.4rem; }
+  th { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); font-family: 'Fira Code'; font-size: 0.74rem; color: var(--text-3); font-weight: 400; }
+  td { padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--border-2); color: var(--text-2); vertical-align: top; }
+  td:first-child { color: var(--text-1); font-family: 'Fira Code'; font-size: 0.8rem; white-space: nowrap; }
+  td.hl { color: var(--success); font-family: 'Fira Code'; }
+
+  /* ── BUG CARDS ── */
+  .bug-card { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--danger); border-radius: 8px; padding: 1.1rem 1.3rem; margin: 1rem 0; }
+  .bug-card .bug-num { font-family: 'Fira Code'; font-size: 0.75rem; color: var(--danger); margin-bottom: 0.3rem; }
+  .bug-card h4 { font-family: 'JetBrains Mono'; font-size: 0.98rem; margin-bottom: 0.6rem; color: var(--text-1); }
+  .bug-card .row { margin-bottom: 0.45rem; font-size: 0.85rem; }
+  .bug-card .row b { color: var(--text-1); font-weight: 600; display: inline-block; min-width: 3.6rem; }
+
+  /* ── DIAGRAM WRAPPER ── */
+  .diagram {
+    background: var(--card2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.4rem; margin: 1.2rem 0 1.6rem; overflow-x: auto;
+  }
+  .diagram-title { font-family: 'Fira Code'; font-size: 0.72rem; color: var(--text-3); margin-bottom: 0.9rem; }
+  .diagram svg { display: block; margin: 0 auto; max-width: 100%; }
+  .diagram .cap { font-size: 0.78rem; color: var(--text-3); text-align: center; margin-top: 0.7rem; }
+
+  footer { text-align: center; padding: 3rem 2rem; font-family: 'Fira Code'; font-size: 0.72rem; color: var(--text-3); }
+
+  @media (max-width: 900px) {
+    nav.toc { display: none; }
+    main { padding: 2rem 1.25rem 4rem; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<nav class="toc">
+  <div class="toc-title">// Contents</div>
+  <a href="#s0">0. 프로젝트 한눈에 보기</a>
+  <a href="#s1">1. 아키텍처 전체 흐름</a>
+  <a href="#s2">2. 크로스플랫폼 코어</a>
+  <a href="#s3">3. 보안 설계</a>
+  <a href="#s4">4. 통신 프로토콜</a>
+  <a href="#s5">5. 데이터 저장</a>
+  <a href="#s6">6. 수집 지표 구현 상세</a>
+  <a href="#s7">7. 성능/권한 설계</a>
+  <a href="#s8">8. APM_Console 아키텍처</a>
+  <a href="#s9">9. 발견한 버그 (7건)</a>
+  <a href="#s10">10. 테스트 전략</a>
+  <a href="#s11">11. 예상 질문 통합</a>
+  <a href="#s12">12. 용어 미니 사전</a>
+  <a href="#s13">13. 라이브 데모 순서</a>
+</nav>
+
+<main>
+  <div class="doc-title">PROJECT_TECHNICAL_REVIEW</div>
+  <p class="doc-sub">APM_Agent / APM_Console 프로젝트 복습 + 면접 준비용 기술문서 — HTML 버전(시각 도표 추가).
+  "이미 다 안다"가 아니라 "설명이 필요할 때 바로 펼쳐볼 수 있다"를 목표로 작성했다. 원본은 <code class="inline">Docs/PROJECT_TECHNICAL_REVIEW.md</code>.</p>
+  <p class="doc-meta">각 섹션의 Q&amp;A 박스는 실제로 나올 법한 질문 + 답변 포인트.</p>
+
+<!-- ============================================================ -->
+<section class="sec" id="s0">
+  <div class="sec-label">// Overview</div>
+  <h2>0. 프로젝트 한눈에 보기</h2>
+
+  <h3>이게 뭔가</h3>
+  <p><code class="inline">APM_Agent</code>(C++)와 <code class="inline">APM_Console</code>(.NET)로 이루어진 경량 모니터링(APM/옵저버빌리티) 시스템. 세 개의 프로세스가 순서대로 연결된다:</p>
+  <ul>
+    <li><strong>Agent</strong>: CPU/메모리/디스크/네트워크/TCP 연결 품질을 주기적으로 수집해서 Collector로 전송.</li>
+    <li><strong>Collector</strong>: Agent로부터 받은 데이터를 SQLite에 저장하고, 동시에 APM_Console로도 전송(재전송).</li>
+    <li><strong>APM_Console</strong>: Collector가 보낸 데이터를 받아서 자체 DB에 저장하고, 웹 브라우저에서 실시간 그래프/표로 보여줌.</li>
+  </ul>
+
+  <h3>왜 이 프로젝트를 만들었나</h3>
+  <p>원래 이 저장소(<code class="inline">gw2-cross</code>)는 IOCP 기반 게임 서버를 크로스플랫폼으로 포팅하는 프로젝트로 시작했는데, 목표가 "APM/옵저버빌리티 개발자 포지션 지원용 포트폴리오"로 재정의되면서, 기존에 만들던 크로스플랫폼 네트워크 코어(<code class="inline">GW2_CrossPlatformCore</code>) 위에 이 APM 시스템을 새로 얹었다.</p>
+
+  <div class="callout warn">
+    <strong>⚠ 네이밍 원칙 — 면접에서 반드시 지킬 것</strong><br><br>
+    내부 문서(WORK_STATUS.md 등)는 "게임 서버"라는 표현을 그대로 쓰지만, <strong>대외적으로(면접 포함) 설명할 때는 절대 "게임"이라는 단어를 쓰면 안 된다.</strong>
+    <ul style="margin-top:0.6rem;">
+      <li>"게임 서버" → <strong>"비동기 I/O 기반 다중 클라이언트 TCP 서버"</strong></li>
+      <li>"게임 클라이언트 접속 처리" → <strong>"다중 에이전트 동시 접속 처리"</strong></li>
+      <li>만들게 된 계기 → <strong>"네트워크 프로그래밍과 동시성 제어를 깊게 익히고 싶어서 직접 구현했다"</strong></li>
+    </ul>
+  </div>
+
+  <h3>기술 스택 요약</h3>
+  <table>
+    <tr><th>영역</th><th>기술</th></tr>
+    <tr><td>네트워크 코어(C++)</td><td>C++20, Standalone Asio(Boost 미사용)</td></tr>
+    <tr><td>보안(현재)</td><td>TLS(OpenSSL) + AES-256-GCM(AEAD)</td></tr>
+    <tr><td>보안(과거 구현 경험)</td><td>ARIA-256-CBC + HMAC-SHA256(Encrypt-then-MAC)</td></tr>
+    <tr><td>직렬화</td><td>Protobuf</td></tr>
+    <tr><td>저장(Agent 쪽)</td><td>SQLite / PostgreSQL·TimescaleDB(컴파일 타임 선택)</td></tr>
+    <tr><td>웹 대시보드</td><td>.NET 8, ASP.NET Core MVC + Razor, EF Core, SignalR</td></tr>
+    <tr><td>플러그인 구조</td><td>Razor Class Library + AssemblyLoadContext</td></tr>
+    <tr><td>테스트</td><td>GoogleTest(C++) 9개, xUnit(.NET) 8개</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s1">
+  <div class="sec-label">// Architecture</div>
+  <h2>1. 아키텍처 전체 흐름</h2>
+
+  <div class="diagram">
+    <div class="diagram-title">// 전체 파이프라인 — 3개 프로세스, 2개의 암호화 구간</div>
+    <svg viewBox="0 0 860 430" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+      <defs>
+        <marker id="arrow1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#58A6FF"/></marker>
+      </defs>
+      <!-- Agent box -->
+      <rect x="20" y="30" width="230" height="150" rx="10" fill="#161B22" stroke="#58A6FF" stroke-width="1.4"/>
+      <text x="135" y="56" text-anchor="middle" fill="#58A6FF" font-weight="700" font-size="14">Agent</text>
+      <text x="135" y="80" text-anchor="middle" fill="#8B949E" font-size="11">ResourceCollector</text>
+      <text x="135" y="98" text-anchor="middle" fill="#6E7681" font-size="10">CPU/메모리/디스크/네트워크/TCP</text>
+      <text x="135" y="122" text-anchor="middle" fill="#8B949E" font-size="11">Protobuf 직렬화</text>
+      <text x="135" y="146" text-anchor="middle" fill="#8B949E" font-size="11">AesGcmPayload::Seal()</text>
+      <text x="135" y="164" text-anchor="middle" fill="#3FB950" font-size="10">AES-256-GCM</text>
+
+      <!-- arrow 1 -->
+      <line x1="250" y1="105" x2="300" y2="105" stroke="#58A6FF" stroke-width="1.6" marker-end="url(#arrow1)"/>
+      <text x="275" y="95" text-anchor="middle" fill="#D29922" font-size="9">TLS</text>
+
+      <!-- Collector box -->
+      <rect x="300" y="20" width="250" height="230" rx="10" fill="#161B22" stroke="#F85149" stroke-width="1.4"/>
+      <text x="425" y="46" text-anchor="middle" fill="#F85149" font-weight="700" font-size="14">Collector</text>
+      <text x="425" y="70" text-anchor="middle" fill="#8B949E" font-size="11">ApmSession::ProcessAccumulated</text>
+      <text x="425" y="86" text-anchor="middle" fill="#6E7681" font-size="10">프레이밍 해제 + 복호화</text>
+      <rect x="325" y="100" width="200" height="34" rx="6" fill="#1C2230" stroke="#30363D"/>
+      <text x="425" y="121" text-anchor="middle" fill="#8B949E" font-size="11">PacketHandler → IMetricStore</text>
+      <text x="425" y="152" text-anchor="middle" fill="#6E7681" font-size="10">SQLite 로컬 저장</text>
+      <rect x="325" y="164" width="200" height="34" rx="6" fill="#1C2230" stroke="#30363D"/>
+      <text x="425" y="185" text-anchor="middle" fill="#8B949E" font-size="11">ResilientSender (재연결 큐잉)</text>
+      <text x="425" y="216" text-anchor="middle" fill="#3FB950" font-size="10">AES-256-GCM (webserver_aes.key)</text>
+      <text x="425" y="234" text-anchor="middle" fill="#6E7681" font-size="9">Collector → Console 전용 인증서 TLS</text>
+
+      <!-- arrow 2 -->
+      <line x1="550" y1="180" x2="610" y2="180" stroke="#F85149" stroke-width="1.6" marker-end="url(#arrow1)"/>
+      <text x="580" y="170" text-anchor="middle" fill="#D29922" font-size="9">TLS</text>
+
+      <!-- APM_Console box -->
+      <rect x="610" y="90" width="230" height="230" rx="10" fill="#161B22" stroke="#A371F7" stroke-width="1.4"/>
+      <text x="725" y="116" text-anchor="middle" fill="#A371F7" font-weight="700" font-size="14">APM_Console (.NET 8)</text>
+      <text x="725" y="140" text-anchor="middle" fill="#8B949E" font-size="11">MetricsReceiverService</text>
+      <text x="725" y="156" text-anchor="middle" fill="#6E7681" font-size="10">TcpListener + SslStream</text>
+      <text x="725" y="180" text-anchor="middle" fill="#8B949E" font-size="11">ApmDbContext (SQLite) 저장</text>
+      <text x="725" y="204" text-anchor="middle" fill="#8B949E" font-size="11">MetricsHub (SignalR) push</text>
+      <line x1="670" y1="220" x2="780" y2="220" stroke="#30363D"/>
+      <text x="725" y="242" text-anchor="middle" fill="#3FB950" font-size="11">/apm/dashboard</text>
+      <text x="725" y="260" text-anchor="middle" fill="#6E7681" font-size="10">Chart.js 그래프 5개 + 실시간 표</text>
+
+      <!-- bottom note -->
+      <text x="430" y="400" text-anchor="middle" fill="#6E7681" font-size="11">Collector는 "저장"과 "APM_Console로 재전송"을 동시에, 서로 독립적으로 수행한다</text>
+    </svg>
+    <div class="cap">Agent↔Collector, Collector↔Console 모두 AES-256-GCM — 단, 키는 구간별로 분리(agent_collector_aes.key / webserver_aes.key)</div>
+  </div>
+
+  <p>핵심은 <strong>Collector가 두 가지 역할을 동시에 한다</strong>는 것: (1) Agent로부터 받은 데이터를 로컬 SQLite에 저장하는 "수집 서버" 역할과, (2) 저장한 데이터를 다시 APM_Console로 넘겨주는 "중계자" 역할. 이 둘은 서로 독립적이다 — 저장이 실패해도 전송은 별개로 진행되고, 전송(WebServer 연결)이 끊겨도 로컬 저장은 계속된다.</p>
+
+  <h3><span class="num">//</span>GW2_CrossPlatformCore를 왜 공유하나</h3>
+  <p>이 프로젝트의 네트워크 코어(<code class="inline">GW2_CrossPlatformCore</code>)는 원래 게임 서버 포팅용으로 만든 것인데, <code class="inline">APM_Agent</code>도 이걸 그대로 가져다 쓴다. 이유는 단순하다 — <strong>비동기 I/O 코어 자체는 도메인(게임이냐 모니터링이냐)과 무관</strong>하기 때문이다. <code class="inline">asio::io_context</code> 기반 이벤트 루프, TLS 소켓 래핑, 스레드 풀 관리 같은 건 "TCP로 여러 클라이언트를 비동기로 상대한다"는 문제의 해법이지 게임 전용 로직이 아니다.</p>
+
+  <div class="code-block"><pre><span class="c-comment">// CMakeLists.txt</span>
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../GW2_Server/GW2_CrossPlatformCore ...)
+add_subdirectory(Common)   <span class="c-comment">// APM_Agent 전용 코드</span>
+add_subdirectory(Storage)  <span class="c-comment">// APM_Agent 전용 코드</span></pre></div>
+
+  <div class="qa-box">
+    <div class="qa-q">왜 게임 서버 코드베이스에서 APM 에이전트를 만들었나요?</div>
+    <div class="qa-a">기존에 크로스플랫폼 비동기 네트워크 코어를 만들어둔 게 있었고, 그 코어 자체는 특정 도메인에 종속되지 않는 범용 인프라라 APM 에이전트에도 그대로 재사용할 수 있었습니다. 코어(네트워크 계층)와 애플리케이션 로직(무엇을 주고받을지)을 분리해서 설계했기 때문에 가능했던 재사용입니다.</div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s2">
+  <div class="sec-label">// Cross-Platform Core</div>
+  <h2>2. 크로스플랫폼 코어 — Standalone Asio</h2>
+
+  <p>원본(<code class="inline">GW2_Server/GW2_ServerCore</code>)은 Windows 전용 <strong>IOCP</strong>(I/O Completion Port)로 짜여 있었다. Windows API에 강하게 결합돼 있어서 Linux 등 다른 OS에서는 아예 컴파일조차 안 된다.</p>
+
+  <p>Linux의 비동기 I/O 메커니즘은 <strong>epoll</strong>이다. IOCP와 epoll은 개념(완료 통지 vs 준비 통지)부터 다르고, 이 둘을 직접 추상화하는 레이어를 처음부터 만드는 건 상당한 공수다. <strong>Standalone Asio</strong>(Boost 전체가 아니라 Asio 라이브러리만 떼어 쓰는 버전)는 이미 이 추상화를 제공한다.</p>
+
+  <div class="diagram">
+    <div class="diagram-title">// OS별 비동기 I/O 추상화</div>
+    <svg viewBox="0 0 700 180" xmlns="http://www.w3.org/2000/svg">
+      <rect x="230" y="20" width="240" height="50" rx="8" fill="#161B22" stroke="#58A6FF" stroke-width="1.4"/>
+      <text x="350" y="50" text-anchor="middle" fill="#58A6FF" font-weight="700" font-size="13" font-family="JetBrains Mono">asio::io_context</text>
+
+      <line x1="300" y1="70" x2="150" y2="120" stroke="#3FB950" stroke-width="1.4"/>
+      <line x1="400" y1="70" x2="550" y2="120" stroke="#3FB950" stroke-width="1.4"/>
+
+      <rect x="50" y="120" width="200" height="46" rx="8" fill="#1C2230" stroke="#30363D"/>
+      <text x="150" y="148" text-anchor="middle" fill="#8B949E" font-size="12">Windows → IOCP</text>
+
+      <rect x="450" y="120" width="200" height="46" rx="8" fill="#1C2230" stroke="#30363D"/>
+      <text x="550" y="148" text-anchor="middle" fill="#8B949E" font-size="12">Linux → epoll</text>
+
+      <text x="350" y="100" text-anchor="middle" fill="#6E7681" font-size="10">애플리케이션 코드는 이 분기를 몰라도 됨</text>
+    </svg>
+  </div>
+
+  <p><strong>설계 원칙</strong>: 비동기 I/O·멀티스레드 처리 "구조" 자체(이벤트 루프, 콜백 기반 처리)는 기존 설계를 유지하고, 그 아래 OS별 구현 디테일만 Asio로 교체했다.</p>
+
+  <p><strong>검증</strong>: Linux에서 빌드+실행까지 검증(포트 리스닝, 무크래시). 게임 콘텐츠 레이어까지 얹어서 실제로 end-to-end로 동작함을 확인한 이력도 있음(포트 7777 리스닝, SIGTERM 정상 종료).</p>
+
+  <div class="callout note">
+    <strong>게임 콘텐츠(GW2_Server)는 왜 Windows 재검증 안 했나</strong> — 이미 검증된 원본 IOCP 버전(<code class="inline">GW2_ServerCore</code>)이 있으니, 게임 콘텐츠 포팅본까지 Windows에서 재검증할 필요를 못 느꼈다. 의도적으로 스코프를 좁힌 결정이다. 단, 포트폴리오의 실제 핵심 산출물인 <code class="inline">APM_Agent</code>는 아래처럼 별개로 Windows 검증을 완료했다.
+  </div>
+
+  <h3>Windows 크로스플랫폼 검증 (2026-07-22)</h3>
+
+  <p><strong>빌드 과정에서 겪은 실제 크로스플랫폼 이슈</strong>:</p>
+  <ul>
+    <li><code class="inline">ResourceCollector</code>(CPU/메모리/디스크/네트워크 수집)는 Linux <code class="inline">/proc</code> 가상 파일시스템 기반이라 Windows 대응 코드가 전혀 없었다 — <code class="inline">GetSystemTimes</code>/<code class="inline">GlobalMemoryStatusEx</code>/<code class="inline">GetDiskFreeSpaceEx</code>/<code class="inline">GetIfTable2</code>(IP Helper API)로 동일한 델타 계산 로직을 새로 작성.</li>
+    <li><code class="inline">ApmSession::GetConnectionInfo()</code>의 Linux <code class="inline">getsockopt(TCP_INFO)</code>는 Windows <code class="inline">WSAIoctl(SIO_TCP_INFO)</code>로 대체 — 단 Windows API 자체가 RTT 변동성/재전송 세그먼트 수 필드를 제공하지 않아, 왜곡된 근사치 대신 그 필드만 정직하게 0으로 남김.</li>
+    <li>Linux에서 생성된 <code class="inline">Metric.pb.h</code>/<code class="inline">.pb.cc</code>(protobuf 3.21대)가 Windows의 최신 protobuf(33.4.0) 버전 검증 매크로에 걸려 재생성 필요 — 스키마(<code class="inline">.proto</code>)는 무변경.</li>
+    <li>MSVC가 UTF-8 소스(GTest 한글 테스트 이름 포함)를 시스템 코드페이지로 잘못 해석해 컴파일 에러 — <code class="inline">/utf-8</code> 컴파일 옵션으로 해결.</li>
+  </ul>
+
+  <div class="callout warn">
+    <strong>가장 흥미로웠던 발견 — Windows 11 Smart App Control(SAC)</strong> — 위 문제를 전부 해결해 빌드는 성공했지만, 실행하면 <code class="inline">Agent.exe</code>가 응답 없이 멈췄다. Windows 이벤트 로그(<code class="inline">Microsoft-Windows-CodeIntegrity/Operational</code>)로 원인을 확정 — SAC가 로컬에서 새로 빌드한(서명 안 된) vcpkg DLL(<code class="inline">libcrypto-3-x64.dll</code>, <code class="inline">libprotobufd.dll</code> 등)의 로딩을 코드 무결성 정책 위반으로 차단하고 있었다. 시스템 보안 설정을 끄는 대신, <strong>vcpkg 정적 링크 트리플릿(<code class="inline">x64-windows-static</code>)으로 전환</strong>해서 최종 실행 파일에 외부 DLL 의존성 자체를 없애는 방식으로 해결 — 코드는 무수정, 빌드 구성만 변경.
+  </div>
+
+  <p><strong>검증 결과</strong>: <code class="inline">Collector.exe</code>/<code class="inline">Agent.exe</code>가 TLS+AES-256-GCM으로 통신하며 실제 Windows 리소스 지표를 수집해 SQLite에 저장하는 전체 파이프라인이 5초 주기로 30초 이상(6+ 사이클) 크래시 없이 동작함을 확인. GTest 유닛 테스트 9/9도 Windows에서 통과.</p>
+
+  <div class="qa-box">
+    <div class="qa-q">Standalone Asio가 정확히 뭔가요? Boost.Asio랑 다른가요?</div>
+    <div class="qa-a">Boost.Asio는 Boost 라이브러리 전체의 일부로 배포되는데, Standalone Asio는 Boost 의존성 없이 Asio 라이브러리 코드만 떼어낸 버전입니다. Boost 전체를 빌드에 끌어오지 않아도 되는 게 장점이고, API는 사실상 동일합니다.</div>
+  </div>
+  <div class="qa-box">
+    <div class="qa-q">크로스플랫폼이라면서 게임 콘텐츠는 Windows에서 왜 검증 안 했나요?</div>
+    <div class="qa-a">게임 콘텐츠는 이미 검증된 원본 IOCP 버전이 따로 있어서, 포팅본을 그쪽에서까지 재검증하는 건 한계효용이 낮다고 판단했습니다. 대신 포트폴리오의 실제 핵심 산출물인 APM_Agent는 Windows에서 직접 빌드하고 실행까지 검증했습니다.</div>
+  </div>
+  <div class="qa-box">
+    <div class="qa-q">Windows 포팅에서 가장 까다로웠던 부분은 뭔가요?</div>
+    <div class="qa-a">코드 자체보다 배포 환경 문제였습니다. 빌드는 다 성공했는데 실행이 안 됐고, 원인을 추적해보니 Windows의 Smart App Control이 서명 안 된 로컬 빌드 DLL의 로딩을 코드 무결성 정책으로 차단하고 있었습니다. 시스템 보안 설정을 끄는 대신 정적 링크로 전환해서, 보안 태세를 낮추지 않고 문제를 근본적으로 없애는 방향을 택했습니다.</div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s3">
+  <div class="sec-label">// Security</div>
+  <h2>3. 보안 설계</h2>
+  <p>이 프로젝트에서 가장 공들인 부분이자, 실제로 설계를 한 번 뒤집은(ARIA→AES) 이력이 있는 영역이다.</p>
+
+  <h3><span class="num">3-1.</span>TLS 계층 — 기반이 되는 전송 보안</h3>
+  <p>TLS는 <strong>공개키(비대칭) 암호와 대칭키 암호를 함께 쓰는 하이브리드 방식</strong>이다.</p>
+
+  <div class="diagram">
+    <div class="diagram-title">// TLS 하이브리드 흐름</div>
+    <svg viewBox="0 0 780 160" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="a2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8B949E"/></marker></defs>
+      <rect x="20" y="30" width="220" height="90" rx="8" fill="#161B22" stroke="#D29922" stroke-width="1.3"/>
+      <text x="130" y="58" text-anchor="middle" fill="#D29922" font-weight="700" font-size="12">① 핸드셰이크</text>
+      <text x="130" y="80" text-anchor="middle" fill="#8B949E" font-size="10">공개키 암호로</text>
+      <text x="130" y="96" text-anchor="middle" fill="#8B949E" font-size="10">안전하게 세션 키 합의</text>
+      <text x="130" y="112" text-anchor="middle" fill="#6E7681" font-size="9">(느리지만 딱 1번)</text>
+
+      <line x1="240" y1="75" x2="290" y2="75" stroke="#8B949E" stroke-width="1.4" marker-end="url(#a2)"/>
+
+      <rect x="290" y="30" width="220" height="90" rx="8" fill="#161B22" stroke="#58A6FF" stroke-width="1.3"/>
+      <text x="400" y="58" text-anchor="middle" fill="#58A6FF" font-weight="700" font-size="12">② 세션 키 확보</text>
+      <text x="400" y="80" text-anchor="middle" fill="#8B949E" font-size="10">이 연결에서만 쓸</text>
+      <text x="400" y="96" text-anchor="middle" fill="#8B949E" font-size="10">임시 대칭키</text>
+
+      <line x1="510" y1="75" x2="560" y2="75" stroke="#8B949E" stroke-width="1.4" marker-end="url(#a2)"/>
+
+      <rect x="560" y="30" width="200" height="90" rx="8" fill="#161B22" stroke="#3FB950" stroke-width="1.3"/>
+      <text x="660" y="58" text-anchor="middle" fill="#3FB950" font-weight="700" font-size="12">③ 데이터 전송</text>
+      <text x="660" y="80" text-anchor="middle" fill="#8B949E" font-size="10">대칭키로 암호화</text>
+      <text x="660" y="96" text-anchor="middle" fill="#6E7681" font-size="9">(빠름, 대량 데이터)</text>
+    </svg>
+    <div class="cap">"TLS = 공개키로 전부 암호화"는 흔한 오해 — 실제 대량 데이터는 대칭키로 처리</div>
+  </div>
+
+  <p>자체 서명 인증서를 쓰기 때문에 클라이언트 쪽에서 <code class="inline">verify_none</code>으로 검증을 생략한다 — 테스트 환경 한정이고, 프로덕션이라면 반드시 CA 인증서를 신뢰 목록에 등록해서 검증해야 한다.</p>
+
+  <h3><span class="num">3-2.</span>ApmSession 독립 작성 — 왜 공용 Session을 건드리지 않았나</h3>
+  <p><code class="inline">GW2_CrossPlatformCore</code>엔 이미 <code class="inline">Session</code>이라는 공유 클래스가 있다. TLS를 붙일 때 이걸 확장하는 대신 <strong>APM_Agent 전용의 독립된 ApmSession을 새로 작성</strong>했다.</p>
+  <ul>
+    <li><strong>문제</strong>: 공유 클래스에 TLS를 수술해서 넣으면, TLS를 안 쓰는 다른 소비자까지 영향을 받는다.</li>
+    <li><strong>판단</strong>: TLS 소비자가 하나뿐인 시점에 공용 클래스 책임을 넓히는 건 과설계(<strong>YAGNI</strong>).</li>
+    <li><strong>해결</strong>: Session은 완전 무수정, ApmSession이 프레이밍·암호화·재연결까지 전담.</li>
+  </ul>
+
+  <h3><span class="num">3-3.</span>왜 TLS만으로 안 끝내고 페이로드를 한 번 더 암호화하나</h3>
+  <p>TLS는 <strong>네트워크 구간만</strong> 보호한다. 로드밸런서/프록시를 거치면 그 지점에서 해제되기도 한다. 그래서 페이로드 자체를 애플리케이션 레벨에서 한 번 더 감싸서, TLS가 어딘가에서 해제되더라도 그 필드는 여전히 보호되게 설계했다.</p>
+
+  <h3><span class="num">3-4.</span>처음 선택 — ARIA-256-CBC + HMAC-SHA256</h3>
+  <p><strong>ARIA</strong>는 KISA(한국인터넷진흥원)가 제정한 국내 표준 블록 암호다. "국가 표준 암호를 실무 수준으로 다뤄본 경험"이 포트폴리오 차별화 포인트가 될 거라고 판단해서 선택했다.</p>
+
+  <p><strong>CBC 모드의 근본적 한계</strong>: CBC는 <strong>기밀성만 제공하고 무결성은 보장하지 않는다.</strong> 패딩 유효성이 새어나가면 <strong>패딩 오라클 공격</strong>으로 평문을 한 바이트씩 복원당할 수 있다.</p>
+
+  <div class="diagram">
+    <div class="diagram-title">// Encrypt-then-MAC (CBC+HMAC) vs AEAD (GCM) — 이 프로젝트 최대 설계 포인트</div>
+    <svg viewBox="0 0 820 300" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="a3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#F85149"/></marker>
+             <marker id="a4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#3FB950"/></marker></defs>
+
+      <text x="220" y="24" text-anchor="middle" fill="#F85149" font-weight="700" font-size="13" font-family="JetBrains Mono">ARIA-CBC + HMAC (개발자가 직접 조합)</text>
+      <rect x="70" y="40" width="150" height="46" rx="6" fill="#161B22" stroke="#F85149"/>
+      <text x="145" y="68" text-anchor="middle" fill="#8B949E" font-size="11">① ARIA-CBC 암호화</text>
+      <line x1="145" y1="86" x2="145" y2="110" stroke="#F85149" stroke-width="1.4" marker-end="url(#a3)"/>
+      <rect x="70" y="112" width="150" height="46" rx="6" fill="#161B22" stroke="#F85149"/>
+      <text x="145" y="140" text-anchor="middle" fill="#8B949E" font-size="11">② HMAC-SHA256 계산</text>
+      <text x="145" y="180" fill="#F85149" font-size="10" text-anchor="middle">⚠ 순서를 실수하면</text>
+      <text x="145" y="196" fill="#F85149" font-size="10" text-anchor="middle">패딩 오라클 재발</text>
+      <text x="145" y="216" fill="#6E7681" font-size="9" text-anchor="middle">(복호화 전 MAC부터</text>
+      <text x="145" y="230" fill="#6E7681" font-size="9" text-anchor="middle">검증해야 안전)</text>
+
+      <line x1="410" y1="150" x2="410" y2="150" stroke="#30363D"/>
+      <line x1="410" y1="20" x2="410" y2="280" stroke="#21262D" stroke-dasharray="4,4"/>
+
+      <text x="620" y="24" text-anchor="middle" fill="#3FB950" font-weight="700" font-size="13" font-family="JetBrains Mono">AES-256-GCM (AEAD, 라이브러리가 처리)</text>
+      <rect x="530" y="60" width="180" height="70" rx="6" fill="#161B22" stroke="#3FB950" stroke-width="1.6"/>
+      <text x="620" y="90" text-anchor="middle" fill="#8B949E" font-size="11">암호화 + 인증 태그 계산</text>
+      <text x="620" y="108" text-anchor="middle" fill="#8B949E" font-size="11">단일 연산</text>
+      <text x="620" y="160" fill="#3FB950" font-size="10" text-anchor="middle">✓ 조합 순서를 실수할</text>
+      <text x="620" y="176" fill="#3FB950" font-size="10" text-anchor="middle">방법 자체가 없음</text>
+      <text x="620" y="196" fill="#6E7681" font-size="9" text-anchor="middle">태그 검증 실패 시</text>
+      <text x="620" y="210" fill="#6E7681" font-size="9" text-anchor="middle">평문이 아예 안 나옴</text>
+    </svg>
+    <div class="cap">"올바르게 구현하면 안전한 것"(CBC+HMAC) vs "잘못 구현할 방법이 없어서 안전한 것"(AEAD)</div>
+  </div>
+
+  <div class="code-block"><pre><span class="c-comment">// SecurePayload::Open() — 순서가 핵심</span>
+<span class="c-comment">// HMAC 검증을 먼저, 통과한 경우에만 ARIA 복호화(패딩 검증) 시도</span>
+<span class="c-comment">// 변조된 암호문은 HMAC 단계에서 균일하게 거부 → 패딩 유효성 정보가 새어나갈 방법이 없음</span></pre></div>
+
+  <p><strong>실제 검증</strong>: 암호문을 변조한 뒤 <code class="inline">Open()</code>을 호출하면 <code class="inline">HmacUtil::Verify()</code> 단계에서 먼저 예외가 발생함을 확인. 대칭키를 일부러 불일치시켜(HMAC 키만 일치·ARIA 키만 불일치) 같은 현상(HMAC 통과 → ARIA 복호화 단계에서 실패)을 재현해서 두 계층이 각각 올바르게 동작함을 실증했다.</p>
+
+  <h3><span class="num">3-5.</span>AES-256-GCM으로 마이그레이션 — 왜 뒤집었나</h3>
+  <p>두 구간(Agent↔Collector는 ARIA, Collector↔Console은 AES-GCM)을 <strong>모두 AES-256-GCM으로 통일</strong>했다.</p>
+  <ol>
+    <li><strong>구조적 안전성</strong>: 위 다이어그램처럼, CBC+HMAC의 조합 실수 여지 자체가 GCM에는 없다.</li>
+    <li><strong>단일 검증 경로</strong>: <code class="inline">AesGcmCipher</code>/<code class="inline">AesGcmPayload</code>는 GoogleTest 9개로 검증돼 있었지만 <code class="inline">AriaCipher</code>/<code class="inline">HmacUtil</code>/<code class="inline">SecurePayload</code>는 자동 테스트가 없는 비대칭이 있었다. 하나로 합치면 테스트 9개가 두 구간 모두를 커버한다.</li>
+  </ol>
+
+  <div class="callout info">
+    <strong>잃은 것과 보존 방법</strong> — ARIA 코드(<code class="inline">AriaCipher</code>/<code class="inline">HmacUtil</code>/<code class="inline">SecurePayload</code>)는 삭제하지 않고 그대로 남김(실행 경로에서만 제외, "참고용" 주석 추가). 구현·검증 경험은 <code class="inline">Docs/ARIA_TO_AES_MIGRATION.md</code>에 별도 정리.
+  </div>
+
+  <div class="code-block"><pre><span class="c-comment">// 수정 전</span>
+AriaCipher::Key encKey = LoadKeyFromHexFile(<span class="c-str">"certs/aria.key"</span>);
+HmacUtil::Key macKey = LoadKeyFromHexFile(<span class="c-str">"certs/hmac.key"</span>);
+...
+std::make_unique&lt;SecurePayload&gt;(encKey, macKey)
+
+<span class="c-comment">// 수정 후</span>
+AesGcmCipher::Key agentCollectorKey = LoadKeyFromHexFile(<span class="c-str">"certs/agent_collector_aes.key"</span>);
+...
+std::make_unique&lt;AesGcmPayload&gt;(agentCollectorKey)</pre></div>
+  <p>세션 생성 로직, 프레이밍 로직, 재연결 로직은 <strong>단 한 줄도 안 바뀌었다.</strong> <code class="inline">IPayloadSealer</code> 인터페이스로 관심사를 분리해둔 덕분 — 마이그레이션 자체가 이 설계의 증거가 됐다.</p>
+
+  <h3><span class="num">3-6.</span>구간별 키 분리</h3>
+  <p>같은 암호 방식(AES-256-GCM)을 쓰지만 키는 서로 다르다: Agent↔Collector는 <code class="inline">agent_collector_aes.key</code>, Collector↔Console은 <code class="inline">webserver_aes.key</code>. 한 구간의 키가 유출돼도 다른 구간은 안전하게 유지하기 위함이다.</p>
+
+  <h3><span class="num">3-7.</span>Collector↔Console 관계의 진화</h3>
+  <p>처음엔 두 프로세스가 <strong>같은 장비의 SQLite 파일을 각자 다른 시점에 여는</strong> 방식이었다(암묵적 전제). 이걸 Collector가 능동적으로 전송하는 명시적 네트워크 관계로 바꿨다 — 서로 다른 장비에 있어도 동작하도록.</p>
+  <p><code class="inline">collector_config.json</code>을 굳이 JSON으로 쓴 이유는 <strong>차후 웹에서 이 설정을 편집할 가능성</strong>을 열어두기 위해서다(웹과 자연스럽게 주고받을 수 있는 포맷).</p>
+
+  <div class="qa-box"><div class="qa-q">왜 기존 Session 클래스를 확장하지 않고 ApmSession을 새로 만들었나요?</div>
+  <div class="qa-a">TLS가 필요한 소비자가 이 시점엔 APM_Agent 하나뿐이었습니다. 하나의 소비자를 위해 여러 소비자가 공유하는 클래스의 책임 범위를 미리 넓혀두는 건 YAGNI 원칙에 어긋난다고 판단했고, 그래서 공유 Session은 완전히 무수정으로 두고 APM 전용 관심사는 전부 별도 클래스에 담았습니다.</div></div>
+  <div class="qa-box"><div class="qa-q">왜 두 구간에 서로 다른 암호를 섞어 쓰다가 통일했나요?</div>
+  <div class="qa-a">Agent↔Collector는 KISA 표준 암호(ARIA)를 실무 수준으로 다뤄보는 게 목적이었고, Collector↔Console은 .NET과의 상호운용성 때문에 AES-GCM을 썼습니다. 나중에 되짚어보니 CBC+HMAC의 수동 조합은 구조적으로 실수 여지가 있고, 테스트도 AES-GCM에만 있는 비대칭이 있어서, GCM의 AEAD 구조적 안전성과 단일 검증 경로라는 이유로 통일했습니다.</div></div>
+  <div class="qa-box"><div class="qa-q">AEAD가 CBC+HMAC보다 왜 더 안전한가요?</div>
+  <div class="qa-a">CBC+HMAC은 두 개의 독립된 연산을 개발자가 특정 순서로 직접 조합해야 하고, 순서를 실수하면 패딩 오라클 공격면이 열립니다. GCM 같은 AEAD는 암호화와 인증을 라이브러리 내부에서 하나의 연산으로 처리해서, 조합 순서를 실수할 방법 자체가 없습니다.</div></div>
+  <div class="qa-box"><div class="qa-q">패딩 오라클 공격이 정확히 뭔가요?</div>
+  <div class="qa-a">CBC 모드는 마지막 블록의 패딩(PKCS7) 유효성을 복호화 시 검증하는데, 공격자가 암호문을 한 바이트씩 조작해가며 '패딩이 유효했는지'를 서버 응답 차이로 구별할 수 있으면, 이 정보를 반복 질의해서 평문을 한 바이트씩 복원할 수 있는 공격입니다. Encrypt-then-MAC으로 감싸서 변조된 암호문을 패딩 검증 단계에 도달하기 전에 차단하면 이 공격면 자체가 사라집니다.</div></div>
+  <div class="qa-box"><div class="qa-q">IV/Nonce를 재사용하면 왜 안 되나요?</div>
+  <div class="qa-a">CBC에서 IV를 재사용하면 같은 평문 블록이 같은 암호문 블록을 만들어 패턴이 노출됩니다. GCM은 더 치명적인데, 같은 키로 Nonce를 재사용하면 인증 태그를 위조할 수 있어 기밀성과 무결성이 동시에 깨집니다. 그래서 IV/Nonce를 호출자가 지정할 방법 자체를 없애고(RAND_bytes()로 매번 내부 생성) 재사용을 코드 레벨에서 차단했습니다.</div></div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s4">
+  <div class="sec-label">// Protocol</div>
+  <h2>4. 통신 프로토콜</h2>
+
+  <h3><span class="num">4-1.</span>메시지 프레이밍 — TCP는 스트림이라 경계가 없다</h3>
+  <p>TCP는 <strong>스트림 프로토콜</strong>이라 "한 번의 read가 정확히 하나의 논리적 메시지"라는 보장이 없다.</p>
+
+  <div class="diagram">
+    <div class="diagram-title">// TCP 원시 바이트 스트림 vs 프레이밍된 메시지</div>
+    <svg viewBox="0 0 780 190" xmlns="http://www.w3.org/2000/svg">
+      <text x="20" y="24" fill="#F85149" font-size="12" font-weight="700">Before — 경계 없는 스트림</text>
+      <rect x="20" y="34" width="720" height="34" fill="#1C2230" stroke="#30363D"/>
+      <text x="380" y="56" text-anchor="middle" fill="#8B949E" font-size="11" font-family="Fira Code">…bytes bytes bytes bytes bytes bytes bytes…</text>
+      <text x="380" y="82" text-anchor="middle" fill="#F85149" font-size="10">어디까지가 메시지 1개인지 알 수 없음</text>
+
+      <text x="20" y="120" fill="#3FB950" font-size="12" font-weight="700">After — PacketHeader{size,id}로 프레이밍</text>
+      <rect x="20" y="130" width="60" height="34" fill="#161B22" stroke="#D29922"/>
+      <text x="50" y="151" text-anchor="middle" fill="#D29922" font-size="9" font-family="Fira Code">header</text>
+      <rect x="80" y="130" width="180" height="34" fill="#161B22" stroke="#3FB950"/>
+      <text x="170" y="151" text-anchor="middle" fill="#3FB950" font-size="10">메시지 1</text>
+      <rect x="264" y="130" width="60" height="34" fill="#161B22" stroke="#D29922"/>
+      <text x="294" y="151" text-anchor="middle" fill="#D29922" font-size="9" font-family="Fira Code">header</text>
+      <rect x="324" y="130" width="120" height="34" fill="#161B22" stroke="#3FB950"/>
+      <text x="384" y="151" text-anchor="middle" fill="#3FB950" font-size="10">메시지 2</text>
+      <text x="600" y="151" text-anchor="middle" fill="#6E7681" font-size="10">header.size만큼 모이면 확정</text>
+    </svg>
+  </div>
+
+  <div class="code-block"><pre><span class="c-key">void</span> <span class="c-type">ApmSession</span>::<span class="c-fn">ProcessAccumulated</span>()
+{
+    <span class="c-key">while</span> (<span class="c-key">true</span>)
+    {
+        size_t remaining = _accumulated.size() - processed;
+        <span class="c-key">if</span> (remaining &lt; HEADER_SIZE) <span class="c-key">break</span>;
+        <span class="c-key">const</span> PacketHeader* header = ...;
+        <span class="c-key">if</span> (remaining &lt; header-&gt;size) <span class="c-key">break</span>;   <span class="c-comment">// 아직 페이로드까지 다 안 모임</span>
+        <span class="c-comment">// 완전한 패킷 하나 확정 → 복호화 → 콜백 호출</span>
+    }
+}</pre></div>
+
+  <h3><span class="num">4-2.</span>Protobuf 리플렉션으로 패킷 ID 자동 결정</h3>
+  <p>수동 배정 대신 <code class="inline">PacketType::descriptor()->index()</code> — <code class="inline">.proto</code> 파일 안 선언 순서를 그대로 ID로 쓴다. ID 충돌·오타가 <strong>구조적으로 발생할 수 없다.</strong></p>
+
+  <h3><span class="num">4-3.</span>PacketHandler — 타입 안전 디스패치</h3>
+  <div class="code-block"><pre><span class="c-key">template</span>&lt;<span class="c-key">typename</span> PacketType&gt;
+<span class="c-key">static void</span> <span class="c-fn">Register</span>(TypedHandler&lt;PacketType&gt; handler)
+{
+    uint16 id = <span class="c-key">static_cast</span>&lt;uint16&gt;(PacketType::descriptor()-&gt;index());
+    Handlers()[id] = [handler](<span class="c-key">const</span> String&amp; payload)
+    {
+        PacketType pkt;
+        <span class="c-key">if</span> (!pkt.ParseFromString(payload)) { <span class="c-comment">/* 에러 로그 */</span> <span class="c-key">return</span>; }
+        handler(pkt);   <span class="c-comment">// 호출자는 이미 파싱된 강타입 메시지만 받음</span>
+    };
+}</pre></div>
+
+  <h3><span class="num">4-4.</span>크로스 언어 스키마 공유 — Metric.proto</h3>
+  <p>C++과 .NET은 <strong>같은 .proto 파일</strong>에서 각자 코드젠한다(C++: <code class="inline">protoc --cpp_out</code>, .NET: <code class="inline">Grpc.Tools</code>+<code class="inline">Google.Protobuf</code>, 실제 gRPC 서비스는 미사용). 스키마를 손으로 복사하면 시간이 지나며 어긋나는데(스키마 이원화), 같은 원본에서 코드젠하기 때문에 이 위험이 구조적으로 없다.</p>
+
+  <h3><span class="num">4-5.</span>ResilientSender — 재연결/큐잉 설계</h3>
+  <p>Agent→Collector, Collector→Console <strong>양쪽 모두</strong>에서 재사용되는 C++ 클래스.</p>
+  <div class="code-block"><pre><span class="c-key">void</span> <span class="c-type">ResilientSender</span>::<span class="c-fn">EnqueueRaw</span>(uint16 id, String payload)
+{
+    <span class="c-key">if</span> (_queue.size() &gt;= _maxQueueSize)
+        _queue.pop_front();   <span class="c-comment">// 큐가 가득 차면 가장 오래된 것부터 버림</span>
+    _queue.push_back(QueuedPacket{ id, std::move(payload) });
+    <span class="c-key">if</span> (_connected &amp;&amp; !_sending) FlushNext();
+}</pre></div>
+  <ul>
+    <li>큐가 가득 차면 <strong>가장 오래된 것부터 버린다</strong> — 최신 데이터가 더 중요하다는 가정.</li>
+    <li>재연결은 5초 타이머로 재시도. 전송 성공 시에만 <code class="inline">pop_front()</code> — 실패하면 큐에 남겨두고 재연결 시 그 항목부터 재시도.</li>
+    <li><strong>스코프</strong>: 메모리 큐만 구현 — 프로세스가 죽으면 큐도 사라짐(디스크 영속화는 범위 밖).</li>
+  </ul>
+
+  <div class="qa-box"><div class="qa-q">TCP가 스트림이라는 게 정확히 무슨 뜻인가요?</div>
+  <div class="qa-a">TCP는 메시지 단위가 아니라 바이트 스트림을 전달합니다. 송신 측이 send()를 3번 호출해도 수신 측은 recv() 한 번에 다 받을 수도, 반대로 여러 번에 나눠 받을 수도 있습니다. 메시지의 경계가 어디인지는 애플리케이션이 직접 정의해야 하고, 이게 메시지 프레이밍이 필요한 이유입니다.</div></div>
+  <div class="qa-box"><div class="qa-q">큐가 가득 차면 오래된 것부터 버리는 게 데이터 유실 아닌가요?</div>
+  <div class="qa-a">맞습니다, 의도적인 트레이드오프입니다. 무한정 쌓아두면 에이전트 자체가 무거워지는 게 더 큰 문제라고 판단했고, 모니터링 데이터는 최신 상태가 가장 중요하다는 도메인 특성상 오래된 데이터부터 버리는 게 합리적이라고 봤습니다.</div></div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s5">
+  <div class="sec-label">// Storage</div>
+  <h2>5. 데이터 저장</h2>
+
+  <h3><span class="num">5-1.</span>IMetricStore — 컴파일 타임 저장소 선택 (C++)</h3>
+  <p>SQLite와 TimescaleDB 둘 다 지원하고 싶은데, <strong>안 쓰는 백엔드의 의존성이 결과물에 남으면 안 된다.</strong> 런타임 분기 대신 인터페이스 + CMake 옵션으로 <strong>컴파일 타임에 하나만 선택</strong>한다.</p>
+  <div class="code-block"><pre><span class="c-comment">// MetricStoreFactory.cpp</span>
+<span class="c-key">#if</span> defined(APM_STORAGE_SQLITE)
+<span class="c-key">#include</span> <span class="c-str">"SqliteMetricStore.h"</span>
+<span class="c-key">#elif</span> defined(APM_STORAGE_TIMESCALEDB)
+<span class="c-key">#include</span> <span class="c-str">"TimescaleMetricStore.h"</span>
+<span class="c-key">#else</span>
+<span class="c-key">#error</span> <span class="c-str">"APM_STORAGE_SQLITE 또는 APM_STORAGE_TIMESCALEDB 중 하나가 정의되어야 함"</span>
+<span class="c-key">#endif</span></pre></div>
+  <p><strong>검증</strong>: SQLite 선택 시 <code class="inline">ldd</code>로 libpq가 결과 바이너리에 전혀 링크되지 않음을 실측 확인.</p>
+
+  <h3><span class="num">5-2.</span>.NET(APM_Console)의 런타임 선택과의 대비</h3>
+  <div class="code-block"><pre><span class="c-key">public void</span> <span class="c-fn">RegisterServices</span>(IServiceCollection services, IConfiguration configuration)
+{
+    <span class="c-key">var</span> backend = configuration[<span class="c-str">"Apm:StorageBackend"</span>] ?? <span class="c-str">"SQLite"</span>;
+    services.AddDbContext&lt;ApmDbContext&gt;(options =&gt;
+    {
+        <span class="c-key">if</span> (backend == <span class="c-str">"TimescaleDB"</span>) options.UseNpgsql(connectionString);
+        <span class="c-key">else</span> options.UseSqlite(connectionString);
+    });
+}</pre></div>
+  <p><strong>.NET은 두 EF Core 프로바이더를 둘 다 참조해둬도 빌드에 지장이 없다.</strong> C++처럼 안 쓰는 라이브러리가 결과물에 딸려오는 문제가 없어서, 설정 파일 값 하나로 런타임에 전환 가능하게 단순화했다 — <strong>언어의 컴파일 모델 차이</strong>를 반영한 의도적 선택.</p>
+
+  <div class="qa-box"><div class="qa-q">왜 C++은 컴파일 타임, .NET은 런타임으로 저장소를 고르나요?</div>
+  <div class="qa-a">C++은 링크 시점에 안 쓰는 라이브러리(예: libpq)까지 결과물에 딸려오는 걸 막으려면 컴파일 타임 분기가 필요합니다. 반면 .NET은 두 EF Core 프로바이더를 다 참조해도 배포 크기나 의존성 문제가 크지 않아서, 설정 파일 값 하나로 런타임에 유연하게 전환하는 쪽이 더 실용적이었습니다.</div></div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s6">
+  <div class="sec-label">// Metrics Implementation</div>
+  <h2>6. 수집 지표 구현 상세</h2>
+  <p><code class="inline">ResourceCollector</code>(C++, Linux 전용)가 <code class="inline">/proc</code> 파일시스템을 파싱해서 지표를 만든다.</p>
+
+  <h3><span class="num">6-1.</span>CPU 사용률 — jiffies 델타</h3>
+  <div class="code-block"><pre><span class="c-type">double</span> <span class="c-type">ResourceCollector</span>::<span class="c-fn">ComputeCpuUsage</span>()
+{
+    uint64 idleAll = idle + iowait;
+    uint64 totalAll = user + nice + system + idle + iowait + irq + softirq + steal;
+    <span class="c-key">if</span> (_hasPrevSample &amp;&amp; totalAll &gt; _prevTotal)
+    {
+        uint64 idleDelta = idleAll - _prevIdle;
+        uint64 totalDelta = totalAll - _prevTotal;
+        usage = <span class="c-num">100.0</span> * (<span class="c-num">1.0</span> - (<span class="c-type">double</span>)idleDelta / (<span class="c-type">double</span>)totalDelta);
+    }
+}</pre></div>
+  <p>한 시점 값만으론 "지금 사용률"을 알 수 없다 — <strong>두 시점 사이의 델타</strong>를 봐야 한다. <code class="inline">idle</code>뿐 아니라 <code class="inline">iowait</code>(디스크 I/O 대기)도 "쉬고 있는 시간"으로 합산하는 게 표준 계산 방식이다.</p>
+
+  <h3><span class="num">6-2.</span>메모리 — MemFree가 아니라 MemAvailable</h3>
+  <p><code class="inline">MemFree</code>를 쓰면 안 된다 — Linux는 남는 메모리를 페이지 캐시로 적극 활용해서, MemFree만 보면 "메모리가 거의 다 찼다"는 착시가 생긴다. <code class="inline">MemAvailable</code>은 캐시처럼 즉시 회수 가능한 메모리까지 포함한 "실질적으로 새 프로세스가 쓸 수 있는 메모리" 추정치다.</p>
+
+  <h3><span class="num">6-3.</span>네트워크 대역폭 — 델타 + 루프백 제외</h3>
+  <p><code class="inline">/proc/net/dev</code>도 누적값이라 델타가 필요하다. <code class="inline">steady_clock</code>으로 실제 경과 시간을 측정해서 정확한 바이트/초를 계산하고, 인터페이스 이름이 환경마다 다르므로 <code class="inline">lo</code>만 제외하고 나머지는 전부 합산한다.</p>
+
+  <h3><span class="num">6-4.</span>TCP 연결 품질 — 커널에서 직접 조회</h3>
+  <div class="code-block"><pre><span class="c-fn">getsockopt</span>(fd, IPPROTO_TCP, TCP_INFO, &amp;tcpInfo, &amp;len);
+<span class="c-comment">// rtt, rttvar, retransmits, total_retrans, snd_cwnd 전부 커널이 이미 추적 중인 값</span></pre></div>
+  <p>별도로 ping을 보내거나 직접 측정할 필요가 없다 — 커널의 TCP 스택이 흐름 제어를 위해 계속 추적하는 값을 그냥 꺼내 쓰는 것.</p>
+
+  <h3><span class="num">6-5.</span>디스크 사용량</h3>
+  <p><code class="inline">statvfs()</code> — 블록 개수 × 블록 크기로 바이트 환산하는 POSIX 표준 함수.</p>
+
+  <div class="qa-box"><div class="qa-q">왜 MemFree가 아니라 MemAvailable을 쓰나요?</div>
+  <div class="qa-a">MemFree는 아무것도 안 쓰고 있는 순수 여유 메모리인데, Linux는 남는 메모리를 페이지 캐시로 적극 활용하기 때문에 MemFree만 보면 실제로는 여유가 있는데도 부족한 것처럼 보이는 착시가 생깁니다. MemAvailable은 캐시처럼 필요시 즉시 회수 가능한 부분까지 커널이 계산해서 제공하는 값이라 실제 체감 여유 메모리에 훨씬 가깝습니다.</div></div>
+  <div class="qa-box"><div class="qa-q">TCP 재전송률 같은 걸 왜 애플리케이션에서 직접 측정 안 하나요?</div>
+  <div class="qa-a">커널의 TCP 스택은 흐름/혼잡 제어를 위해 RTT, 재전송 횟수 등을 이미 실시간으로 추적하고 있습니다. getsockopt(TCP_INFO)로 그냥 읽어오면 되는데, 애플리케이션에서 별도로 재측정하면 정확도도 떨어지고 불필요한 오버헤드만 생깁니다.</div></div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s7">
+  <div class="sec-label">// Performance / Privilege</div>
+  <h2>7. 성능/권한 설계</h2>
+
+  <h3><span class="num">7-1.</span>PrivilegeDrop — 최소 권한 원칙</h3>
+  <p>침해당했을 때 공격자가 물려받는 권한 범위를 최소화하는 것이 목적.</p>
+  <div class="diagram">
+    <div class="diagram-title">// 권한 하향 순서 — 반드시 이 순서로</div>
+    <svg viewBox="0 0 780 100" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="a5" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#58A6FF"/></marker></defs>
+      <rect x="20" y="25" width="160" height="50" rx="8" fill="#161B22" stroke="#58A6FF"/>
+      <text x="100" y="55" text-anchor="middle" fill="#8B949E" font-size="12" font-family="Fira Code">1. setgid()</text>
+      <line x1="180" y1="50" x2="220" y2="50" stroke="#58A6FF" marker-end="url(#a5)"/>
+      <rect x="220" y="25" width="200" height="50" rx="8" fill="#161B22" stroke="#58A6FF"/>
+      <text x="320" y="55" text-anchor="middle" fill="#8B949E" font-size="12" font-family="Fira Code">2. setgroups(0,…)</text>
+      <line x1="420" y1="50" x2="460" y2="50" stroke="#58A6FF" marker-end="url(#a5)"/>
+      <rect x="460" y="25" width="160" height="50" rx="8" fill="#161B22" stroke="#58A6FF"/>
+      <text x="540" y="55" text-anchor="middle" fill="#8B949E" font-size="12" font-family="Fira Code">3. setuid()</text>
+      <line x1="620" y1="50" x2="660" y2="50" stroke="#3FB950" marker-end="url(#a5)"/>
+      <rect x="660" y="25" width="110" height="50" rx="8" fill="#161B22" stroke="#3FB950"/>
+      <text x="715" y="50" text-anchor="middle" fill="#3FB950" font-size="10">재상승</text>
+      <text x="715" y="64" text-anchor="middle" fill="#3FB950" font-size="10">불가 검증</text>
+    </svg>
+    <div class="cap">uid를 먼저 낮추면 root 권한이 사라져 이후 setgid/setgroups가 실패한다 — 순서가 핵심</div>
+  </div>
+  <p><strong>재상승 불가 검증</strong>: 권한 하향 후 <code class="inline">setuid(0)</code>을 다시 시도해서 <strong>성공하면 오히려 문제</strong>다 — saved-set-uid가 여전히 0으로 남아있다는 뜻.</p>
+
+  <h3><span class="num">7-2.</span>syscall 최소화 — 커널 모드 전환 비용</h3>
+  <div class="callout note">최소 권한(7-1)은 <strong>보안</strong> 관점, syscall 최소화는 <strong>성능</strong> 관점 — 완전히 독립된 두 개념.</div>
+
+  <div class="diagram">
+    <div class="diagram-title">// syscall 실측 (strace -c, Agent 5분 정상 동작 — 총 1,921회 / 19.4ms)</div>
+    <svg viewBox="0 0 780 300" xmlns="http://www.w3.org/2000/svg" font-family="Fira Code">
+      <text x="100" y="26.9" text-anchor="end" fill="#8B949E" font-size="12">epoll_wait</text>
+      <rect x="110" y="10" width="610" height="26" rx="4" fill="#1C2230"/>
+      <rect x="110" y="10" width="205.5" height="26" rx="4" fill="#3987E5"/>
+      <text x="323.5" y="26.9" fill="#E6EDF3" font-size="12">155</text>
+
+      <text x="100" y="64.9" text-anchor="end" fill="#8B949E" font-size="12">read</text>
+      <rect x="110" y="48" width="610" height="26" rx="4" fill="#1C2230"/>
+      <rect x="110" y="48" width="610.0" height="26" rx="4" fill="#3987E5"/>
+      <text x="728" y="64.9" fill="#E6EDF3" font-size="12">460</text>
+
+      <text x="100" y="102.9" text-anchor="end" fill="#8B949E" font-size="12">openat</text>
+      <rect x="110" y="86" width="610" height="26" rx="4" fill="#1C2230"/>
+      <rect x="110" y="86" width="412.5" height="26" rx="4" fill="#3987E5"/>
+      <text x="530.5" y="102.9" fill="#E6EDF3" font-size="12">311</text>
+
+      <text x="100" y="140.9" text-anchor="end" fill="#8B949E" font-size="12">close</text>
+      <rect x="110" y="124" width="610" height="26" rx="4" fill="#1C2230"/>
+      <rect x="110" y="124" width="409.9" height="26" rx="4" fill="#3987E5"/>
+      <text x="527.9" y="140.9" fill="#E6EDF3" font-size="12">309</text>
+
+      <text x="100" y="178.9" text-anchor="end" fill="#8B949E" font-size="12">sendto/write</text>
+      <rect x="110" y="162" width="610" height="26" rx="4" fill="#1C2230"/>
+      <rect x="110" y="162" width="100.8" height="26" rx="4" fill="#3987E5"/>
+      <text x="218.8" y="178.9" fill="#E6EDF3" font-size="12">76</text>
+
+      <text x="100" y="216.9" text-anchor="end" fill="#8B949E" font-size="12">getsockopt</text>
+      <rect x="110" y="200" width="610" height="26" rx="4" fill="#1C2230"/>
+      <rect x="110" y="200" width="99.5" height="26" rx="4" fill="#3987E5"/>
+      <text x="217.5" y="216.9" fill="#E6EDF3" font-size="12">75</text>
+
+      <text x="100" y="254.9" text-anchor="end" fill="#8B949E" font-size="12">statfs</text>
+      <rect x="110" y="238" width="610" height="26" rx="4" fill="#1C2230"/>
+      <rect x="110" y="238" width="98.1" height="26" rx="4" fill="#3987E5"/>
+      <text x="216.1" y="254.9" fill="#E6EDF3" font-size="12">74</text>
+    </svg>
+    <div class="cap">epoll_wait 블로킹 대기가 압도적 — openat/close(매 사이클 /proc 재오픈)가 유일한 반복 비용(전체의 32%)</div>
+  </div>
+
+  <p>다만 수집 주기를 훨씬 좁힐 계획이 생기면 파일 디스크립터 캐싱 최적화를 고려할 지점으로 남겨뒀다(알려진 최적화 여지를 스스로 인지하고 있다는 걸 보여주는 부분).</p>
+
+  <h3><span class="num">7-3.</span>리소스 사용량 실측</h3>
+  <table>
+    <tr><th>항목</th><th>값</th><th>비고</th></tr>
+    <tr><td>RSS</td><td class="hl">13.8MB 고정</td><td>20샘플(15초 간격, 5분) 전부 13,716~14,156KB — 누수 없음</td></tr>
+    <tr><td>CPU 평균</td><td class="hl">0.017%</td><td>utime+stime 합계 5 tick(HZ=100 기준)/300초</td></tr>
+  </table>
+
+  <div class="qa-box"><div class="qa-q">최소 권한과 syscall 최소화가 왜 다른 개념인가요?</div>
+  <div class="qa-a">최소 권한은 프로세스가 침해당했을 때의 피해 범위(보안)를 줄이는 거고, syscall 최소화는 커널 모드 전환 비용(성능)을 줄이는 겁니다. 완전히 독립된 축이라 의도적으로 분리해서 설계·설명했습니다.</div></div>
+  <div class="qa-box"><div class="qa-q">메모리 누수가 없다는 걸 어떻게 확신하나요?</div>
+  <div class="qa-a">5분간 15초 간격으로 20번 RSS를 샘플링했는데 전부 13.8MB 근처에서 완전히 고정돼 있었습니다. 누수가 있었다면 지속적으로 증가하는 추세가 보였을 텐데 그런 패턴이 없었습니다. 다만 5분이라는 관측 시간의 한계상, 훨씬 긴 시간 스케일의 아주 느린 누수까지 배제한다고는 말할 수 없습니다.</div></div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s8">
+  <div class="sec-label">// APM_Console</div>
+  <h2>8. APM_Console 아키텍처</h2>
+
+  <h3><span class="num">8-1.</span>플러그인 아키텍처 — 왜 이렇게까지 나눴나</h3>
+  <p>Apm 도메인과 Game 도메인을 한 프로젝트에 넣는 안(A안, 리플렉션 자동 등록)보다, 공수가 3~5배 더 들어도 <strong>컴파일 타임에 강제되는 격리</strong>가 있는 B안(도메인별 별도 프로젝트 + 런타임 로딩)을 선택했다.</p>
+
+  <div class="diagram">
+    <div class="diagram-title">// 플러그인 로딩 구조</div>
+    <svg viewBox="0 0 780 220" xmlns="http://www.w3.org/2000/svg">
+      <rect x="300" y="20" width="180" height="50" rx="8" fill="#161B22" stroke="#A371F7" stroke-width="1.4"/>
+      <text x="390" y="50" text-anchor="middle" fill="#A371F7" font-weight="700" font-size="12" font-family="JetBrains Mono">ApmConsole.Host</text>
+
+      <line x1="350" y1="70" x2="200" y2="120" stroke="#58A6FF" stroke-width="1.3"/>
+      <line x1="430" y1="70" x2="580" y2="120" stroke="#58A6FF" stroke-width="1.3"/>
+
+      <rect x="100" y="120" width="200" height="70" rx="8" fill="#161B22" stroke="#3FB950"/>
+      <text x="200" y="145" text-anchor="middle" fill="#3FB950" font-size="12" font-family="JetBrains Mono">Domain.Apm.dll</text>
+      <text x="200" y="164" text-anchor="middle" fill="#6E7681" font-size="9">RCL, 자체 ALC 로드</text>
+      <text x="200" y="178" text-anchor="middle" fill="#6E7681" font-size="9">wwwroot 임베디드</text>
+
+      <rect x="480" y="120" width="200" height="70" rx="8" fill="#161B22" stroke="#D29922"/>
+      <text x="580" y="145" text-anchor="middle" fill="#D29922" font-size="12" font-family="JetBrains Mono">Domain.Game.dll</text>
+      <text x="580" y="164" text-anchor="middle" fill="#6E7681" font-size="9">RCL, 자체 ALC 로드</text>
+      <text x="580" y="178" text-anchor="middle" fill="#6E7681" font-size="9">(현재 휴면)</text>
+
+      <text x="390" y="210" text-anchor="middle" fill="#6E7681" font-size="10">IDomainModule(공유 계약 타입)은 항상 Host의 Default ALC 것을 재사용</text>
+    </svg>
+  </div>
+
+  <h3><span class="num">8-2.</span>DomainLoadContext — 타입 아이덴티티 함정 회피 (면접 단골 포인트)</h3>
+  <p><strong>같은 이름의 타입도 AssemblyLoadContext(ALC)가 다르면 완전히 다른 타입으로 취급된다.</strong> Host가 로드한 <code class="inline">IDomainModule</code>과 도메인 DLL이 별도 ALC에서 다시 로드한 같은 이름의 타입은 CLR 입장에서 별개 타입이라 <code class="inline">is</code>/캐스팅이 전부 실패한다.</p>
+  <div class="code-block"><pre><span class="c-key">protected override</span> Assembly? <span class="c-fn">Load</span>(AssemblyName assemblyName)
+{
+    <span class="c-comment">// 호스트(Default ALC)가 이미 로드해 둔 어셈블리는 그대로 재사용 -</span>
+    <span class="c-comment">// 공유 계약 타입(IDomainModule 등)의 아이덴티티가 갈라지는 걸 막기 위함.</span>
+    <span class="c-key">var</span> existing = AssemblyLoadContext.Default.Assemblies
+        .FirstOrDefault(a =&gt; a.GetName().Name == assemblyName.Name);
+    <span class="c-key">if</span> (existing != <span class="c-key">null</span>) <span class="c-key">return</span> existing;
+
+    <span class="c-comment">// 호스트가 모르는 도메인 전용 패키지(EF Core, SQLite 등)는 도메인 폴더에서 정상 로드</span>
+    <span class="c-key">var</span> assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName);
+    <span class="c-key">return</span> assemblyPath != <span class="c-key">null</span> ? LoadFromAssemblyPath(assemblyPath) : <span class="c-key">null</span>;
+}</pre></div>
+
+  <h3><span class="num">8-3.</span>SignalR 실시간 갱신 + 대시보드</h3>
+  <div class="diagram">
+    <div class="diagram-title">// 폴링 vs push</div>
+    <svg viewBox="0 0 780 140" xmlns="http://www.w3.org/2000/svg">
+      <text x="20" y="24" fill="#F85149" font-size="12" font-weight="700">폴링</text>
+      <line x1="20" y1="55" x2="760" y2="55" stroke="#30363D"/>
+      <circle cx="60" cy="55" r="5" fill="#F85149"/><circle cx="160" cy="55" r="5" fill="#F85149"/>
+      <circle cx="260" cy="55" r="5" fill="#F85149"/><circle cx="360" cy="55" r="5" fill="#F85149"/>
+      <circle cx="460" cy="55" r="5" fill="#3FB950"/><circle cx="560" cy="55" r="5" fill="#F85149"/>
+      <circle cx="660" cy="55" r="5" fill="#F85149"/>
+      <text x="390" y="80" text-anchor="middle" fill="#6E7681" font-size="10">변경 없어도 계속 요청(빨강) — 딱 한 번만 실제 변경(초록), 나머지는 낭비 + 주기만큼 지연</text>
+
+      <text x="20" y="112" fill="#3FB950" font-size="12" font-weight="700">SignalR push</text>
+      <line x1="20" y1="118" x2="760" y2="118" stroke="#30363D"/>
+      <circle cx="460" cy="118" r="6" fill="#3FB950"/>
+      <text x="620" y="122" fill="#6E7681" font-size="10">변경된 순간에만 push, 지연 최소</text>
+    </svg>
+  </div>
+  <p>메트릭을 DB에 저장한 <strong>직후 곧바로</strong> <code class="inline">MetricsHub</code>(<code class="inline">/apm/hub/metrics</code>)로 브로드캐스트한다. 대시보드는 그래프 5개(CPU/메모리/디스크 사용률, 네트워크 RX·TX, TCP RTT+RTT 분산) + 최근 메트릭 표(11컬럼), 최대 20개 유지.</p>
+
+  <div class="qa-box"><div class="qa-q">.NET 플러그인 아키텍처에서 타입 충돌이 왜 생기나요?</div>
+  <div class="qa-a">AssemblyLoadContext는 어셈블리 격리 단위입니다. 같은 이름·같은 코드의 타입이라도 서로 다른 ALC에서 각각 로드되면 CLR은 이걸 별개 타입으로 취급합니다. 그래서 호스트와 플러그인이 별도 ALC에서 각자 로드한 같은 이름의 인터페이스 타입은 is 캐스팅이 실패하게 됩니다. 공유해야 하는 계약 타입은 항상 같은 ALC(보통 Default)에서 오도록 로딩 로직을 짜야 합니다.</div></div>
+  <div class="qa-box"><div class="qa-q">왜 폴링 대신 SignalR을 썼나요?</div>
+  <div class="qa-a">폴링은 변경이 없어도 계속 요청을 보내는 낭비가 있고 주기만큼의 지연이 항상 발생합니다. SignalR은 저장 직후 곧바로 push하기 때문에 불필요한 요청도 없고 지연도 최소화됩니다.</div></div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s9">
+  <div class="sec-label">// Debugging</div>
+  <h2>9. 발견한 버그 전체 (7건 상세)</h2>
+  <p>"제안 단계에선 맞아 보였지만 실제 빌드/실행/렌더링에서 발견된" 버그 7건.</p>
+
+  <div class="bug-card"><div class="bug-num">// Bug 1</div><h4>Razor HTML 인코딩이 JS 타임스탬프를 깨뜨림</h4>
+    <div class="row"><b>증상</b>대시보드 초기 렌더링에서 차트가 빈 그래프로 뜸.</div>
+    <div class="row"><b>원인</b>Razor의 <code class="inline">@</code> 표현식은 &lt;script&gt; 안이라도 항상 HTML 인코딩됨 — ISO 문자열의 "+"가 "&amp;#x2B;"로 깨져 <code class="inline">new Date()</code> 파싱 실패.</div>
+    <div class="row"><b>발견</b>실제 렌더링된 페이지를 <code class="inline">curl</code>로 확인하다가 발견.</div>
+    <div class="row"><b>수정</b>ISO 문자열 대신 유닉스 밀리초(숫자)로 전달 — 숫자는 인코딩할 특수문자가 없음.</div>
+  </div>
+
+  <div class="bug-card"><div class="bug-num">// Bug 2</div><h4>TLS 핸드셰이크 모드 파라미터 누락</h4>
+    <div class="row"><b>증상</b>Agent(client) 모드가 실질적으로 동작하지 않음(미정의 동작).</div>
+    <div class="row"><b>원인</b>생성자가 <code class="inline">mode</code>를 안 받아 <code class="inline">_mode</code>가 미초기화, <code class="inline">handshakeType</code>도 계산만 하고 <code class="inline">server</code>가 하드코딩된 채 남음.</div>
+    <div class="row"><b>발견</b>코드 리뷰(직접 대조)로 발견.</div>
+    <div class="row"><b>수정</b><code class="inline">SessionMode mode</code> 파라미터 추가, 계산한 <code class="inline">handshakeType</code> 실제 전달. <code class="inline">nm</code> 심볼 검증 + 실행 검증.</div>
+  </div>
+
+  <div class="bug-card"><div class="bug-num">// Bug 3</div><h4>ApmSession.h/.cpp가 0바이트 빈 파일로 방치</h4>
+    <div class="row"><b>증상</b>"빌드 성공"이 곧 "코드가 있다"는 착각.</div>
+    <div class="row"><b>원인</b>빈 .cpp도 정상 컴파일된다 — 빌드 성공만으론 못 잡음.</div>
+    <div class="row"><b>발견</b><code class="inline">nm</code>으로 오브젝트 파일에 심볼이 실제 존재하는지 확인하다가 발견.</div>
+    <div class="row"><b>수정</b>내용 재작성 + 심볼 존재 재확인. <em>"빌드 성공 ≠ 동작" 원칙이 생긴 계기.</em></div>
+  </div>
+
+  <div class="bug-card"><div class="bug-num">// Bug 4</div><h4>Storage 계층 3종 동시 결함</h4>
+    <div class="row"><b>증상</b>컴파일 자체가 안 됨.</div>
+    <div class="row"><b>원인</b>include 오타 + 빈 CMakeLists.txt + 헤더에 .cpp 내용 혼입, 3가지 동시 존재.</div>
+    <div class="row"><b>수정</b>3건 모두 직접 수정 후 클린 빌드 재검증.</div>
+  </div>
+
+  <div class="bug-card"><div class="bug-num">// Bug 5</div><h4>ComputeNetworkUsage 중복 정의</h4>
+    <div class="row"><b>증상</b><code class="inline">redefinition</code> 컴파일 에러.</div>
+    <div class="row"><b>원인</b>파일 끝에 빈 껍데기 중복 정의 + <code class="inline">ComputeCpuUsage()</code> 통째로 누락.</div>
+    <div class="row"><b>수정</b>중복 삭제 + 누락 함수 복원.</div>
+  </div>
+
+  <div class="bug-card"><div class="bug-num">// Bug 6</div><h4>TCP_INFO 연동 시 파일 누락 + 오타</h4>
+    <div class="row"><b>증상</b>링크/컴파일 에러.</div>
+    <div class="row"><b>원인</b>관련 파일 4개 누락 + 타입명 오타(<code class="inline">TcpConnectonInfo</code>) + <code class="inline">.pb.h</code> 미재생성.</div>
+    <div class="row"><b>수정</b>파일 복원, 오타 수정, 재생성. 클린 빌드+<code class="inline">nm</code>+실행 검증(<code class="inline">rtt:32us,var:26us,retrans:0,cwnd:10</code> — 루프백 특성과 일치).</div>
+  </div>
+
+  <div class="bug-card"><div class="bug-num">// Bug 7</div><h4>ManifestEmbeddedFileProvider가 매니페스트를 못 찾음</h4>
+    <div class="row"><b>증상</b>정적 리소스 404 — 예외가 조용히 삼켜져서 원인 파악 어려움.</div>
+    <div class="row"><b>원인</b>매니페스트 생성 MSBuild 타겟이 별도 NuGet 패키지(<code class="inline">Microsoft.Extensions.FileProviders.Embedded</code>)에 있었음. <code class="inline">catch</code> 블록이 이 예외를 "정상 케이스"로 오인해서 삼킴.</div>
+    <div class="row"><b>발견</b>별도 콘솔 앱으로 <code class="inline">GetManifestResourceNames()</code> 직접 호출 + <code class="inline">curl</code>로 최종 검증.</div>
+    <div class="row"><b>수정</b>패키지 참조 추가.</div>
+  </div>
+
+  <div class="qa-box"><div class="qa-q">버그를 발견하는 본인만의 원칙이 있나요?</div>
+  <div class="qa-a">'빌드 성공은 동작을 증명하지 않는다'는 원칙입니다. 실제로 빈 파일이 정상 컴파일되는 걸 겪은 뒤로는, 심볼이 실제 존재하는지 nm으로 확인하고, 웹 쪽은 실제 렌더링된 결과를 curl로 직접 확인하는 걸 기본 절차로 삼았습니다.</div></div>
+  <div class="qa-box"><div class="qa-q">예외가 조용히 삼켜져서 디버깅이 어려웠던 경험 있나요?</div>
+  <div class="qa-a">ManifestEmbeddedFileProvider 케이스가 정확히 그랬습니다. 특정 예외를 '정상적으로 있을 수 있는 케이스'로 오인해서 캐치 블록이 조용히 삼키고 있었는데 실제로는 진짜 설정 오류였습니다. 이후로는 catch 블록이 '정말 무해한 케이스만 걸러내는지'를 더 의심하게 됐습니다.</div></div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s10">
+  <div class="sec-label">// Testing</div>
+  <h2>10. 테스트 전략</h2>
+
+  <table>
+    <tr><th>구성</th><th>개수</th><th>검증 항목</th></tr>
+    <tr><td>AesGcmCipher(C++)</td><td class="hl">5</td><td>왕복 복원 / nonce 매번 다름 / 태그 변조 거부 / 암호문 변조 거부 / 다른 키 거부</td></tr>
+    <tr><td>AesGcmPayload(C++)</td><td class="hl">4</td><td>왕복 / 와이어 포맷 크기 / 변조 거부 / 인터페이스 경유 동작</td></tr>
+    <tr><td>ReadExactAsync(.NET)</td><td class="hl">4</td><td>전부 수신 / 분할 수신(ChunkedStream) / 조기 종료 / 길이 0</td></tr>
+    <tr><td>DecryptAndParse(.NET)</td><td class="hl">4</td><td>정상 왕복 / 태그·암호문 변조·잘못된 키 거부</td></tr>
+  </table>
+
+  <div class="callout info">
+    <strong>테스트 가능하게 만들기 위한 리팩터링</strong> — <code class="inline">MetricsReceiverService</code>의 <code class="inline">ReadExactAsync</code>/<code class="inline">DecryptAndParse</code>는 원래 private였는데 internal로 넓히고(<code class="inline">InternalsVisibleTo</code>), <code class="inline">DecryptAndParse</code>는 인스턴스 필드 대신 <strong>키를 파라미터로 받는 static 메서드</strong>로 전환 — DI 없이도 순수 로직만 테스트 가능하게. "테스트 가능한 설계"는 의도적으로 리팩터링해야 얻어지는 것.
+  </div>
+
+  <h3>왜 이 두 개만 골랐나</h3>
+  <ol>
+    <li>포트폴리오 특성상 시간 예산이 제한적 — "핵심 위험 지점 우선"이 합리적 우선순위.</li>
+    <li>Agent↔Collector도 AES-GCM으로 통일되면서, 이 9개가 <strong>운영 경로 전체</strong>를 커버하게 됨.</li>
+    <li><code class="inline">ApmSession::ProcessAccumulated</code>처럼 소켓에 강결합된 부분은 아직 자동 테스트 없음 — 인지하고 있는 갭.</li>
+  </ol>
+
+  <div class="qa-box"><div class="qa-q">왜 100% 테스트 커버리지를 목표로 하지 않았나요?</div>
+  <div class="qa-a">시간 예산이 정해져 있었고, 모든 코드를 동일한 강도로 테스트하는 것보다 실수하면 조용히 실패하고 파급력이 큰 영역(암호화, 네트워크 프레이밍)을 우선하는 게 더 합리적인 투자라고 판단했습니다. 어디에 테스트가 없는지도 명확히 인지하고 있습니다.</div></div>
+  <div class="qa-box"><div class="qa-q">테스트하기 어려운 코드를 어떻게 테스트 가능하게 만드나요?</div>
+  <div class="qa-a">인스턴스 필드에 의존하던 로직을 파라미터를 받는 static 메서드로 바꿔서 DI 컨테이너 전체를 구성하지 않아도 순수 로직만 테스트할 수 있게 만듭니다. 접근 제한자는 최소한만 넓히고 InternalsVisibleTo로 테스트 프로젝트에만 노출해서 공개 API 표면은 유지합니다.</div></div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s11">
+  <div class="sec-label">// Q&amp;A Index</div>
+  <h2>11. 예상 면접 질문 모음 (통합)</h2>
+  <table>
+    <tr><th>주제</th><th>질문</th><th>섹션</th></tr>
+    <tr><td>아키텍처</td><td>왜 이 코어를 다른 프로젝트에도 재사용했나</td><td><a href="#s1">1절</a></td></tr>
+    <tr><td>아키텍처</td><td>Standalone Asio가 뭔가, Boost.Asio와 차이는</td><td><a href="#s2">2절</a></td></tr>
+    <tr><td>아키텍처</td><td>크로스플랫폼이라면서 게임 콘텐츠는 Windows에서 왜 검증 안 했나 / Windows 포팅 최대 난관</td><td><a href="#s2">2절</a></td></tr>
+    <tr><td>보안</td><td>왜 Session을 확장 안 하고 ApmSession을 새로 만들었나</td><td><a href="#s3">3절</a></td></tr>
+    <tr><td>보안</td><td>왜 두 암호를 섞어 쓰다 통일했나</td><td><a href="#s3">3절</a></td></tr>
+    <tr><td>보안</td><td>AEAD가 CBC+HMAC보다 왜 더 안전한가</td><td><a href="#s3">3절</a></td></tr>
+    <tr><td>보안</td><td>패딩 오라클 공격이 뭔가</td><td><a href="#s3">3절</a></td></tr>
+    <tr><td>보안</td><td>IV/Nonce 재사용이 왜 위험한가</td><td><a href="#s3">3절</a></td></tr>
+    <tr><td>프로토콜</td><td>TCP가 스트림이라는 게 무슨 뜻인가</td><td><a href="#s4">4절</a></td></tr>
+    <tr><td>저장</td><td>왜 C++은 컴파일 타임, .NET은 런타임으로 저장소를 고르나</td><td><a href="#s5">5절</a></td></tr>
+    <tr><td>수집</td><td>MemFree 대신 MemAvailable을 쓰는 이유</td><td><a href="#s6">6절</a></td></tr>
+    <tr><td>성능</td><td>최소 권한과 syscall 최소화가 왜 다른가</td><td><a href="#s7">7절</a></td></tr>
+    <tr><td>성능</td><td>메모리 누수 없다는 걸 어떻게 확신하나</td><td><a href="#s7">7절</a></td></tr>
+    <tr><td>플러그인</td><td>.NET 플러그인 아키텍처에서 타입 충돌이 왜 생기나</td><td><a href="#s8">8절</a></td></tr>
+    <tr><td>플러그인</td><td>왜 폴링 대신 SignalR인가</td><td><a href="#s8">8절</a></td></tr>
+    <tr><td>디버깅</td><td>버그를 발견하는 본인만의 원칙이 있나</td><td><a href="#s9">9절</a></td></tr>
+    <tr><td>테스트</td><td>왜 100% 커버리지를 목표로 안 했나</td><td><a href="#s10">10절</a></td></tr>
+  </table>
+
+  <div class="callout warn">
+    <strong>포지셔닝(가장 중요)</strong> — "이 프로젝트를 만들게 된 계기가 뭔가요?" → <strong>"네트워크 프로그래밍과 동시성 제어를 깊게 익히고 싶어서 직접 구현했다."</strong> 0절 네이밍 원칙 반드시 준수(게임 언급 금지).
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s12">
+  <div class="sec-label">// Glossary</div>
+  <h2>12. 용어 미니 사전</h2>
+  <table>
+    <tr><th>용어</th><th>뜻</th></tr>
+    <tr><td>IOCP</td><td>Windows의 비동기 I/O 완료 통지(Completion Port) 메커니즘.</td></tr>
+    <tr><td>epoll</td><td>Linux의 비동기 I/O 준비 통지(readiness notification) 메커니즘.</td></tr>
+    <tr><td>AEAD</td><td>Authenticated Encryption with Associated Data — 암호화와 인증을 하나의 연산으로 처리하는 방식(예: AES-GCM).</td></tr>
+    <tr><td>Encrypt-then-MAC</td><td>암호화한 뒤 그 암호문에 대해 별도로 MAC을 계산·검증하는 패턴. 복호화 전에 MAC부터 검증해야 안전.</td></tr>
+    <tr><td>패딩 오라클 공격</td><td>CBC 모드에서 패딩 유효성 정보가 새어나가는 걸 악용해 평문을 복원하는 공격.</td></tr>
+    <tr><td>KISA</td><td>한국인터넷진흥원 — ARIA 등 국내 표준 암호를 제정.</td></tr>
+    <tr><td>jiffies</td><td>Linux 커널이 시간을 세는 단위. /proc/stat의 CPU 시간이 이 단위로 누적.</td></tr>
+    <tr><td>AssemblyLoadContext(ALC)</td><td>.NET에서 어셈블리를 격리해서 로드하는 단위. 플러그인 아키텍처의 핵심.</td></tr>
+    <tr><td>Razor Class Library(RCL)</td><td>.cshtml과 정적 파일을 어셈블리 안에 컴파일해 내장할 수 있게 해주는 .NET 프로젝트 타입.</td></tr>
+    <tr><td>Nonce vs IV</td><td>같은 개념(암호화마다 달라져야 하는 값)을 GCM 계열에선 보통 Nonce, CBC 계열에선 IV라고 부른다.</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<section class="sec" id="s13">
+  <div class="sec-label">// Live Demo</div>
+  <h2>13. 라이브 데모 실행 순서</h2>
+  <p>면접에서 실제 시연을 요청받을 경우를 대비한 순서(상세는 <code class="inline">Docs/WEBSERVER_TEST_SCENARIO.md</code>).</p>
+
+  <div class="code-block"><pre><span class="c-comment"># 1) 인증서/키 생성(최초 1회)</span>
+cd APM_Agent
+bash certs/generate_test_cert.sh
+bash certs/generate_agent_collector_key.sh
+bash certs/generate_webserver_key.sh
+cd ../APM_Console && bash certs/generate_webserver_cert.sh
+
+<span class="c-comment"># 2) 빌드</span>
+cd APM_Agent && cmake -S . -B build -DAPM_STORAGE_BACKEND=SQLite &amp;&amp; cmake --build build
+cd ../APM_Console && dotnet build ApmConsole.sln
+
+<span class="c-comment"># 3) 실행 순서 (터미널 3개)</span>
+<span class="c-comment"># 3-1) APM_Console 먼저</span>
+cd APM_Console &amp;&amp; dotnet run --project src/ApmConsole.Host/ApmConsole.Host.csproj
+<span class="c-comment"># 3-2) Collector (반드시 APM_Agent/ 안에서)</span>
+cd APM_Agent &amp;&amp; ./build/Collector
+<span class="c-comment"># 3-3) Agent</span>
+cd APM_Agent &amp;&amp; ./build/Agent</pre></div>
+
+  <p>브라우저로 <code class="inline">/apm/dashboard</code> 접속 — 5초마다 실시간 갱신을 보여줄 수 있다.</p>
+  <div class="callout note"><strong>복원력 시연(선택)</strong>: Collector를 강제 종료했다가 재시작 — Agent 로그에 <code class="inline">[ResilientSender] queued (size=N)</code>가 쌓이다가, 재시작 즉시 버퍼링분부터 순서대로 재전송되는 걸 보여줄 수 있다.</div>
+</section>
+
+<footer>PROJECT_TECHNICAL_REVIEW.html · APM_Agent &amp; APM_Console · 원본: PROJECT_TECHNICAL_REVIEW.md</footer>
+</main>
+</div>
+</body>
+</html>

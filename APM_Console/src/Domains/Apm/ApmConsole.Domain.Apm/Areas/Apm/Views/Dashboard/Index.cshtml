@@ -1,0 +1,202 @@
+@model List<ApmConsole.Domain.Apm.Infrastructure.Persistence.MetricRecord>
+
+<link rel="stylesheet" href="~/css/site.css" />
+
+<div class="dashboard">
+	<h1>Apm 대시보드</h1>
+	<span id="connection-status" class="status-pill">실시간 연결 중...</span>
+
+	<div class="chart-grid">
+		<div class="card">
+			<h2>CPU 사용률 추이</h2>
+			<div class="chart-wrap"><canvas id="cpuChart"></canvas></div>
+		</div>
+		<div class="card">
+			<h2>메모리 사용률 추이</h2>
+			<div class="chart-wrap"><canvas id="memChart"></canvas></div>
+		</div>
+		<div class="card">
+			<h2>디스크 사용률 추이</h2>
+			<div class="chart-wrap"><canvas id="diskChart"></canvas></div>
+		</div>
+		<div class="card">
+			<h2>네트워크 트래픽 추이</h2>
+			<div class="chart-wrap"><canvas id="netChart"></canvas></div>
+		</div>
+		<div class="card">
+			<h2>TCP RTT 추이</h2>
+			<div class="chart-wrap"><canvas id="rttChart"></canvas></div>
+		</div>
+	</div>
+
+	<div class="card">
+		<h2>최근 메트릭</h2>
+		@if (!Model.Any())
+		{
+			<p class="empty-state">아직 수집된 메트릭이 없습니다. Collector/Agent가 실행 중인지 확인하세요.</p>
+		}
+		else
+		{
+			<table>
+				<thead>
+					<tr>
+						<th>시각</th><th>CPU %</th><th>메모리(MB)</th><th>디스크(GB)</th>
+						<th>Net RX</th><th>Net TX</th><th>RTT(us)</th><th>RTT 분산(us)</th>
+						<th>재전송</th><th>총 재전송</th><th>cwnd</th>
+					</tr>
+				</thead>
+				<tbody>
+				@foreach (var m in Model)
+				{
+					<tr>
+						<td>@m.Ts.ToLocalTime()</td>
+						<td>@m.CpuUsagePercent.ToString("F1")</td>
+						<td>@((m.MemUsedBytes / 1024.0 / 1024.0).ToString("F0")) / @((m.MemTotalBytes / 1024.0 / 1024.0).ToString("F0"))</td>
+						<td>@((m.DiskUsedBytes / 1024.0 / 1024.0 / 1024.0).ToString("F1")) / @((m.DiskTotalBytes / 1024.0 / 1024.0 / 1024.0).ToString("F1"))</td>
+						<td>@m.NetRxBytesPerSec B/s</td>
+						<td>@m.NetTxBytesPerSec B/s</td>
+						<td>@m.TcpRttUs</td>
+						<td>@m.TcpRttVarUs</td>
+						<td>@m.TcpRetransmits</td>
+						<td>@m.TcpTotalRetrans</td>
+						<td>@m.TcpSndCwnd</td>
+					</tr>
+				}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+<script src="~/lib/signalr/signalr.min.js"></script>
+<script src="~/lib/chartjs/chart.umd.js"></script>
+<script>
+	const statusEl = document.getElementById("connection-status");
+
+	// 표(Model)는 최신순(내림차순)이라, 차트는 시간순(오름차순)으로 뒤집어서 초기 데이터를 채움.
+	// t는 유닉스 밀리초(순수 숫자) - Razor 코드 표현식은 항상 HTML 인코딩을 거쳐서, ISO 문자열의
+	// 시간대 기호가 깨져 JS Date 파싱이 실패하는 문제가 있었음(실제 렌더링으로 발견) - 숫자는
+	// 인코딩할 특수문자가 없어서 이 문제 자체가 없음.
+	// memPercent/diskPercent는 총량이 0인 경우(비정상 상황) 나눗셈 오류를 피하려고 서버측 계산에서
+	// 0으로 처리함 - 실제 운영 환경에서는 total이 0일 수 없지만 방어적으로 넣어둠.
+	const initialPoints = [
+	@foreach (var m in Model.AsEnumerable().Reverse())
+	{
+		<text>{
+			t: @m.Ts.ToUnixTimeMilliseconds(),
+			cpu: @m.CpuUsagePercent.ToString("F1"),
+			memPercent: @((m.MemTotalBytes > 0 ? m.MemUsedBytes * 100.0 / m.MemTotalBytes : 0).ToString("F1")),
+			diskPercent: @((m.DiskTotalBytes > 0 ? m.DiskUsedBytes * 100.0 / m.DiskTotalBytes : 0).ToString("F1")),
+			netRx: @m.NetRxBytesPerSec,
+			netTx: @m.NetTxBytesPerSec,
+			rtt: @m.TcpRttUs,
+			rttVar: @m.TcpRttVarUs,
+		},</text>
+	}
+	];
+
+	// 5개 차트가 "초기 데이터로 생성 + 새 포인트 push/trim/update"라는 동일한 구조를 반복하므로
+	// 공통 로직을 두 헬퍼로 뽑음(차트마다 따로 안 씀 - 그래프 목록이 늘어나도 이 두 함수만 재사용).
+	// 재전송(tcpRetransmits, 순간값)/총 재전송(tcpTotalRetrans, 누적값)/cwnd(tcpSndCwnd)는
+	// 표 컬럼으로만 노출 - 등락이 완만한 카운터라 별도 그래프 카드로 추가하기보다는 RTT와 짝지어
+	// 표로 보는 편이 더 읽기 쉽다고 판단.
+	function createLineChart(canvasId, datasets, yOptions) {
+		return new Chart(document.getElementById(canvasId), {
+			type: "line",
+			data: { labels: initialPoints.map(p => new Date(p.t).toLocaleTimeString()), datasets },
+			options: {
+				animation: false,
+				responsive: true,
+				maintainAspectRatio: false,
+				scales: { y: yOptions || { beginAtZero: true } },
+			},
+		});
+	}
+
+	function pushToChart(chart, label, values) {
+		chart.data.labels.push(label);
+		values.forEach((v, i) => chart.data.datasets[i].data.push(v));
+
+		while (chart.data.labels.length > 20) {
+			chart.data.labels.shift();
+			chart.data.datasets.forEach(ds => ds.data.shift());
+		}
+
+		chart.update();
+	}
+
+	const cpuChart = createLineChart("cpuChart", [
+		{ label: "CPU %", data: initialPoints.map(p => p.cpu), borderColor: "#3D6B8F",
+		  backgroundColor: "rgba(61, 107, 143, 0.15)", fill: true, tension: 0.2, pointRadius: 2 },
+	], { beginAtZero: true, suggestedMax: 100 });
+
+	const memChart = createLineChart("memChart", [
+		{ label: "메모리 %", data: initialPoints.map(p => p.memPercent), borderColor: "#C97A3D",
+		  backgroundColor: "rgba(201, 122, 61, 0.15)", fill: true, tension: 0.2, pointRadius: 2 },
+	], { beginAtZero: true, suggestedMax: 100 });
+
+	const diskChart = createLineChart("diskChart", [
+		{ label: "디스크 %", data: initialPoints.map(p => p.diskPercent), borderColor: "#6B4FA0",
+		  backgroundColor: "rgba(107, 79, 160, 0.15)", fill: true, tension: 0.2, pointRadius: 2 },
+	], { beginAtZero: true, suggestedMax: 100 });
+
+	const netChart = createLineChart("netChart", [
+		{ label: "수신 B/s", data: initialPoints.map(p => p.netRx), borderColor: "#2E7D4F", tension: 0.2, pointRadius: 2 },
+		{ label: "송신 B/s", data: initialPoints.map(p => p.netTx), borderColor: "#B23A3A", tension: 0.2, pointRadius: 2 },
+	]);
+
+	const rttChart = createLineChart("rttChart", [
+		{ label: "RTT(us)", data: initialPoints.map(p => p.rtt), borderColor: "#3D8F8F", tension: 0.2, pointRadius: 2 },
+		{ label: "RTT 분산(us)", data: initialPoints.map(p => p.rttVar), borderColor: "#A0A03D", tension: 0.2, pointRadius: 2 },
+	]);
+
+	const connection = new signalR.HubConnectionBuilder()
+		.withUrl("/apm/hub/metrics")
+		.withAutomaticReconnect()
+		.build();
+
+	connection.on("NewMetric", (m) => {
+		const tbody = document.querySelector("table tbody");
+		if (tbody) {
+			const row = document.createElement("tr");
+			row.innerHTML = `
+				<td>${new Date(m.ts).toLocaleString()}</td>
+				<td>${m.cpuUsagePercent.toFixed(1)}</td>
+				<td>${(m.memUsedBytes / 1024 / 1024).toFixed(0)} / ${(m.memTotalBytes / 1024 / 1024).toFixed(0)}</td>
+				<td>${(m.diskUsedBytes / 1024 / 1024 / 1024).toFixed(1)} / ${(m.diskTotalBytes / 1024 / 1024 / 1024).toFixed(1)}</td>
+				<td>${m.netRxBytesPerSec} B/s</td>
+				<td>${m.netTxBytesPerSec} B/s</td>
+				<td>${m.tcpRttUs}</td>
+				<td>${m.tcpRttVarUs}</td>
+				<td>${m.tcpRetransmits}</td>
+				<td>${m.tcpTotalRetrans}</td>
+				<td>${m.tcpSndCwnd}</td>
+			`;
+			tbody.insertBefore(row, tbody.firstChild);
+
+			while (tbody.rows.length > 20)
+				tbody.deleteRow(tbody.rows.length - 1);
+		}
+
+		const label = new Date(m.ts).toLocaleTimeString();
+		const memPercent = m.memTotalBytes > 0 ? (m.memUsedBytes / m.memTotalBytes * 100) : 0;
+		const diskPercent = m.diskTotalBytes > 0 ? (m.diskUsedBytes / m.diskTotalBytes * 100) : 0;
+
+		pushToChart(cpuChart, label, [m.cpuUsagePercent]);
+		pushToChart(memChart, label, [memPercent]);
+		pushToChart(diskChart, label, [diskPercent]);
+		pushToChart(netChart, label, [m.netRxBytesPerSec, m.netTxBytesPerSec]);
+		pushToChart(rttChart, label, [m.tcpRttUs, m.tcpRttVarUs]);
+	});
+
+	connection.start()
+		.then(() => {
+			statusEl.textContent = "실시간 연결됨";
+			statusEl.classList.add("status-connected");
+		})
+		.catch(err => {
+			console.error(err);
+			statusEl.textContent = "실시간 연결 실패 - 새로고침으로만 갱신됩니다";
+			statusEl.classList.add("status-error");
+		});
+</script>
