@@ -26,7 +26,7 @@
 2순위 : 알림(alerting, 임계치 기반)                    ✅ 코드 적용 + 빌드/테스트 검증 완료
 3순위 : 데이터 보존 정책(retention)                    ✅ 코드 적용 + 빌드 검증 완료
 4순위 : 함수/트랜잭션 레벨 계측                         ✅ 코드 적용 + protoc 재생성 + 빌드/테스트 검증 완료
-5순위 : 백분위/집계 통계                                ⬜ 미착수
+5순위 : 백분위/집계 통계                                ✅ 코드 적용 + 빌드/테스트 검증 완료
 6순위 : OpenTelemetry — 구현 보류, 면접용 답변 정리만  ⬜ 미착수
 7순위 : 원격 명령 실행 기능                            ⏸️ 보류(사유 아래 참고), 착수 여부 미정
 ```
@@ -99,9 +99,25 @@
 
 **남은 선택 사항(코드/빌드 관점에선 4순위 완료, 실행 관점 확인은 선택)**: Collector+Console을 실제로 함께 띄워 `[MetricsReceiverService] span 저장: Collector.HandleMetricPacket ...` / `AlertsController.Index` 관련 span이 `TransactionSpans` 테이블에 실제로 쌓이는지 눈으로 확인하는 것 — 필수는 아님(패킷 id 분기 로직 자체는 단순하고, `Metric` 경로는 이미 동작 검증된 것과 동일한 프레이밍이라 리스크가 낮다고 판단).
 
-**아직 안 한 것**: `git commit`(재생성된 `Metric.pb.h`/`.pb.cc` 포함) — 사용자가 직접 커밋 여부/시점 결정.
+**커밋 완료 (2026-07-26, `33ec155`)**: "Add load testing, alerting, data retention, and transaction tracing" — 1순위(LoadTester, 그동안 스테이징만 되고 커밋 안 된 상태였음)까지 함께 한 커밋으로 반영(사용자 결정: main.cpp 등 여러 순위가 같은 파일에 얽혀 있어 비대화형 세션에서 patch 단위 분리가 불가능해 단일 커밋으로 진행). 커밋 메시지는 AI 도구 언급/서명 없이 작성. `apm_metrics.db-journal`/`loadtest_results/`(런타임 산출물)와 `.vscode/`는 이번 커밋에서 의도적으로 제외 — 여전히 untracked 상태로 디스크에 남아있음(필요시 `.gitignore`에 `*.db-journal`/`loadtest_results/` 추가 고려). `CLAUDE.md`도 이번 작업과 무관해 손대지 않았으나 여전히 untracked 상태(원래 "커밋되어 있어야 할 프로젝트 지침 파일"인데 실제로는 추적 안 되고 있음 — 별도 확인 필요할 수 있음).
 
-### 5순위 — 백분위/집계 통계 ⬜ 미착수
+### 5순위 — 백분위/집계 통계 ✅ 코드 적용 + 빌드/테스트 검증 완료
+
+확인 4건 확정: 대상 데이터 `TransactionSpans`만(Metrics는 이미 시계열 그래프 있어 제외), 계산 시점은 조회 시점(사전 집계 테이블 없음), 집계 시간 창은 사용자 선택(1시간/24시간/7일), 노출은 새 페이지 `/apm/traces`.
+
+**설계 핵심**: SQLite에 `PERCENTILE_CONT` 같은 SQL 백분위 함수가 없어(PostgreSQL/TimescaleDB엔 있음) 시간 창으로 거른 span을 메모리로 가져와 C#에서 `GroupBy(OperationName)` + 정렬 + `PercentileCalculator`(선형 보간, `AlertEvaluator`와 같은 순수 로직 패턴)로 계산 — 백엔드 무관 통일. 4순위에서 이미 만든 `TransactionSpanRecord`의 `(OperationName, Ts)` 복합 인덱스가 이 쿼리에 그대로 맞아 **스키마 변경 없음**. 저장은 마이크로초(`DurationUs`)지만 화면엔 밀리초로 환산해서 표시. 설계 상세: `SESSION_LOG.md` 2026-07-26 여덟 번째 항목("5순위(백분위/집계 통계) 설계 제안").
+
+**2026-07-26 적용 완료** — 사용자가 "바로 적용하자"로 명시 확인, 아래 6개 파일 실제 반영:
+- 신규 5개: `Infrastructure/PercentileCalculator.cs`, `tests/.../Infrastructure/PercentileCalculatorTests.cs`, `Models/TracesViewModel.cs`, `Controllers/TracesController.cs`, `Areas/Apm/Views/Traces/Index.cshtml`
+- 수정 1개: `Areas/Apm/Views/Dashboard/Index.cshtml`(트랜잭션 통계 페이지 링크 추가)
+
+Agent/Collector 변경 없음(Console 쪽만 닫히는 작업 — C++ 재빌드 불필요).
+
+**검증 완료(사용자, WSL, 2026-07-26)**: `dotnet build` → `Build succeeded, 0 Warning(s), 0 Error(s)`. `dotnet test` → `Passed: 18, Failed: 0`(기존 13건 + 신규 `PercentileCalculatorTests` 5건) — 예상대로 회귀 없이 통과.
+
+**남은 선택 사항(코드/빌드 관점에선 5순위 완료, 실행 관점 확인은 선택)**: `/apm/traces` 페이지를 브라우저에서 직접 띄워 실제 트랜잭션 span 데이터(4순위 `Collector.HandleMetricPacket`/`AlertsController.Index` 계측분)로 시간 창 전환(1시간/24시간/7일)과 p50/p95/p99 표시가 의도대로 나오는지 확인 — 필수는 아님(2순위 `/apm/alerts` 시각 검증과 마찬가지로 아직 미실행 상태, 사용자 판단으로 뒤로 미뤄둔 항목들과 함께 나중에 일괄 확인 가능).
+
+이로써 로드맵 1~5순위 전부 코드/빌드 관점에서 완료. 남은 항목: 6순위(OpenTelemetry, 구현 안 함 - 면접 답변만 정리), 7순위(원격 명령 실행, 보류) — 그리고 미뤄둔 실행 관점 시각 검증들(2순위 알림, 5순위 트레이스, 1순위 부하 매트릭스 5단계).
 
 ### 6순위 — OpenTelemetry ⬜ 미착수
 

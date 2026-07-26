@@ -1,0 +1,67 @@
+@model ApmConsole.Domain.Apm.Models.TracesViewModel
+
+<link rel="stylesheet" href="~/css/site.css" />
+
+<div class="dashboard">
+	<h1>트랜잭션 통계</h1>
+	<a href="/apm/dashboard">← 대시보드로</a>
+
+	<div class="card">
+		<h2>집계 구간</h2>
+		@if (Model.Window == "1h")
+		{
+			<strong>최근 1시간</strong>
+		}
+		else
+		{
+			<a href="/apm/traces?window=1h">최근 1시간</a>
+		}
+		&nbsp;|&nbsp;
+		@if (Model.Window == "24h")
+		{
+			<strong>최근 24시간</strong>
+		}
+		else
+		{
+			<a href="/apm/traces?window=24h">최근 24시간</a>
+		}
+		&nbsp;|&nbsp;
+		@if (Model.Window == "7d")
+		{
+			<strong>최근 7일</strong>
+		}
+		else
+		{
+			<a href="/apm/traces?window=7d">최근 7일</a>
+		}
+	</div>
+
+	<div class="card">
+		<h2>연산별 레이턴시 백분위(ms)</h2>
+		@if (!Model.Rows.Any())
+		{
+			<p class="empty-state">선택한 구간에 계측 데이터가 없습니다.</p>
+		}
+		else
+		{
+			<table>
+				<thead>
+					<tr><th>연산</th><th>건수</th><th>P50</th><th>P95</th><th>P99</th><th>성공률</th></tr>
+				</thead>
+				<tbody>
+				@foreach (var r in Model.Rows)
+				{
+					<tr>
+						<td>@r.OperationName</td>
+						<td>@r.Count</td>
+						<td>@r.P50Ms.ToString("F2")</td>
+						<td>@r.P95Ms.ToString("F2")</td>
+						<td>@r.P99Ms.ToString("F2")</td>
+						<td>@r.SuccessRatePercent.ToString("F1")%</td>
+					</tr>
+				}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>

@@ -5300,3 +5300,307 @@ public class MetricsReceiverService : BackgroundService
 - 아직 파일 생성/수정 전 — `CLAUDE.md` 규칙대로 제안 단계(사용자가 이번엔 "4순위로 넘어가자"만 확인, "적용해줘"는 아직). 사용자가 "적용해줘" 하면 위 파일들(C++ 신규 4 + 수정 3: `Metric.proto`/`Common/CMakeLists.txt`/`Collector/main.cpp`, C# 신규 2 + 수정 4: `ApmDbContext.cs`/`MetricsReceiverService.cs`/`AlertsController.cs`/`RetentionService.cs` — 총 13개)을 전부 실제로 반영 예정.
 - **적용 순서 주의**: `Metric.proto` 수정 후 반드시 **Linux(WSL)에서 `protoc` 재생성 + 커밋**이 먼저 이루어져야 C++ 쪽(`apm::TransactionSpan` 참조)이 컴파일됨 — 이 세션은 그 재생성을 대신 실행할 수 없음(아키텍처 제약, WORK_STATUS.md 참고). C# 쪽은 `dotnet build` 시 자동 재생성이라 별도 조치 불필요.
 - 빌드 검증: Console은 `dotnet build`(+가능하면 `dotnet test` — 이번엔 새 테스트를 추가하지 않았으므로 기존 13건 통과만 재확인), Collector는 `cmake --build build`.
+
+## 2026-07-26 — 5순위(백분위/집계 통계) 설계 제안
+
+### 배경
+
+4순위(함수/트랜잭션 레벨 계측) 코드 적용 + protoc 재생성 + Console/Collector 빌드·테스트 검증 + 커밋(`33ec155`)까지 완료 후 5순위로 전환.
+
+**확인 필요 4건 → 사용자 결정**:
+1. 대상 데이터: **`TransactionSpans`만**(`Metrics`는 이미 대시보드 시계열 그래프로 보이고 있어 백분위 필요성이 상대적으로 낮다고 판단)
+2. 계산 시점: **조회 시점에 계산**(사전 집계 테이블 없음)
+3. 집계 시간 창: **사용자가 선택**(1시간/24시간/7일)
+4. 노출 위치: **새 페이지 `/apm/traces`**
+
+### 설계
+
+**핵심 판단 — SQLite에는 백분위 SQL 함수가 없음**: PostgreSQL/TimescaleDB는 `percentile_cont`를 지원하지만 SQLite는 없음. 백엔드 분기 없이 통일하기 위해, 시간 창으로 거른 `TransactionSpans`를 `.Select(필요 컬럼만).ToListAsync()`로 메모리에 가져온 뒤 **C#에서 직접** `GroupBy(OperationName)` → 정렬 → 백분위 계산. EF Core의 `GroupBy`를 SQL로 번역시키려다 실패/저효율 쿼리가 나는 걸 피하는 목적도 겸함. 데이터량은 3순위(보존정책, 기본 30일)로 이미 상한이 있고, 이번엔 최대 7일 창만 보므로 실용적인 범위.
+
+**인덱스 재사용**: 4순위에서 이미 만들어둔 `TransactionSpanRecord`의 `(OperationName, Ts)` 복합 인덱스(`ApmDbContext.OnModelCreating`)가 "시간 창으로 거르고 OperationName으로 묶는" 이번 쿼리에 정확히 맞음 — **스키마 변경 불필요**.
+
+**백분위 계산 방식**: 선형 보간(linear interpolation, `numpy.percentile` 기본값과 동일한 정의) — `AlertEvaluator`와 같은 패턴으로 `PercentileCalculator`를 순수 로직(DB/HTTP 의존 없음)으로 분리해 테스트 대상으로 삼음. 정렬은 호출자(`TracesController`) 책임 — 같은 정렬된 배열에서 p50/p95/p99를 여러 번 뽑아 쓰므로 매번 재정렬하지 않기 위함.
+
+**단위 표시**: 저장은 `DurationUs`(정수, 마이크로초 — `MetricRecord.TcpRttUs`와 같은 관례)지만, 화면엔 **밀리초**로 환산해서 보여줌(레이턴시 백분위는 ms 단위가 업계 관례이자 가독성이 더 좋음 — 원시 메트릭 표(`Dashboard/Index.cshtml`)가 단위 변환 없이 그대로 보여주는 것과는 이 페이지의 목적 자체가 달라서 의도적으로 다르게 감).
+
+**실시간 갱신 없음**: 2/4순위의 Alerts 페이지와 달리 SignalR을 안 씀 — "조회 시점에 계산" 결정과 상충되고(모든 span 저장마다 재계산해서 브로드캐스트하면 사실상 사전 집계와 다를 게 없어짐), 사용자가 매번 원하는 시간 창을 골라 새로고침하는 것으로 충분하다고 판단.
+
+### 제안 — 신규 파일
+
+**`APM_Console/src/Domains/Apm/ApmConsole.Domain.Apm/Infrastructure/PercentileCalculator.cs`** (신규)
+```csharp
+namespace ApmConsole.Domain.Apm.Infrastructure;
+
+/*----------------------
+    PercentileCalculator
+------------------------*/
+// 순수 로직만 담당(DB I/O 없음) - AlertEvaluator와 같은 이유로 public + 테스트 대상.
+// SQLite는 PERCENTILE_CONT 같은 SQL 백분위 함수가 없어(PostgreSQL/TimescaleDB에는 있음)
+// 백엔드 무관하게 동작하도록 C# 메모리 계산으로 통일(2026-07-26 5순위 결정).
+public static class PercentileCalculator
+{
+    // 선형 보간(linear interpolation) 방식 - numpy.percentile 기본값과 동일한 정의.
+    // sortedValues는 호출자가 오름차순 정렬해서 넘겨야 함(같은 배열로 p50/p95/p99를
+    // 여러 번 구할 때 매번 재정렬하지 않기 위해 정렬 책임을 분리).
+    public static double Compute(IReadOnlyList<long> sortedValues, double percentile)
+    {
+        if (sortedValues.Count == 0)
+            return 0;
+        if (sortedValues.Count == 1)
+            return sortedValues[0];
+
+        var rank = (percentile / 100.0) * (sortedValues.Count - 1);
+        var lowerIndex = (int)Math.Floor(rank);
+        var upperIndex = (int)Math.Ceiling(rank);
+
+        if (lowerIndex == upperIndex)
+            return sortedValues[lowerIndex];
+
+        var fraction = rank - lowerIndex;
+        return sortedValues[lowerIndex] + (sortedValues[upperIndex] - sortedValues[lowerIndex]) * fraction;
+    }
+}
+```
+
+**`APM_Console/tests/ApmConsole.Domain.Apm.Tests/Infrastructure/PercentileCalculatorTests.cs`** (신규, 기존 테스트 컨벤션 그대로 따름)
+```csharp
+using ApmConsole.Domain.Apm.Infrastructure;
+
+namespace ApmConsole.Domain.Apm.Tests.Infrastructure;
+
+public class PercentileCalculatorTests
+{
+    [Fact]
+    public void 빈_배열이면_0을_반환한다()
+    {
+        var result = PercentileCalculator.Compute(Array.Empty<long>(), 50);
+
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public void 값이_하나뿐이면_그_값을_그대로_반환한다()
+    {
+        var result = PercentileCalculator.Compute(new long[] { 42 }, 99);
+
+        Assert.Equal(42, result);
+    }
+
+    [Fact]
+    public void P50은_중앙값과_같다()
+    {
+        var sorted = new long[] { 10, 20, 30, 40, 50 };
+
+        var result = PercentileCalculator.Compute(sorted, 50);
+
+        Assert.Equal(30, result);
+    }
+
+    [Fact]
+    public void 순위가_두_값_사이에_있으면_선형보간한다()
+    {
+        // 4개 값(인덱스 0~3) 기준 p90 -> rank = 0.9 * 3 = 2.7 -> 인덱스 2와 3 사이를 30% 보간.
+        var sorted = new long[] { 10, 20, 30, 40 };
+
+        var result = PercentileCalculator.Compute(sorted, 90);
+
+        Assert.Equal(37, result);   // 30 + (40-30)*0.7
+    }
+
+    [Fact]
+    public void P100은_최댓값과_같다()
+    {
+        var sorted = new long[] { 5, 15, 25 };
+
+        var result = PercentileCalculator.Compute(sorted, 100);
+
+        Assert.Equal(25, result);
+    }
+}
+```
+
+**`APM_Console/src/Domains/Apm/ApmConsole.Domain.Apm/Models/TracesViewModel.cs`** (신규)
+```csharp
+namespace ApmConsole.Domain.Apm.Models;
+
+public record OperationStatsRow(
+    string OperationName,
+    int Count,
+    double P50Ms,
+    double P95Ms,
+    double P99Ms,
+    double SuccessRatePercent);
+
+public record TracesViewModel(string Window, List<OperationStatsRow> Rows);
+```
+
+**`APM_Console/src/Domains/Apm/ApmConsole.Domain.Apm/Controllers/TracesController.cs`** (신규)
+```csharp
+using ApmConsole.Domain.Apm.Infrastructure;
+using ApmConsole.Domain.Apm.Infrastructure.Persistence;
+using ApmConsole.Domain.Apm.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace ApmConsole.Domain.Apm.Controllers;
+
+[Area("Apm")]
+[Route("apm/traces")]
+public class TracesController : Controller
+{
+    private readonly ApmDbContext _db;
+
+    public TracesController(ApmDbContext db)
+    {
+        _db = db;
+    }
+
+    // window: "1h" | "24h" | "7d" - 기본 1시간(2026-07-26 5순위 결정: 사용자가 링크로 선택).
+    // 인식 못 하는 값은 "1h"로 취급(방어적) - 쿼리스트링을 직접 조작해도 안전하게 기본값으로 수렴.
+    [HttpGet]
+    public async Task<IActionResult> Index(string window = "1h")
+    {
+        window = window is "24h" or "7d" ? window : "1h";
+
+        var lookback = window switch
+        {
+            "24h" => TimeSpan.FromHours(24),
+            "7d" => TimeSpan.FromDays(7),
+            _ => TimeSpan.FromHours(1),
+        };
+        var cutoff = DateTimeOffset.UtcNow - lookback;
+
+        // 조회 시점에 계산(사전 집계 테이블 없음, 2026-07-26 5순위 결정) - GroupBy를 SQL로
+        // 번역시키지 않고 필요한 컬럼만 뽑아 메모리로 가져온 뒤 C#에서 묶음 - SQLite/TimescaleDB
+        // 백엔드 차이(SQLite는 PERCENTILE_CONT 같은 SQL 백분위 함수가 없음)를 아예 우회.
+        // OperationName+Ts 복합 인덱스(ApmDbContext, 4순위)가 이 WHERE+묶음에 그대로 맞음.
+        var spans = await _db.TransactionSpans
+            .AsNoTracking()
+            .Where(s => s.Ts >= cutoff)
+            .Select(s => new { s.OperationName, s.DurationUs, s.Success })
+            .ToListAsync();
+
+        var rows = spans
+            .GroupBy(s => s.OperationName)
+            .Select(g =>
+            {
+                var sorted = g.Select(s => s.DurationUs).OrderBy(us => us).ToList();
+                return new OperationStatsRow(
+                    OperationName: g.Key,
+                    Count: sorted.Count,
+                    P50Ms: PercentileCalculator.Compute(sorted, 50) / 1000.0,
+                    P95Ms: PercentileCalculator.Compute(sorted, 95) / 1000.0,
+                    P99Ms: PercentileCalculator.Compute(sorted, 99) / 1000.0,
+                    SuccessRatePercent: g.Count(s => s.Success) * 100.0 / g.Count());
+            })
+            .OrderByDescending(r => r.Count)
+            .ToList();
+
+        return View(new TracesViewModel(window, rows));
+    }
+}
+```
+
+**`APM_Console/src/Domains/Apm/ApmConsole.Domain.Apm/Areas/Apm/Views/Traces/Index.cshtml`** (신규)
+```html
+@model ApmConsole.Domain.Apm.Models.TracesViewModel
+
+<link rel="stylesheet" href="~/css/site.css" />
+
+<div class="dashboard">
+	<h1>트랜잭션 통계</h1>
+	<a href="/apm/dashboard">← 대시보드로</a>
+
+	<div class="card">
+		<h2>집계 구간</h2>
+		@if (Model.Window == "1h")
+		{
+			<strong>최근 1시간</strong>
+		}
+		else
+		{
+			<a href="/apm/traces?window=1h">최근 1시간</a>
+		}
+		&nbsp;|&nbsp;
+		@if (Model.Window == "24h")
+		{
+			<strong>최근 24시간</strong>
+		}
+		else
+		{
+			<a href="/apm/traces?window=24h">최근 24시간</a>
+		}
+		&nbsp;|&nbsp;
+		@if (Model.Window == "7d")
+		{
+			<strong>최근 7일</strong>
+		}
+		else
+		{
+			<a href="/apm/traces?window=7d">최근 7일</a>
+		}
+	</div>
+
+	<div class="card">
+		<h2>연산별 레이턴시 백분위(ms)</h2>
+		@if (!Model.Rows.Any())
+		{
+			<p class="empty-state">선택한 구간에 계측 데이터가 없습니다.</p>
+		}
+		else
+		{
+			<table>
+				<thead>
+					<tr><th>연산</th><th>건수</th><th>P50</th><th>P95</th><th>P99</th><th>성공률</th></tr>
+				</thead>
+				<tbody>
+				@foreach (var r in Model.Rows)
+				{
+					<tr>
+						<td>@r.OperationName</td>
+						<td>@r.Count</td>
+						<td>@r.P50Ms.ToString("F2")</td>
+						<td>@r.P95Ms.ToString("F2")</td>
+						<td>@r.P99Ms.ToString("F2")</td>
+						<td>@r.SuccessRatePercent.ToString("F1")%</td>
+					</tr>
+				}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+```
+
+### 제안 — 기존 파일 수정 (수정 전 / 수정 후)
+
+**변경 사유**: 대시보드에서 새 페이지로 가는 링크 하나만 추가(2순위 때 알림 페이지 링크를 추가한 것과 동일한 패턴).
+
+**`Areas/Apm/Views/Dashboard/Index.cshtml`**
+
+수정 전:
+```html
+<div class="dashboard">
+	<h1>Apm 대시보드</h1>
+	<a href="/apm/alerts">알림 설정/이력 →</a>
+	<span id="connection-status" class="status-pill">실시간 연결 중...</span>
+```
+
+수정 후:
+```html
+<div class="dashboard">
+	<h1>Apm 대시보드</h1>
+	<a href="/apm/alerts">알림 설정/이력 →</a>
+	<a href="/apm/traces">트랜잭션 통계 →</a>
+	<span id="connection-status" class="status-pill">실시간 연결 중...</span>
+```
+
+### 확인 필요 없음 — 재확인한 기존 결정 그대로 적용
+
+이번 항목은 앞서 사용자가 확정한 4건(대상 데이터/계산 시점/시간 창/노출 위치)을 그대로 구현한 것 — 추가로 확인받을 판단 지점은 없다고 보고 전체를 한 번에 제안함.
+
+### 결정 사항
+
+- 아직 파일 생성/수정 전 — `CLAUDE.md` 규칙대로 제안 단계(사용자가 이번엔 "5순위로 넘어가자"만 확인, "적용해줘"는 아직). 사용자가 "적용해줘" 하면 위 파일들(신규 5 + 수정 1: `Dashboard/Index.cshtml` — 총 6개)을 전부 실제로 반영 예정.
+- 스키마 변경 없음(4순위에서 만든 인덱스 재사용) — Console 쪽만 닫히는 작업(Agent/Collector 변경 불필요).
+- 빌드 검증: `dotnet build` + `dotnet test`(신규 `PercentileCalculatorTests` 5건 포함 — 기존 13건과 합쳐 18건 통과 기대).
