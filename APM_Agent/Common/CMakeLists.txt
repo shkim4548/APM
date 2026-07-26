@@ -11,6 +11,8 @@ add_library(APM_Common STATIC
     MetricScheduler.cpp
     ResilientSender.cpp
     PacketHandler.cpp
+    SpanRecorder.cpp
+    ScopedSpan.cpp
     ../Protocol/Metric.pb.cc
 )
 

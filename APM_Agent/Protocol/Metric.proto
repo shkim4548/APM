@@ -16,3 +16,14 @@ message Metric
     uint32 tcp_total_retrans = 11;
     uint32 tcp_snd_cwnd = 12;
 }
+
+// 함수/트랜잭션 1건 계측 결과(2026-07-26 4순위) - 반드시 Metric 뒤에 이어 붙일 것
+// (패킷 ID가 .proto 파일 내 선언 순서로 결정됨 - WORK_STATUS.md 아키텍처 제약 참고).
+// Ts는 일부러 안 넣음 - Metric과 동일하게 Console(수신 측)이 도착 시각 기준으로 채움
+// (Collector/Agent 쪽 시계 동기화를 신뢰하지 않기 위함, MetricRecord.Ts와 같은 이유).
+message TransactionSpan
+{
+    string operation_name = 1;
+    uint64 duration_us = 2;
+    bool success = 3;
+}

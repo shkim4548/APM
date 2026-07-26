@@ -20,6 +20,8 @@ CollectorConfig LoadCollectorConfig(const String& path)
         config.webServerPort = json["webserver_port"].get<unsigned short>();
     if (json.contains("push_interval_seconds"))
         config.pushIntervalSeconds = json["push_interval_seconds"].get<int>();
+    if (json.contains("metrics_retention_days"))
+        config.metricsRetentionDays = json["metrics_retention_days"].get<int>();
 
     return config;
 }

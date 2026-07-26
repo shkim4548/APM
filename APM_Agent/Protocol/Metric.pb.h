@@ -48,9 +48,13 @@ namespace apm {
 class Metric;
 struct MetricDefaultTypeInternal;
 extern MetricDefaultTypeInternal _Metric_default_instance_;
+class TransactionSpan;
+struct TransactionSpanDefaultTypeInternal;
+extern TransactionSpanDefaultTypeInternal _TransactionSpan_default_instance_;
 }  // namespace apm
 PROTOBUF_NAMESPACE_OPEN
 template<> ::apm::Metric* Arena::CreateMaybeMessage<::apm::Metric>(Arena*);
+template<> ::apm::TransactionSpan* Arena::CreateMaybeMessage<::apm::TransactionSpan>(Arena*);
 PROTOBUF_NAMESPACE_CLOSE
 namespace apm {
 
@@ -323,6 +327,181 @@ class Metric final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Metric_2eproto;
 };
+// -------------------------------------------------------------------
+
+class TransactionSpan final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:apm.TransactionSpan) */ {
+ public:
+  inline TransactionSpan() : TransactionSpan(nullptr) {}
+  ~TransactionSpan() override;
+  explicit PROTOBUF_CONSTEXPR TransactionSpan(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  TransactionSpan(const TransactionSpan& from);
+  TransactionSpan(TransactionSpan&& from) noexcept
+    : TransactionSpan() {
+    *this = ::std::move(from);
+  }
+
+  inline TransactionSpan& operator=(const TransactionSpan& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline TransactionSpan& operator=(TransactionSpan&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const TransactionSpan& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const TransactionSpan* internal_default_instance() {
+    return reinterpret_cast<const TransactionSpan*>(
+               &_TransactionSpan_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    1;
+
+  friend void swap(TransactionSpan& a, TransactionSpan& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(TransactionSpan* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(TransactionSpan* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  TransactionSpan* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<TransactionSpan>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const TransactionSpan& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const TransactionSpan& from) {
+    TransactionSpan::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(TransactionSpan* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "apm.TransactionSpan";
+  }
+  protected:
+  explicit TransactionSpan(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kOperationNameFieldNumber = 1,
+    kDurationUsFieldNumber = 2,
+    kSuccessFieldNumber = 3,
+  };
+  // string operation_name = 1;
+  void clear_operation_name();
+  const std::string& operation_name() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_operation_name(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_operation_name();
+  PROTOBUF_NODISCARD std::string* release_operation_name();
+  void set_allocated_operation_name(std::string* operation_name);
+  private:
+  const std::string& _internal_operation_name() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_operation_name(const std::string& value);
+  std::string* _internal_mutable_operation_name();
+  public:
+
+  // uint64 duration_us = 2;
+  void clear_duration_us();
+  uint64_t duration_us() const;
+  void set_duration_us(uint64_t value);
+  private:
+  uint64_t _internal_duration_us() const;
+  void _internal_set_duration_us(uint64_t value);
+  public:
+
+  // bool success = 3;
+  void clear_success();
+  bool success() const;
+  void set_success(bool value);
+  private:
+  bool _internal_success() const;
+  void _internal_set_success(bool value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:apm.TransactionSpan)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr operation_name_;
+    uint64_t duration_us_;
+    bool success_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Metric_2eproto;
+};
 // ===================================================================
 
 
@@ -574,9 +753,105 @@ inline void Metric::set_tcp_snd_cwnd(uint32_t value) {
   // @@protoc_insertion_point(field_set:apm.Metric.tcp_snd_cwnd)
 }
 
+// -------------------------------------------------------------------
+
+// TransactionSpan
+
+// string operation_name = 1;
+inline void TransactionSpan::clear_operation_name() {
+  _impl_.operation_name_.ClearToEmpty();
+}
+inline const std::string& TransactionSpan::operation_name() const {
+  // @@protoc_insertion_point(field_get:apm.TransactionSpan.operation_name)
+  return _internal_operation_name();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void TransactionSpan::set_operation_name(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.operation_name_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:apm.TransactionSpan.operation_name)
+}
+inline std::string* TransactionSpan::mutable_operation_name() {
+  std::string* _s = _internal_mutable_operation_name();
+  // @@protoc_insertion_point(field_mutable:apm.TransactionSpan.operation_name)
+  return _s;
+}
+inline const std::string& TransactionSpan::_internal_operation_name() const {
+  return _impl_.operation_name_.Get();
+}
+inline void TransactionSpan::_internal_set_operation_name(const std::string& value) {
+  
+  _impl_.operation_name_.Set(value, GetArenaForAllocation());
+}
+inline std::string* TransactionSpan::_internal_mutable_operation_name() {
+  
+  return _impl_.operation_name_.Mutable(GetArenaForAllocation());
+}
+inline std::string* TransactionSpan::release_operation_name() {
+  // @@protoc_insertion_point(field_release:apm.TransactionSpan.operation_name)
+  return _impl_.operation_name_.Release();
+}
+inline void TransactionSpan::set_allocated_operation_name(std::string* operation_name) {
+  if (operation_name != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.operation_name_.SetAllocated(operation_name, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.operation_name_.IsDefault()) {
+    _impl_.operation_name_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:apm.TransactionSpan.operation_name)
+}
+
+// uint64 duration_us = 2;
+inline void TransactionSpan::clear_duration_us() {
+  _impl_.duration_us_ = uint64_t{0u};
+}
+inline uint64_t TransactionSpan::_internal_duration_us() const {
+  return _impl_.duration_us_;
+}
+inline uint64_t TransactionSpan::duration_us() const {
+  // @@protoc_insertion_point(field_get:apm.TransactionSpan.duration_us)
+  return _internal_duration_us();
+}
+inline void TransactionSpan::_internal_set_duration_us(uint64_t value) {
+  
+  _impl_.duration_us_ = value;
+}
+inline void TransactionSpan::set_duration_us(uint64_t value) {
+  _internal_set_duration_us(value);
+  // @@protoc_insertion_point(field_set:apm.TransactionSpan.duration_us)
+}
+
+// bool success = 3;
+inline void TransactionSpan::clear_success() {
+  _impl_.success_ = false;
+}
+inline bool TransactionSpan::_internal_success() const {
+  return _impl_.success_;
+}
+inline bool TransactionSpan::success() const {
+  // @@protoc_insertion_point(field_get:apm.TransactionSpan.success)
+  return _internal_success();
+}
+inline void TransactionSpan::_internal_set_success(bool value) {
+  
+  _impl_.success_ = value;
+}
+inline void TransactionSpan::set_success(bool value) {
+  _internal_set_success(value);
+  // @@protoc_insertion_point(field_set:apm.TransactionSpan.success)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 
 // @@protoc_insertion_point(namespace_scope)
 

@@ -11,9 +11,10 @@
 class TimescaleMetricStore : public IMetricStore
 {
 public:
-	explicit TimescaleMetricStore(const String& connectionString);
+	explicit TimescaleMetricStore(const String& connectionString, int retentionDays);
 
 	void Store(const apm::Metric& metric) override;
+	void Prune(int retentionDays) override;
 
 private:
 	DBConnection _connection;

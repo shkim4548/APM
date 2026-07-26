@@ -2,7 +2,7 @@
 #include "TimescaleMetricStore.h"
 #include <cstdio>
 
-TimescaleMetricStore::TimescaleMetricStore(const String& connectionString)
+TimescaleMetricStore::TimescaleMetricStore(const String& connectionString, int retentionDays)
 {
 	if (!_connection.Connect(connectionString.c_str()))
 		throw std::runtime_error("TimescaleMetricStore - DB 연결 실패");
@@ -24,6 +24,19 @@ TimescaleMetricStore::TimescaleMetricStore(const String& connectionString)
 
 	if (!_connection.Execute(createSql, 0, nullptr))
 		throw std::runtime_error("TimescaleMetricStore - 테이블/하이퍼테이블 생성 실패");
+
+	// TimescaleDB 네이티브 보존 정책 - 청크(시간 범위 파티션) 단위로 통째로 드롭하므로
+	// SqliteMetricStore처럼 행 단위 DELETE보다 훨씬 저렴함. 등록 후엔 TimescaleDB 백그라운드
+	// 잡이 알아서 주기 실행 - Collector가 반복 호출할 필요가 없음(Prune()이 no-op인 이유,
+	// 2026-07-26 3순위 설계). if_not_exists=>TRUE라 재시작마다 다시 호출해도 안전(중복 등록 안 됨).
+	char retentionDaysStr[16];
+	std::snprintf(retentionDaysStr, sizeof(retentionDaysStr), "%d", retentionDays);
+	const char* policyParams[1] = { retentionDaysStr };
+	const char* policySql =
+		"SELECT add_retention_policy('metrics', INTERVAL '1 day' * $1::int, if_not_exists => TRUE);";
+
+	if (!_connection.Execute(policySql, 1, policyParams))
+		throw std::runtime_error("TimescaleMetricStore - 보존 정책 등록 실패");
 }
 
 void TimescaleMetricStore::Store(const apm::Metric& metric)
@@ -51,4 +64,11 @@ void TimescaleMetricStore::Store(const apm::Metric& metric)
 
 	if (!_connection.Execute(insertSql, 9, params))
 		std::cerr << "[TimescaleMetricStore] insert failed" << std::endl;
+}
+
+void TimescaleMetricStore::Prune(int /*retentionDays*/)
+{
+	// no-op - 생성자에서 등록한 add_retention_policy가 TimescaleDB 백그라운드 워커로
+	// 알아서 처리함(위 생성자 주석 참고). Collector 쪽에서 주기 호출은 하지만 여기선 아무것도
+	// 안 함 - IMetricStore 인터페이스를 통일하기 위한 형식상의 오버라이드.
 }

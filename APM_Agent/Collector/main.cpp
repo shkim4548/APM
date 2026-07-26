@@ -6,6 +6,8 @@
 #include "PacketHandler.h"
 #include "KeyLoader.h"
 #include "CollectorConfig.h"
+#include "ScopedSpan.h"
+#include "SpanRecorder.h"
 #include "Protocol/Metric.pb.h"
 #include "Storage/MetricStoreFactory.h"
 #include <thread>
@@ -34,7 +36,7 @@ int main()
 
         CollectorConfig config = LoadCollectorConfig("collector_config.json");
 
-        auto store = CreateMetricStore(STORAGE_CONNECTION_INFO);
+        auto store = CreateMetricStore(STORAGE_CONNECTION_INFO, config.metricsRetentionDays);
 
         // Collector가 받은 뒤 아직 WebServer로 안 보낸 메트릭들 - 주기/CLI 트리거로 비워짐.
         std::vector<apm::Metric> pendingMetrics;
@@ -58,6 +60,10 @@ int main()
         PacketHandler::Register<apm::Metric>(
             [&store, &pendingMetrics](const apm::Metric& pkt)
             {
+                // Collector 안에서 "트랜잭션"이라 부를 만한 지점 중 가장 자연스러운 곳 -
+                // Agent가 보낸 메트릭 패킷 하나를 받아 저장하는 구간(2026-07-26 4순위 데모 계측).
+                APM_TRACE_SCOPE("Collector.HandleMetricPacket");
+
                 store->Store(pkt);
                 pendingMetrics.push_back(pkt);
                 std::cout << "[Collector] metric stored: cpu=" << pkt.cpu_usage_percent()
@@ -97,18 +103,34 @@ int main()
         };
         doAccept();
 
-        // pendingMetrics에 쌓인 걸 전부 WebServer로 보내고 비움 - 주기 타이머와 CLI 트리거
-        // 둘 다 이 함수 하나를 호출함(로직 중복 방지).
+        // pendingMetrics/SpanRecorder에 쌓인 걸 전부 WebServer로 보내고 비움 - 주기 타이머와
+        // CLI 트리거 둘 다 이 함수 하나를 호출함(로직 중복 방지). span 전송을 여기 얹은 이유:
+        // 이미 "주기적으로 WebServer에 밀어넣는" 책임을 지고 있는 함수라 새 타이머를 또
+        // 만들 필요가 없음(2026-07-26 4순위 설계).
         auto flushToWebServer = [&pendingMetrics, &webServerSender]()
         {
-            if (pendingMetrics.empty())
-                return;
+            if (!pendingMetrics.empty())
+            {
+                std::cout << "[Collector] WebServer로 " << pendingMetrics.size() << "건 전송 시도" << std::endl;
+                for (const auto& m : pendingMetrics)
+                    webServerSender.Enqueue(m);
 
-            std::cout << "[Collector] WebServer로 " << pendingMetrics.size() << "건 전송 시도" << std::endl;
-            for (const auto& m : pendingMetrics)
-                webServerSender.Enqueue(m);
+                pendingMetrics.clear();
+            }
 
-            pendingMetrics.clear();
+            auto spans = SpanRecorder::Instance().DrainAll();
+            if (!spans.empty())
+            {
+                std::cout << "[Collector] WebServer로 span " << spans.size() << "건 전송 시도" << std::endl;
+                for (const auto& s : spans)
+                {
+                    apm::TransactionSpan pkt;
+                    pkt.set_operation_name(s.operationName);
+                    pkt.set_duration_us(s.durationUs);
+                    pkt.set_success(s.success);
+                    webServerSender.Enqueue(pkt);
+                }
+            }
         };
 
         asio::steady_timer pushTimer(ioContext);
@@ -127,6 +149,26 @@ int main()
                 });
         };
         schedulePush();
+
+        // 로컬 저장소(store) 보존 정책 - pushTimer와 같은 패턴, 24시간 간격으로
+        // 오래된 행 정리(TimescaleMetricStore는 내부적으로 no-op, SqliteMetricStore만 실제
+        // DELETE 수행 - IMetricStore::Prune 문서 참고, 2026-07-26 3순위 설계).
+        asio::steady_timer pruneTimer(ioContext);
+        std::function<void()> schedulePrune;
+        schedulePrune = [&]()
+        {
+            pruneTimer.expires_after(std::chrono::hours(24));
+            pruneTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        store->Prune(config.metricsRetentionDays);
+                        schedulePrune();
+                    }
+                });
+        };
+        schedulePrune();
 
         // Collector 콘솔에 "send"를 입력하면 즉시 전송. stdin 읽기는 블로킹이라 별도 스레드에서
         // 돌리고, 실제 전송(flushToWebServer)은 asio::post로 io_context 스레드에 넘김 -

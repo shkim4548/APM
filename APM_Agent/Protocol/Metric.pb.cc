@@ -45,8 +45,23 @@ struct MetricDefaultTypeInternal {
   };
 };
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 MetricDefaultTypeInternal _Metric_default_instance_;
+PROTOBUF_CONSTEXPR TransactionSpan::TransactionSpan(
+    ::_pbi::ConstantInitialized): _impl_{
+    /*decltype(_impl_.operation_name_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.duration_us_)*/uint64_t{0u}
+  , /*decltype(_impl_.success_)*/false
+  , /*decltype(_impl_._cached_size_)*/{}} {}
+struct TransactionSpanDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR TransactionSpanDefaultTypeInternal()
+      : _instance(::_pbi::ConstantInitialized{}) {}
+  ~TransactionSpanDefaultTypeInternal() {}
+  union {
+    TransactionSpan _instance;
+  };
+};
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 TransactionSpanDefaultTypeInternal _TransactionSpan_default_instance_;
 }  // namespace apm
-static ::_pb::Metadata file_level_metadata_Metric_2eproto[1];
+static ::_pb::Metadata file_level_metadata_Metric_2eproto[2];
 static constexpr ::_pb::EnumDescriptor const** file_level_enum_descriptors_Metric_2eproto = nullptr;
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Metric_2eproto = nullptr;
 
@@ -69,13 +84,24 @@ const uint32_t TableStruct_Metric_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
   PROTOBUF_FIELD_OFFSET(::apm::Metric, _impl_.tcp_retransmits_),
   PROTOBUF_FIELD_OFFSET(::apm::Metric, _impl_.tcp_total_retrans_),
   PROTOBUF_FIELD_OFFSET(::apm::Metric, _impl_.tcp_snd_cwnd_),
+  ~0u,  // no _has_bits_
+  PROTOBUF_FIELD_OFFSET(::apm::TransactionSpan, _internal_metadata_),
+  ~0u,  // no _extensions_
+  ~0u,  // no _oneof_case_
+  ~0u,  // no _weak_field_map_
+  ~0u,  // no _inlined_string_donated_
+  PROTOBUF_FIELD_OFFSET(::apm::TransactionSpan, _impl_.operation_name_),
+  PROTOBUF_FIELD_OFFSET(::apm::TransactionSpan, _impl_.duration_us_),
+  PROTOBUF_FIELD_OFFSET(::apm::TransactionSpan, _impl_.success_),
 };
 static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, -1, sizeof(::apm::Metric)},
+  { 18, -1, -1, sizeof(::apm::TransactionSpan)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
   &::apm::_Metric_default_instance_._instance,
+  &::apm::_TransactionSpan_default_instance_._instance,
 };
 
 const char descriptor_table_protodef_Metric_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
@@ -87,13 +113,15 @@ const char descriptor_table_protodef_Metric_2eproto[] PROTOBUF_SECTION_VARIABLE(
   "tes_per_sec\030\007 \001(\004\022\022\n\ntcp_rtt_us\030\010 \001(\r\022\026\n"
   "\016tcp_rtt_var_us\030\t \001(\r\022\027\n\017tcp_retransmits"
   "\030\n \001(\r\022\031\n\021tcp_total_retrans\030\013 \001(\r\022\024\n\014tcp"
-  "_snd_cwnd\030\014 \001(\rb\006proto3"
+  "_snd_cwnd\030\014 \001(\r\"O\n\017TransactionSpan\022\026\n\016op"
+  "eration_name\030\001 \001(\t\022\023\n\013duration_us\030\002 \001(\004\022"
+  "\017\n\007success\030\003 \001(\010b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_Metric_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Metric_2eproto = {
-    false, false, 343, descriptor_table_protodef_Metric_2eproto,
+    false, false, 424, descriptor_table_protodef_Metric_2eproto,
     "Metric.proto",
-    &descriptor_table_Metric_2eproto_once, nullptr, 0, 1,
+    &descriptor_table_Metric_2eproto_once, nullptr, 0, 2,
     schemas, file_default_instances, TableStruct_Metric_2eproto::offsets,
     file_level_metadata_Metric_2eproto, file_level_enum_descriptors_Metric_2eproto,
     file_level_service_descriptors_Metric_2eproto,
@@ -569,12 +597,279 @@ void Metric::InternalSwap(Metric* other) {
       file_level_metadata_Metric_2eproto[0]);
 }
 
+// ===================================================================
+
+class TransactionSpan::_Internal {
+ public:
+};
+
+TransactionSpan::TransactionSpan(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                         bool is_message_owned)
+  : ::PROTOBUF_NAMESPACE_ID::Message(arena, is_message_owned) {
+  SharedCtor(arena, is_message_owned);
+  // @@protoc_insertion_point(arena_constructor:apm.TransactionSpan)
+}
+TransactionSpan::TransactionSpan(const TransactionSpan& from)
+  : ::PROTOBUF_NAMESPACE_ID::Message() {
+  TransactionSpan* const _this = this; (void)_this;
+  new (&_impl_) Impl_{
+      decltype(_impl_.operation_name_){}
+    , decltype(_impl_.duration_us_){}
+    , decltype(_impl_.success_){}
+    , /*decltype(_impl_._cached_size_)*/{}};
+
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  _impl_.operation_name_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.operation_name_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_operation_name().empty()) {
+    _this->_impl_.operation_name_.Set(from._internal_operation_name(), 
+      _this->GetArenaForAllocation());
+  }
+  ::memcpy(&_impl_.duration_us_, &from._impl_.duration_us_,
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.success_) -
+    reinterpret_cast<char*>(&_impl_.duration_us_)) + sizeof(_impl_.success_));
+  // @@protoc_insertion_point(copy_constructor:apm.TransactionSpan)
+}
+
+inline void TransactionSpan::SharedCtor(
+    ::_pb::Arena* arena, bool is_message_owned) {
+  (void)arena;
+  (void)is_message_owned;
+  new (&_impl_) Impl_{
+      decltype(_impl_.operation_name_){}
+    , decltype(_impl_.duration_us_){uint64_t{0u}}
+    , decltype(_impl_.success_){false}
+    , /*decltype(_impl_._cached_size_)*/{}
+  };
+  _impl_.operation_name_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.operation_name_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+}
+
+TransactionSpan::~TransactionSpan() {
+  // @@protoc_insertion_point(destructor:apm.TransactionSpan)
+  if (auto *arena = _internal_metadata_.DeleteReturnArena<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>()) {
+  (void)arena;
+    return;
+  }
+  SharedDtor();
+}
+
+inline void TransactionSpan::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+  _impl_.operation_name_.Destroy();
+}
+
+void TransactionSpan::SetCachedSize(int size) const {
+  _impl_._cached_size_.Set(size);
+}
+
+void TransactionSpan::Clear() {
+// @@protoc_insertion_point(message_clear_start:apm.TransactionSpan)
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  _impl_.operation_name_.ClearToEmpty();
+  ::memset(&_impl_.duration_us_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&_impl_.success_) -
+      reinterpret_cast<char*>(&_impl_.duration_us_)) + sizeof(_impl_.success_));
+  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+const char* TransactionSpan::_InternalParse(const char* ptr, ::_pbi::ParseContext* ctx) {
+#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
+  while (!ctx->Done(&ptr)) {
+    uint32_t tag;
+    ptr = ::_pbi::ReadTag(ptr, &tag);
+    switch (tag >> 3) {
+      // string operation_name = 1;
+      case 1:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 10)) {
+          auto str = _internal_mutable_operation_name();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+          CHK_(::_pbi::VerifyUTF8(str, "apm.TransactionSpan.operation_name"));
+        } else
+          goto handle_unusual;
+        continue;
+      // uint64 duration_us = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 16)) {
+          _impl_.duration_us_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // bool success = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 24)) {
+          _impl_.success_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      default:
+        goto handle_unusual;
+    }  // switch
+  handle_unusual:
+    if ((tag == 0) || ((tag & 7) == 4)) {
+      CHK_(ptr);
+      ctx->SetLastTag(tag);
+      goto message_done;
+    }
+    ptr = UnknownFieldParse(
+        tag,
+        _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
+        ptr, ctx);
+    CHK_(ptr != nullptr);
+  }  // while
+message_done:
+  return ptr;
+failure:
+  ptr = nullptr;
+  goto message_done;
+#undef CHK_
+}
+
+uint8_t* TransactionSpan::_InternalSerialize(
+    uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:apm.TransactionSpan)
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // string operation_name = 1;
+  if (!this->_internal_operation_name().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_operation_name().data(), static_cast<int>(this->_internal_operation_name().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "apm.TransactionSpan.operation_name");
+    target = stream->WriteStringMaybeAliased(
+        1, this->_internal_operation_name(), target);
+  }
+
+  // uint64 duration_us = 2;
+  if (this->_internal_duration_us() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt64ToArray(2, this->_internal_duration_us(), target);
+  }
+
+  // bool success = 3;
+  if (this->_internal_success() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteBoolToArray(3, this->_internal_success(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:apm.TransactionSpan)
+  return target;
+}
+
+size_t TransactionSpan::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:apm.TransactionSpan)
+  size_t total_size = 0;
+
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // string operation_name = 1;
+  if (!this->_internal_operation_name().empty()) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_operation_name());
+  }
+
+  // uint64 duration_us = 2;
+  if (this->_internal_duration_us() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(this->_internal_duration_us());
+  }
+
+  // bool success = 3;
+  if (this->_internal_success() != 0) {
+    total_size += 1 + 1;
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData TransactionSpan::_class_data_ = {
+    ::PROTOBUF_NAMESPACE_ID::Message::CopyWithSourceCheck,
+    TransactionSpan::MergeImpl
+};
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*TransactionSpan::GetClassData() const { return &_class_data_; }
+
+
+void TransactionSpan::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg) {
+  auto* const _this = static_cast<TransactionSpan*>(&to_msg);
+  auto& from = static_cast<const TransactionSpan&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:apm.TransactionSpan)
+  GOOGLE_DCHECK_NE(&from, _this);
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (!from._internal_operation_name().empty()) {
+    _this->_internal_set_operation_name(from._internal_operation_name());
+  }
+  if (from._internal_duration_us() != 0) {
+    _this->_internal_set_duration_us(from._internal_duration_us());
+  }
+  if (from._internal_success() != 0) {
+    _this->_internal_set_success(from._internal_success());
+  }
+  _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void TransactionSpan::CopyFrom(const TransactionSpan& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:apm.TransactionSpan)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool TransactionSpan::IsInitialized() const {
+  return true;
+}
+
+void TransactionSpan::InternalSwap(TransactionSpan* other) {
+  using std::swap;
+  auto* lhs_arena = GetArenaForAllocation();
+  auto* rhs_arena = other->GetArenaForAllocation();
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.operation_name_, lhs_arena,
+      &other->_impl_.operation_name_, rhs_arena
+  );
+  ::PROTOBUF_NAMESPACE_ID::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(TransactionSpan, _impl_.success_)
+      + sizeof(TransactionSpan::_impl_.success_)
+      - PROTOBUF_FIELD_OFFSET(TransactionSpan, _impl_.duration_us_)>(
+          reinterpret_cast<char*>(&_impl_.duration_us_),
+          reinterpret_cast<char*>(&other->_impl_.duration_us_));
+}
+
+::PROTOBUF_NAMESPACE_ID::Metadata TransactionSpan::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_Metric_2eproto_getter, &descriptor_table_Metric_2eproto_once,
+      file_level_metadata_Metric_2eproto[1]);
+}
+
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace apm
 PROTOBUF_NAMESPACE_OPEN
 template<> PROTOBUF_NOINLINE ::apm::Metric*
 Arena::CreateMaybeMessage< ::apm::Metric >(Arena* arena) {
   return Arena::CreateMessageInternal< ::apm::Metric >(arena);
+}
+template<> PROTOBUF_NOINLINE ::apm::TransactionSpan*
+Arena::CreateMaybeMessage< ::apm::TransactionSpan >(Arena* arena) {
+  return Arena::CreateMessageInternal< ::apm::TransactionSpan >(arena);
 }
 PROTOBUF_NAMESPACE_CLOSE
 

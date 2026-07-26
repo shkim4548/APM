@@ -15,6 +15,7 @@ public:
 	~SqliteMetricStore() override;
 
 	void Store(const apm::Metric& metric) override;
+	void Prune(int retentionDays) override;
 
 private:
 	sqlite3* _db = nullptr;

@@ -8,6 +8,7 @@ using Apm;
 using ApmConsole.Domain.Apm.Hubs;
 using ApmConsole.Domain.Apm.Infrastructure.Persistence;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -91,11 +92,18 @@ public class MetricsReceiverService : BackgroundService
 
                 while (!stoppingToken.IsCancellationRequested)
                 {
-                    var metric = await ReadOnePacketAsync(sslStream, stoppingToken);
-                    if (metric == null)
+                    var packet = await ReadOnePacketAsync(sslStream, stoppingToken);
+                    if (packet == null)
                         break;
 
-                    await StoreAndBroadcastAsync(metric);
+                    var (id, sealedPayload) = packet.Value;
+
+                    if (id == (ushort)Metric.Descriptor.Index)
+                        await StoreAndBroadcastAsync(DecryptAndParse(sealedPayload, _aesKey));
+                    else if (id == (ushort)TransactionSpan.Descriptor.Index)
+                        await StoreSpanAsync(DecryptAndParseSpan(sealedPayload, _aesKey));
+                    else
+                        Console.WriteLine($"[MetricsReceiverService] 알 수 없는 패킷 id={id}, 무시");
                 }
             }
             catch (Exception ex)
@@ -121,7 +129,10 @@ public class MetricsReceiverService : BackgroundService
         return buffer;
     }
 
-    private async Task<Metric?> ReadOnePacketAsync(Stream stream, CancellationToken ct)
+    // 헤더만 읽고 id/암호화된 payload를 그대로 반환 - 어느 메시지 타입인지는 호출자
+    // (HandleClientAsync)가 id로 분기해서 결정(2026-07-26 4순위, 메시지 타입이 2개가 되면서
+    // 예전처럼 "무조건 Metric으로 파싱"할 수 없게 됨).
+    private async Task<(ushort Id, byte[] SealedPayload)?> ReadOnePacketAsync(Stream stream, CancellationToken ct)
     {
         // PacketHeader{ uint16 size; uint16 id; } - C++와 동일하게 4바이트, 리틀엔디안.
         var header = await ReadExactAsync(stream, 4, ct);
@@ -129,13 +140,13 @@ public class MetricsReceiverService : BackgroundService
             return null;
 
         ushort totalSize = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(0, 2));
-        // id(header[2..4])는 지금 메시지 타입이 Metric 하나뿐이라 별도 분기 없이 무시.
+        ushort id = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(2, 2));
 
         var sealedPayload = await ReadExactAsync(stream, totalSize - 4, ct);
         if (sealedPayload == null)
             return null;
 
-        return DecryptAndParse(sealedPayload, _aesKey);
+        return (id, sealedPayload);
     }
 
     // Span<T>(ref struct)를 async 메서드 안에서 지역 변수로 두면 .NET 8/C# 12 기준
@@ -144,6 +155,22 @@ public class MetricsReceiverService : BackgroundService
     // static + aesKey를 파라미터로 받도록 함 - _aesKey(인스턴스 필드, 생성자가 파일 I/O로 채움) 대신
     // 순수 입력만으로 테스트할 수 있게(서비스 전체를 DI로 구성하지 않아도 됨).
     internal static Metric DecryptAndParse(byte[] sealedPayload, byte[] aesKey)
+    {
+        var plaintext = Unseal(sealedPayload, aesKey);
+        return Metric.Parser.ParseFrom(plaintext);
+    }
+
+    // DecryptAndParse와 완전히 같은 와이어 포맷(AesGcmPayload::Seal 기준)에 메시지 타입만 다름 -
+    // Unseal()로 복호화 로직(신경 써야 할 crypto 슬라이싱 부분)만 공유하고, 기존 DecryptAndParse의
+    // 시그니처/테스트(DecryptAndParseTests.cs)는 그대로 둠(2026-07-26 4순위 설계 - 제네릭화 대신
+    // 이 방식을 택한 이유는 기존 테스트 영향 없이 가장 작은 변경으로 끝내기 위함).
+    internal static TransactionSpan DecryptAndParseSpan(byte[] sealedPayload, byte[] aesKey)
+    {
+        var plaintext = Unseal(sealedPayload, aesKey);
+        return TransactionSpan.Parser.ParseFrom(plaintext);
+    }
+
+    private static byte[] Unseal(byte[] sealedPayload, byte[] aesKey)
     {
         // AesGcmPayload::Seal()의 와이어 포맷: [Nonce(12B)][ciphertext(가변)][Tag(16B)]
         var nonce = sealedPayload.AsSpan(0, NonceSize);
@@ -154,7 +181,7 @@ public class MetricsReceiverService : BackgroundService
         using var aesGcm = new AesGcm(aesKey, TagSize);
         aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
 
-        return Metric.Parser.ParseFrom(plaintext);
+        return plaintext;
     }
 
     private async Task StoreAndBroadcastAsync(Metric metric)
@@ -185,5 +212,84 @@ public class MetricsReceiverService : BackgroundService
         Console.WriteLine($"[MetricsReceiverService] 저장 완료: cpu={record.CpuUsagePercent}%");
 
         await _hubContext.Clients.All.SendAsync("NewMetric", record);
+
+        await EvaluateAlertsAsync(db, record);
+    }
+
+    // 저장된 메트릭 1건에 대해 활성화된 임계치를 전부 평가 - 상태 전이(Opened/Resolved)가
+    // 있을 때만 AlertRecord를 기록하고 SignalR로 알림(2026-07-26, WORK_STATUS.md 2순위).
+    private async Task EvaluateAlertsAsync(ApmDbContext db, MetricRecord record)
+    {
+        var memPercent = record.MemTotalBytes > 0 ? record.MemUsedBytes * 100.0 / record.MemTotalBytes : 0;
+        var diskPercent = record.DiskTotalBytes > 0 ? record.DiskUsedBytes * 100.0 / record.DiskTotalBytes : 0;
+
+        var currentValues = new Dictionary<AlertMetricType, double>
+        {
+            [AlertMetricType.CpuPercent] = record.CpuUsagePercent,
+            [AlertMetricType.MemoryPercent] = memPercent,
+            [AlertMetricType.DiskPercent] = diskPercent,
+            [AlertMetricType.TcpRttUs] = record.TcpRttUs,
+        };
+
+        var thresholds = await db.AlertThresholds.AsNoTracking().Where(t => t.Enabled).ToListAsync();
+
+        foreach (var threshold in thresholds)
+        {
+            var currentValue = currentValues[threshold.MetricType];
+
+            var openAlert = await db.AlertRecords
+                .Where(a => a.MetricType == threshold.MetricType && a.ClosedAt == null)
+                .OrderByDescending(a => a.Id)
+                .FirstOrDefaultAsync();
+
+            var transition = AlertEvaluator.Evaluate(currentValue, threshold.Value, openAlert != null);
+
+            if (transition == AlertTransition.Opened)
+            {
+                var opened = new AlertRecord
+                {
+                    MetricType = threshold.MetricType,
+                    ThresholdValue = threshold.Value,
+                    TriggerValue = currentValue,
+                    OpenedAt = DateTimeOffset.UtcNow,
+                };
+                db.AlertRecords.Add(opened);
+                await db.SaveChangesAsync();
+
+                Console.WriteLine($"[MetricsReceiverService] 알림 발생: {threshold.MetricType}={currentValue:F1} (임계치 {threshold.Value})");
+                await _hubContext.Clients.All.SendAsync("AlertOpened", opened);
+            }
+            else if (transition == AlertTransition.Resolved && openAlert != null)
+            {
+                openAlert.ResolvedValue = currentValue;
+                openAlert.ClosedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync();
+
+                Console.WriteLine($"[MetricsReceiverService] 알림 해제: {threshold.MetricType}={currentValue:F1}");
+                await _hubContext.Clients.All.SendAsync("AlertResolved", openAlert);
+            }
+        }
+    }
+
+    // Collector가 보낸 span을 저장만 함(대시보드 실시간 갱신은 이번 범위 밖 - 5순위에서
+    // 집계 뷰를 만들 때 같이 고려, 2026-07-26 4순위 설계).
+    private async Task StoreSpanAsync(TransactionSpan span)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApmDbContext>();
+
+        var record = new TransactionSpanRecord
+        {
+            Ts = DateTimeOffset.UtcNow,
+            Source = "Collector",
+            OperationName = span.OperationName,
+            DurationUs = (long)span.DurationUs,
+            Success = span.Success,
+        };
+
+        db.TransactionSpans.Add(record);
+        await db.SaveChangesAsync();
+
+        Console.WriteLine($"[MetricsReceiverService] span 저장: {record.OperationName} ({record.DurationUs}us, success={record.Success})");
     }
 }

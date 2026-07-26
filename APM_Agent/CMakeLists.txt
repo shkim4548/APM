@@ -47,6 +47,16 @@ add_executable(Agent
 )
 target_link_libraries(Agent PRIVATE APM_Common)
 
+add_executable(LoadTester
+    LoadTester/main.cpp
+    LoadTester/LoadTesterConfig.cpp
+    LoadTester/LoadTestStats.cpp
+    LoadTester/SimulatedAgent.cpp
+    LoadTester/LoadTester.cpp
+    pch.cpp
+)
+target_link_libraries(LoadTester PRIVATE APM_Common)
+
 # 단위 테스트는 선택 사항(GTest) - 기본 ON이지만 libgtest-dev가 없는 환경에서도
 # Collector/Agent 빌드 자체는 막히면 안 되므로(이 프로젝트의 기존 원칙 - 예상치 못한
 # 빌드 요구사항 금지), find_package 실패 시 조용히 건너뛰고 안내만 출력한다.

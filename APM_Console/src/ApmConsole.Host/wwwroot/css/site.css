@@ -139,3 +139,7 @@ tbody tr:hover {
     color: var(--text-dim);
     font-size: 14px;
 }
+
+.alert-row-active td:first-child {
+    border-left: 3px solid var(--danger);
+}

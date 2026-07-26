@@ -1,0 +1,153 @@
+@model ApmConsole.Domain.Apm.Models.AlertsViewModel
+@functions {
+	string MetricLabel(ApmConsole.Domain.Apm.Infrastructure.Persistence.AlertMetricType type) => type switch
+	{
+		ApmConsole.Domain.Apm.Infrastructure.Persistence.AlertMetricType.CpuPercent => "CPU 사용률",
+		ApmConsole.Domain.Apm.Infrastructure.Persistence.AlertMetricType.MemoryPercent => "메모리 사용률",
+		ApmConsole.Domain.Apm.Infrastructure.Persistence.AlertMetricType.DiskPercent => "디스크 사용률",
+		ApmConsole.Domain.Apm.Infrastructure.Persistence.AlertMetricType.TcpRttUs => "TCP RTT",
+		_ => type.ToString(),
+	};
+}
+
+<link rel="stylesheet" href="~/css/site.css" />
+
+<div class="dashboard">
+	<h1>알림</h1>
+	<a href="/apm/dashboard">← 대시보드로</a>
+	<span id="connection-status" class="status-pill">실시간 연결 중...</span>
+
+	<div class="card">
+		<h2>임계치 설정</h2>
+		<form method="post" action="/apm/alerts/thresholds">
+			<table>
+				<thead>
+					<tr><th>지표</th><th>임계치</th><th>활성화</th></tr>
+				</thead>
+				<tbody>
+				@foreach (var t in Model.Thresholds)
+				{
+					<tr>
+						<td>@MetricLabel(t.MetricType)</td>
+						<td><input type="number" step="0.1" name="value[@t.Id]" value="@t.Value" /></td>
+						<td><input type="checkbox" name="enabled[@t.Id]" value="true" checked="@t.Enabled" /></td>
+					</tr>
+				}
+				</tbody>
+			</table>
+			<button type="submit">저장</button>
+		</form>
+	</div>
+
+	<div class="card">
+		<h2>활성 알림</h2>
+		<table id="activeTable">
+			<thead><tr><th>지표</th><th>발생 시각</th><th>측정값</th><th>임계치</th></tr></thead>
+			<tbody>
+			@if (!Model.ActiveAlerts.Any())
+			{
+				<tr id="activeEmptyRow"><td colspan="4" class="empty-state">현재 활성 알림 없음</td></tr>
+			}
+			else
+			{
+				foreach (var a in Model.ActiveAlerts)
+				{
+					<tr class="alert-row-active" data-alert-id="@a.Id">
+						<td>@MetricLabel(a.MetricType)</td>
+						<td>@a.OpenedAt.ToLocalTime()</td>
+						<td>@a.TriggerValue.ToString("F1")</td>
+						<td>@a.ThresholdValue.ToString("F1")</td>
+					</tr>
+				}
+			}
+			</tbody>
+		</table>
+	</div>
+
+	<div class="card">
+		<h2>최근 이력(최대 20건)</h2>
+		@if (!Model.RecentHistory.Any())
+		{
+			<p class="empty-state">아직 해제된 알림 이력이 없습니다.</p>
+		}
+		else
+		{
+			<table>
+				<thead><tr><th>지표</th><th>발생</th><th>해제</th><th>측정값</th><th>복구값</th><th>임계치</th></tr></thead>
+				<tbody>
+				@foreach (var a in Model.RecentHistory)
+				{
+					<tr>
+						<td>@MetricLabel(a.MetricType)</td>
+						<td>@a.OpenedAt.ToLocalTime()</td>
+						<td>@a.ClosedAt?.ToLocalTime()</td>
+						<td>@a.TriggerValue.ToString("F1")</td>
+						<td>@a.ResolvedValue?.ToString("F1")</td>
+						<td>@a.ThresholdValue.ToString("F1")</td>
+					</tr>
+				}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+<script src="~/lib/signalr/signalr.min.js"></script>
+<script>
+	const statusEl = document.getElementById("connection-status");
+
+	// AlertMetricType enum 이름(JsonStringEnumConverter로 문자열로 내려옴, ApmModule.cs 참고) -> 한글 라벨.
+	const metricLabels = {
+		CpuPercent: "CPU 사용률",
+		MemoryPercent: "메모리 사용률",
+		DiskPercent: "디스크 사용률",
+		TcpRttUs: "TCP RTT",
+	};
+
+	function upsertActiveRow(alert) {
+		const tbody = document.querySelector("#activeTable tbody");
+		document.getElementById("activeEmptyRow")?.remove();
+
+		const row = document.createElement("tr");
+		row.className = "alert-row-active";
+		row.dataset.alertId = alert.id;
+		row.innerHTML = `
+			<td>${metricLabels[alert.metricType] ?? alert.metricType}</td>
+			<td>${new Date(alert.openedAt).toLocaleString()}</td>
+			<td>${alert.triggerValue.toFixed(1)}</td>
+			<td>${alert.thresholdValue.toFixed(1)}</td>
+		`;
+		tbody.prepend(row);
+	}
+
+	function removeActiveRow(alertId) {
+		document.querySelector(`#activeTable tr[data-alert-id="${alertId}"]`)?.remove();
+
+		const tbody = document.querySelector("#activeTable tbody");
+		if (!tbody.rows.length) {
+			const row = document.createElement("tr");
+			row.id = "activeEmptyRow";
+			row.innerHTML = `<td colspan="4" class="empty-state">현재 활성 알림 없음</td>`;
+			tbody.appendChild(row);
+		}
+	}
+
+	const connection = new signalR.HubConnectionBuilder()
+		.withUrl("/apm/hub/metrics")
+		.withAutomaticReconnect()
+		.build();
+
+	connection.on("AlertOpened", upsertActiveRow);
+	connection.on("AlertResolved", (alert) => removeActiveRow(alert.id));
+
+	connection.start()
+		.then(() => {
+			statusEl.textContent = "실시간 연결됨";
+			statusEl.classList.add("status-connected");
+		})
+		.catch(err => {
+			console.error(err);
+			statusEl.textContent = "실시간 연결 실패 - 새로고침으로만 갱신됩니다";
+			statusEl.classList.add("status-error");
+		});
+</script>

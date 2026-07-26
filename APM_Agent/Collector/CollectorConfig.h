@@ -13,6 +13,7 @@ struct CollectorConfig
     String webServerHost = "127.0.0.1";
     unsigned short webServerPort = 9100;
     int pushIntervalSeconds = 10;
+    int metricsRetentionDays = 30;   // Collector 로컬 저장소 보존 기간(2026-07-26 3순위)
 };
 
 // JSON 파일을 읽어 설정을 만듦. 파일이 없으면 기본값을 그대로 씀(로컬 데모 시

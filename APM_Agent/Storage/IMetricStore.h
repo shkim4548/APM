@@ -12,4 +12,9 @@ class IMetricStore
 public:
     virtual ~IMetricStore() = default;
     virtual void Store(const apm::Metric& metric) = 0;
+
+    // retentionDays보다 오래된 행 삭제 - 백엔드별 구현 방식이 다름(SqliteMetricStore는
+    // 직접 DELETE, TimescaleMetricStore는 생성자에서 등록한 네이티브 보존 정책이 백그라운드로
+    // 알아서 처리하므로 이 함수는 사실상 no-op, 2026-07-26 3순위 설계).
+    virtual void Prune(int retentionDays) = 0;
 };
