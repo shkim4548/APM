@@ -15,8 +15,9 @@
 
 - **파이프라인**: 수집(CPU/메모리/디스크/네트워크/TCP) → 직렬화(Protobuf) → 암호화(AES-256-GCM) → 프레이밍 → TLS 전송 → 저장(SQLite) → 실시간 대시보드까지 end-to-end 동작
 - **크로스플랫폼**: Linux(WSL)뿐 아니라 Windows에서도 빌드+실행 검증 완료(`APM_Agent`) — WinAPI 기반 리소스 수집, `SIO_TCP_INFO`, Windows 11 Smart App Control 대응(정적 링크)까지 포함
-- **테스트**: C++ GoogleTest 9개 + .NET xUnit 8개, 전부 통과
-- **실측 성능**: syscall 1,921회/19.4ms(5분 정상 동작), RSS 13.8MB 고정(누수 없음), CPU 평균 0.017%
+- **테스트**: C++ GoogleTest 9개 + .NET xUnit 18개, 전부 통과
+- **실측 성능(Agent 정상 동작)**: syscall 1,921회/19.4ms(5분), RSS 13.8MB 고정(누수 없음), CPU 평균 0.017%
+- **스케일 테스트(Collector)**: 자체 제작 `LoadTester`로 최대 300 동시 연결까지 부하 실측 — 동시 접속 ~72개에서 하드 리밋 발견, `strace` 분석으로 원인이 SQLite 동기 `fdatasync`(단일 스레드 이벤트 루프를 블로킹)임을 확인(CPU/메모리는 병목 아님). 상세: `Docs/PROJECT_TECHNICAL_REVIEW.md` §7-4
 
 자세한 아키텍처·설계 의사결정·발견한 버그는 [`Docs/PROJECT_TECHNICAL_REVIEW.md`](Docs/PROJECT_TECHNICAL_REVIEW.md) 또는 [`Docs/portfolio_apm.html`](Docs/portfolio_apm.html)을 참고.
 
