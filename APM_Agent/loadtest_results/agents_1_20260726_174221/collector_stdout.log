@@ -1,0 +1,1677 @@
+[PrivilegeDrop] 이미 비-root 권한으로 실행 중 - 하향 불필요
+Collector listening on port 9000 (TLS)
+[Collector] WebServer(127.0.0.1:9100)로 10초마다 전송 (콘솔에 'send' 입력 시 즉시 전송)
+[ResilientSender] connect failed: Connection refused
+[Collector] connection accepted
+[Collector] metric stored: cpu=84.1535% mem=1648304023/17179869184 disk=5775034119/536870912000 net=rx:798881B/s,tx:19006B/s tcp=rtt:42502us,var:1556us,retrans:0(total:0),cwnd:56
+[Collector] metric stored: cpu=68.3608% mem=5520309989/17179869184 disk=33134071213/536870912000 net=rx:613601B/s,tx:1016603B/s tcp=rtt:44834us,var:2989us,retrans:0(total:0),cwnd:73
+[Collector] metric stored: cpu=90.1011% mem=7564647727/17179869184 disk=93047330642/536870912000 net=rx:432999B/s,tx:580042B/s tcp=rtt:15367us,var:2266us,retrans:0(total:0),cwnd:17
+[Collector] metric stored: cpu=33.9044% mem=2823215846/17179869184 disk=78406699700/536870912000 net=rx:360206B/s,tx:689568B/s tcp=rtt:42296us,var:730us,retrans:0(total:0),cwnd:69
+[Collector] metric stored: cpu=19.6776% mem=4093086399/17179869184 disk=5443087838/536870912000 net=rx:618026B/s,tx:474460B/s tcp=rtt:25597us,var:1827us,retrans:0(total:0),cwnd:16
+[Collector] metric stored: cpu=29.7287% mem=6194287297/17179869184 disk=87980645940/536870912000 net=rx:973271B/s,tx:236811B/s tcp=rtt:21930us,var:1474us,retrans:0(total:0),cwnd:16
+[Collector] metric stored: cpu=38.2722% mem=8572200905/17179869184 disk=27466864026/536870912000 net=rx:103741B/s,tx:355311B/s tcp=rtt:36042us,var:4712us,retrans:0(total:0),cwnd:42
+[Collector] metric stored: cpu=99.2557% mem=3619490781/17179869184 disk=101275491645/536870912000 net=rx:45354B/s,tx:910559B/s tcp=rtt:1235us,var:2415us,retrans:0(total:0),cwnd:62
+[Collector] metric stored: cpu=30.3485% mem=3278804969/17179869184 disk=810575716/536870912000 net=rx:824331B/s,tx:677347B/s tcp=rtt:8052us,var:3460us,retrans:0(total:0),cwnd:50
+[Collector] metric stored: cpu=28.7822% mem=6730395712/17179869184 disk=72451781314/536870912000 net=rx:386265B/s,tx:704061B/s tcp=rtt:46275us,var:4109us,retrans:0(total:0),cwnd:0
+[Collector] metric stored: cpu=22.7367% mem=7908638108/17179869184 disk=52948281433/536870912000 net=rx:203277B/s,tx:544187B/s tcp=rtt:21534us,var:4786us,retrans:0(total:0),cwnd:100
+[Collector] metric stored: cpu=51.237% mem=2417330187/17179869184 disk=88398585150/536870912000 net=rx:976245B/s,tx:879708B/s tcp=rtt:39532us,var:1176us,retrans:0(total:0),cwnd:90
+[Collector] metric stored: cpu=85.1082% mem=4370967495/17179869184 disk=92223529296/536870912000 net=rx:899973B/s,tx:509449B/s tcp=rtt:8124us,var:3958us,retrans:0(total:0),cwnd:8
+[Collector] metric stored: cpu=61.1175% mem=236240349/17179869184 disk=82124825105/536870912000 net=rx:180577B/s,tx:730278B/s tcp=rtt:23037us,var:4291us,retrans:0(total:0),cwnd:29
+[Collector] metric stored: cpu=28.0504% mem=3274261971/17179869184 disk=22126139059/536870912000 net=rx:385403B/s,tx:343082B/s tcp=rtt:27228us,var:1423us,retrans:0(total:0),cwnd:91
+[Collector] metric stored: cpu=80.0339% mem=2942090706/17179869184 disk=98115922895/536870912000 net=rx:423464B/s,tx:453553B/s tcp=rtt:2142us,var:3293us,retrans:0(total:0),cwnd:73
+[Collector] metric stored: cpu=13.9006% mem=458312349/17179869184 disk=18245492085/536870912000 net=rx:612253B/s,tx:599085B/s tcp=rtt:43433us,var:2238us,retrans:0(total:0),cwnd:59
+[Collector] metric stored: cpu=69.7486% mem=4302293953/17179869184 disk=74486800911/536870912000 net=rx:332897B/s,tx:935924B/s tcp=rtt:24320us,var:2203us,retrans:0(total:0),cwnd:53
+[Collector] metric stored: cpu=97.2257% mem=6502620578/17179869184 disk=86864475095/536870912000 net=rx:643527B/s,tx:904413B/s tcp=rtt:49659us,var:4379us,retrans:0(total:0),cwnd:82
+[Collector] metric stored: cpu=0.754494% mem=1351315776/17179869184 disk=74394245330/536870912000 net=rx:319276B/s,tx:387638B/s tcp=rtt:20665us,var:4522us,retrans:0(total:0),cwnd:21
+[Collector] metric stored: cpu=26.2624% mem=7617945379/17179869184 disk=66015486404/536870912000 net=rx:293049B/s,tx:841967B/s tcp=rtt:5640us,var:4154us,retrans:0(total:0),cwnd:76
+[Collector] metric stored: cpu=89.7538% mem=4802529852/17179869184 disk=61235860195/536870912000 net=rx:994802B/s,tx:202873B/s tcp=rtt:17122us,var:3236us,retrans:0(total:0),cwnd:83
+[Collector] metric stored: cpu=70.2775% mem=4569147373/17179869184 disk=54966387612/536870912000 net=rx:968018B/s,tx:207835B/s tcp=rtt:25786us,var:1344us,retrans:0(total:0),cwnd:96
+[Collector] metric stored: cpu=2.8486% mem=7778069540/17179869184 disk=72788374910/536870912000 net=rx:984989B/s,tx:206761B/s tcp=rtt:10944us,var:4724us,retrans:0(total:0),cwnd:81
+[Collector] metric stored: cpu=66.996% mem=741790046/17179869184 disk=31433036080/536870912000 net=rx:641433B/s,tx:347717B/s tcp=rtt:29448us,var:291us,retrans:0(total:0),cwnd:92
+[Collector] metric stored: cpu=19.4081% mem=4654719729/17179869184 disk=99107841138/536870912000 net=rx:488112B/s,tx:536678B/s tcp=rtt:9051us,var:4617us,retrans:0(total:0),cwnd:93
+[Collector] metric stored: cpu=27.4217% mem=7820041245/17179869184 disk=98224958452/536870912000 net=rx:442589B/s,tx:588223B/s tcp=rtt:48533us,var:1570us,retrans:0(total:0),cwnd:90
+[Collector] metric stored: cpu=75.4402% mem=5117850284/17179869184 disk=50190857305/536870912000 net=rx:936114B/s,tx:138607B/s tcp=rtt:5307us,var:4528us,retrans:0(total:0),cwnd:84
+[Collector] metric stored: cpu=38.2292% mem=7527295258/17179869184 disk=96667595370/536870912000 net=rx:735131B/s,tx:289642B/s tcp=rtt:31263us,var:570us,retrans:0(total:0),cwnd:21
+[Collector] metric stored: cpu=17.6778% mem=3242534127/17179869184 disk=45461233379/536870912000 net=rx:947562B/s,tx:739859B/s tcp=rtt:42790us,var:3172us,retrans:0(total:0),cwnd:52
+[ResilientSender] connect failed: Connection refused
+[Collector] metric stored: cpu=73.5814% mem=4259276912/17179869184 disk=73613403078/536870912000 net=rx:305382B/s,tx:175463B/s tcp=rtt:46576us,var:2083us,retrans:0(total:0),cwnd:92
+[Collector] metric stored: cpu=25.8653% mem=4773379061/17179869184 disk=15243196695/536870912000 net=rx:102429B/s,tx:407438B/s tcp=rtt:5270us,var:1938us,retrans:0(total:0),cwnd:48
+[Collector] metric stored: cpu=90.1255% mem=6146042407/17179869184 disk=16874173878/536870912000 net=rx:995194B/s,tx:504704B/s tcp=rtt:17870us,var:3883us,retrans:0(total:0),cwnd:31
+[Collector] metric stored: cpu=45.236% mem=2501111048/17179869184 disk=61311314342/536870912000 net=rx:662180B/s,tx:268110B/s tcp=rtt:25732us,var:4265us,retrans:0(total:0),cwnd:65
+[Collector] metric stored: cpu=44.0095% mem=5536799440/17179869184 disk=31942539583/536870912000 net=rx:42693B/s,tx:886947B/s tcp=rtt:17648us,var:3511us,retrans:0(total:0),cwnd:5
+[Collector] metric stored: cpu=85.6682% mem=3685129650/17179869184 disk=7936668600/536870912000 net=rx:960728B/s,tx:838304B/s tcp=rtt:11224us,var:640us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=91.9739% mem=2485253470/17179869184 disk=62521596373/536870912000 net=rx:72557B/s,tx:940582B/s tcp=rtt:5899us,var:2304us,retrans:0(total:0),cwnd:38
+[Collector] metric stored: cpu=11.7307% mem=3481374680/17179869184 disk=93465203318/536870912000 net=rx:992856B/s,tx:398075B/s tcp=rtt:39844us,var:526us,retrans:0(total:0),cwnd:38
+[Collector] metric stored: cpu=49.0866% mem=7081091691/17179869184 disk=77641800750/536870912000 net=rx:732798B/s,tx:635280B/s tcp=rtt:29289us,var:433us,retrans:0(total:0),cwnd:63
+[Collector] metric stored: cpu=3.81343% mem=3723006268/17179869184 disk=28979655969/536870912000 net=rx:854892B/s,tx:573970B/s tcp=rtt:39801us,var:2127us,retrans:0(total:0),cwnd:100
+[Collector] metric stored: cpu=55.0645% mem=8438030503/17179869184 disk=78087127933/536870912000 net=rx:833260B/s,tx:684428B/s tcp=rtt:43227us,var:1830us,retrans:0(total:0),cwnd:26
+[Collector] metric stored: cpu=54.2595% mem=4582845320/17179869184 disk=3323822457/536870912000 net=rx:458833B/s,tx:733378B/s tcp=rtt:3461us,var:2592us,retrans:0(total:0),cwnd:82
+[Collector] metric stored: cpu=78.1351% mem=941791961/17179869184 disk=45476073246/536870912000 net=rx:428913B/s,tx:609922B/s tcp=rtt:9755us,var:4676us,retrans:0(total:0),cwnd:16
+[Collector] metric stored: cpu=33.5215% mem=4926601967/17179869184 disk=88728165288/536870912000 net=rx:469327B/s,tx:7998B/s tcp=rtt:39928us,var:3490us,retrans:0(total:0),cwnd:19
+[Collector] metric stored: cpu=22.6357% mem=804826321/17179869184 disk=72465280889/536870912000 net=rx:165730B/s,tx:772635B/s tcp=rtt:9586us,var:3583us,retrans:0(total:0),cwnd:91
+[Collector] metric stored: cpu=92.6073% mem=5375440533/17179869184 disk=83174121223/536870912000 net=rx:304957B/s,tx:378540B/s tcp=rtt:22832us,var:3654us,retrans:0(total:0),cwnd:28
+[Collector] metric stored: cpu=76.5139% mem=2974452314/17179869184 disk=16077899763/536870912000 net=rx:677943B/s,tx:789850B/s tcp=rtt:6674us,var:1012us,retrans:0(total:0),cwnd:1
+[Collector] metric stored: cpu=54.3424% mem=7415444733/17179869184 disk=61603909542/536870912000 net=rx:364977B/s,tx:806591B/s tcp=rtt:13025us,var:58us,retrans:0(total:0),cwnd:81
+[Collector] metric stored: cpu=57.4603% mem=2608231250/17179869184 disk=3431231118/536870912000 net=rx:42223B/s,tx:60916B/s tcp=rtt:6723us,var:2372us,retrans:0(total:0),cwnd:76
+[Collector] metric stored: cpu=40.7862% mem=3558396681/17179869184 disk=105299685237/536870912000 net=rx:237737B/s,tx:268370B/s tcp=rtt:32241us,var:1769us,retrans:0(total:0),cwnd:59
+[Collector] metric stored: cpu=91.3896% mem=2091393955/17179869184 disk=58667014507/536870912000 net=rx:65474B/s,tx:875339B/s tcp=rtt:45953us,var:1189us,retrans:0(total:0),cwnd:55
+[Collector] metric stored: cpu=3.64391% mem=7957447706/17179869184 disk=65685095680/536870912000 net=rx:779378B/s,tx:725192B/s tcp=rtt:3574us,var:4570us,retrans:0(total:0),cwnd:82
+[Collector] metric stored: cpu=61.1029% mem=3938746636/17179869184 disk=47732334370/536870912000 net=rx:957240B/s,tx:905010B/s tcp=rtt:20316us,var:375us,retrans:0(total:0),cwnd:31
+[Collector] metric stored: cpu=52.7162% mem=7532583783/17179869184 disk=9815835757/536870912000 net=rx:360519B/s,tx:263566B/s tcp=rtt:21310us,var:2941us,retrans:0(total:0),cwnd:91
+[Collector] metric stored: cpu=66.1538% mem=5053891969/17179869184 disk=74354106234/536870912000 net=rx:777883B/s,tx:743685B/s tcp=rtt:48464us,var:3089us,retrans:0(total:0),cwnd:18
+[Collector] metric stored: cpu=62.7779% mem=1735419783/17179869184 disk=19597176191/536870912000 net=rx:298134B/s,tx:508882B/s tcp=rtt:25783us,var:1976us,retrans:0(total:0),cwnd:38
+[Collector] metric stored: cpu=30.985% mem=244156959/17179869184 disk=83745328606/536870912000 net=rx:219385B/s,tx:377584B/s tcp=rtt:37865us,var:104us,retrans:0(total:0),cwnd:88
+[Collector] metric stored: cpu=94.933% mem=761865562/17179869184 disk=80373151904/536870912000 net=rx:678304B/s,tx:661050B/s tcp=rtt:43700us,var:1401us,retrans:0(total:0),cwnd:92
+[Collector] metric stored: cpu=76.4872% mem=6783160743/17179869184 disk=96491238417/536870912000 net=rx:212083B/s,tx:189785B/s tcp=rtt:3355us,var:2510us,retrans:0(total:0),cwnd:88
+[Collector] metric stored: cpu=35.2497% mem=87026245/17179869184 disk=96303478138/536870912000 net=rx:170882B/s,tx:937055B/s tcp=rtt:27809us,var:4248us,retrans:0(total:0),cwnd:5
+[Collector] metric stored: cpu=35.6276% mem=4301122954/17179869184 disk=34479948471/536870912000 net=rx:732897B/s,tx:1042524B/s tcp=rtt:43153us,var:1719us,retrans:0(total:0),cwnd:48
+[Collector] metric stored: cpu=81.2983% mem=4639262132/17179869184 disk=55062575303/536870912000 net=rx:755343B/s,tx:239021B/s tcp=rtt:14865us,var:849us,retrans:0(total:0),cwnd:65
+[Collector] metric stored: cpu=18.7564% mem=5356812260/17179869184 disk=103348912796/536870912000 net=rx:39069B/s,tx:89820B/s tcp=rtt:49929us,var:367us,retrans:0(total:0),cwnd:34
+[Collector] metric stored: cpu=42.8951% mem=432380911/17179869184 disk=579258452/536870912000 net=rx:319007B/s,tx:672250B/s tcp=rtt:42090us,var:481us,retrans:0(total:0),cwnd:4
+[Collector] metric stored: cpu=95.1509% mem=6421935092/17179869184 disk=66877483068/536870912000 net=rx:832275B/s,tx:435521B/s tcp=rtt:39237us,var:3629us,retrans:0(total:0),cwnd:14
+[Collector] metric stored: cpu=78.5881% mem=5013527594/17179869184 disk=74404980345/536870912000 net=rx:158747B/s,tx:1034872B/s tcp=rtt:26156us,var:3054us,retrans:0(total:0),cwnd:85
+[Collector] metric stored: cpu=69.7438% mem=4677427836/17179869184 disk=33423562863/536870912000 net=rx:738044B/s,tx:989102B/s tcp=rtt:47222us,var:4297us,retrans:0(total:0),cwnd:17
+[Collector] metric stored: cpu=27.2386% mem=6419387431/17179869184 disk=60173273337/536870912000 net=rx:727541B/s,tx:447292B/s tcp=rtt:45222us,var:3379us,retrans:0(total:0),cwnd:19
+[Collector] metric stored: cpu=58.284% mem=215902578/17179869184 disk=91164931498/536870912000 net=rx:1003604B/s,tx:972253B/s tcp=rtt:49451us,var:3673us,retrans:0(total:0),cwnd:79
+[Collector] metric stored: cpu=98.7984% mem=7240599182/17179869184 disk=18412105508/536870912000 net=rx:1039164B/s,tx:880364B/s tcp=rtt:20984us,var:4491us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=24.2704% mem=5889439953/17179869184 disk=6601993857/536870912000 net=rx:1015772B/s,tx:532884B/s tcp=rtt:25622us,var:1422us,retrans:0(total:0),cwnd:31
+[Collector] metric stored: cpu=62.9517% mem=2267589085/17179869184 disk=7691097462/536870912000 net=rx:944804B/s,tx:829240B/s tcp=rtt:21279us,var:4838us,retrans:0(total:0),cwnd:10
+[Collector] metric stored: cpu=55.5107% mem=8221850615/17179869184 disk=64563450156/536870912000 net=rx:378003B/s,tx:558587B/s tcp=rtt:30652us,var:2836us,retrans:0(total:0),cwnd:40
+[Collector] metric stored: cpu=8.66643% mem=652921008/17179869184 disk=41703296973/536870912000 net=rx:781632B/s,tx:937607B/s tcp=rtt:38820us,var:2316us,retrans:0(total:0),cwnd:47
+[Collector] metric stored: cpu=79.609% mem=3390356054/17179869184 disk=82986002244/536870912000 net=rx:902871B/s,tx:758392B/s tcp=rtt:6443us,var:3422us,retrans:0(total:0),cwnd:6
+[Collector] metric stored: cpu=33.2488% mem=795161628/17179869184 disk=91232115621/536870912000 net=rx:466089B/s,tx:850683B/s tcp=rtt:9428us,var:4186us,retrans:0(total:0),cwnd:74
+[Collector] metric stored: cpu=39.1754% mem=3436668558/17179869184 disk=51891501555/536870912000 net=rx:608452B/s,tx:954993B/s tcp=rtt:31487us,var:4946us,retrans:0(total:0),cwnd:32
+[Collector] metric stored: cpu=11.5356% mem=2402820064/17179869184 disk=57822412854/536870912000 net=rx:308774B/s,tx:585903B/s tcp=rtt:48507us,var:40us,retrans:0(total:0),cwnd:60
+[Collector] metric stored: cpu=33.4947% mem=4310173920/17179869184 disk=91214409507/536870912000 net=rx:650199B/s,tx:1026186B/s tcp=rtt:27402us,var:4354us,retrans:0(total:0),cwnd:3
+[Collector] WebServer로 79건 전송 시도
+[ResilientSender] queued (size=1)
+[ResilientSender] queued (size=2)
+[ResilientSender] queued (size=3)
+[ResilientSender] queued (size=4)
+[ResilientSender] queued (size=5)
+[ResilientSender] queued (size=6)
+[ResilientSender] queued (size=7)
+[ResilientSender] queued (size=8)
+[ResilientSender] queued (size=9)
+[ResilientSender] queued (size=10)
+[ResilientSender] queued (size=11)
+[ResilientSender] queued (size=12)
+[ResilientSender] queued (size=13)
+[ResilientSender] queued (size=14)
+[ResilientSender] queued (size=15)
+[ResilientSender] queued (size=16)
+[ResilientSender] queued (size=17)
+[ResilientSender] queued (size=18)
+[ResilientSender] queued (size=19)
+[ResilientSender] queued (size=20)
+[ResilientSender] queued (size=21)
+[ResilientSender] queued (size=22)
+[ResilientSender] queued (size=23)
+[ResilientSender] queued (size=24)
+[ResilientSender] queued (size=25)
+[ResilientSender] queued (size=26)
+[ResilientSender] queued (size=27)
+[ResilientSender] queued (size=28)
+[ResilientSender] queued (size=29)
+[ResilientSender] queued (size=30)
+[ResilientSender] queued (size=31)
+[ResilientSender] queued (size=32)
+[ResilientSender] queued (size=33)
+[ResilientSender] queued (size=34)
+[ResilientSender] queued (size=35)
+[ResilientSender] queued (size=36)
+[ResilientSender] queued (size=37)
+[ResilientSender] queued (size=38)
+[ResilientSender] queued (size=39)
+[ResilientSender] queued (size=40)
+[ResilientSender] queued (size=41)
+[ResilientSender] queued (size=42)
+[ResilientSender] queued (size=43)
+[ResilientSender] queued (size=44)
+[ResilientSender] queued (size=45)
+[ResilientSender] queued (size=46)
+[ResilientSender] queued (size=47)
+[ResilientSender] queued (size=48)
+[ResilientSender] queued (size=49)
+[ResilientSender] queued (size=50)
+[ResilientSender] queued (size=51)
+[ResilientSender] queued (size=52)
+[ResilientSender] queued (size=53)
+[ResilientSender] queued (size=54)
+[ResilientSender] queued (size=55)
+[ResilientSender] queued (size=56)
+[ResilientSender] queued (size=57)
+[ResilientSender] queued (size=58)
+[ResilientSender] queued (size=59)
+[ResilientSender] queued (size=60)
+[ResilientSender] queued (size=61)
+[ResilientSender] queued (size=62)
+[ResilientSender] queued (size=63)
+[ResilientSender] queued (size=64)
+[ResilientSender] queued (size=65)
+[ResilientSender] queued (size=66)
+[ResilientSender] queued (size=67)
+[ResilientSender] queued (size=68)
+[ResilientSender] queued (size=69)
+[ResilientSender] queued (size=70)
+[ResilientSender] queued (size=71)
+[ResilientSender] queued (size=72)
+[ResilientSender] queued (size=73)
+[ResilientSender] queued (size=74)
+[ResilientSender] queued (size=75)
+[ResilientSender] queued (size=76)
+[ResilientSender] queued (size=77)
+[ResilientSender] queued (size=78)
+[ResilientSender] queued (size=79)
+[Collector] metric stored: cpu=29.4721% mem=1819780839/17179869184 disk=2364062887/536870912000 net=rx:45012B/s,tx:1033252B/s tcp=rtt:2650us,var:484us,retrans:0(total:0),cwnd:87
+[Collector] metric stored: cpu=36.9687% mem=2485599141/17179869184 disk=67435869952/536870912000 net=rx:492384B/s,tx:825609B/s tcp=rtt:4234us,var:2629us,retrans:0(total:0),cwnd:23
+[ResilientSender] connect failed: Connection refused
+[Collector] metric stored: cpu=88.0996% mem=417584708/17179869184 disk=42582969933/536870912000 net=rx:963218B/s,tx:971441B/s tcp=rtt:48749us,var:4193us,retrans:0(total:0),cwnd:48
+[Collector] metric stored: cpu=91.8418% mem=896308963/17179869184 disk=32872377666/536870912000 net=rx:599606B/s,tx:786229B/s tcp=rtt:35676us,var:4902us,retrans:0(total:0),cwnd:30
+[Collector] metric stored: cpu=17.9181% mem=3576398858/17179869184 disk=26101695415/536870912000 net=rx:763177B/s,tx:220346B/s tcp=rtt:45001us,var:3556us,retrans:0(total:0),cwnd:98
+[Collector] metric stored: cpu=39.7888% mem=2497113776/17179869184 disk=94393971560/536870912000 net=rx:524340B/s,tx:362212B/s tcp=rtt:41290us,var:1717us,retrans:0(total:0),cwnd:74
+[Collector] metric stored: cpu=83.0158% mem=5751982085/17179869184 disk=17813767669/536870912000 net=rx:482357B/s,tx:566280B/s tcp=rtt:13404us,var:1963us,retrans:0(total:0),cwnd:79
+[Collector] metric stored: cpu=4.38298% mem=6411781701/17179869184 disk=4167545762/536870912000 net=rx:854093B/s,tx:346374B/s tcp=rtt:40498us,var:4337us,retrans:0(total:0),cwnd:22
+[Collector] metric stored: cpu=57.9491% mem=1300861361/17179869184 disk=75719081478/536870912000 net=rx:1000886B/s,tx:359451B/s tcp=rtt:17508us,var:4500us,retrans:0(total:0),cwnd:40
+[Collector] metric stored: cpu=72.3921% mem=1248348476/17179869184 disk=52254663366/536870912000 net=rx:45952B/s,tx:602888B/s tcp=rtt:18370us,var:2932us,retrans:0(total:0),cwnd:35
+[Collector] metric stored: cpu=90.5593% mem=3052841777/17179869184 disk=22587017699/536870912000 net=rx:357213B/s,tx:981956B/s tcp=rtt:32983us,var:1601us,retrans:0(total:0),cwnd:80
+[Collector] metric stored: cpu=93.5015% mem=6123438751/17179869184 disk=24820718712/536870912000 net=rx:443276B/s,tx:41713B/s tcp=rtt:24027us,var:4349us,retrans:0(total:0),cwnd:90
+[Collector] metric stored: cpu=87.5112% mem=2871733670/17179869184 disk=69633993222/536870912000 net=rx:584262B/s,tx:105164B/s tcp=rtt:18702us,var:4843us,retrans:0(total:0),cwnd:17
+[Collector] metric stored: cpu=55.6303% mem=3955874539/17179869184 disk=97384047609/536870912000 net=rx:712706B/s,tx:249051B/s tcp=rtt:32176us,var:3791us,retrans:0(total:0),cwnd:69
+[Collector] metric stored: cpu=79.5621% mem=3100425212/17179869184 disk=62553816372/536870912000 net=rx:737320B/s,tx:177450B/s tcp=rtt:4910us,var:954us,retrans:0(total:0),cwnd:71
+[Collector] metric stored: cpu=58.7341% mem=1407697196/17179869184 disk=30758953199/536870912000 net=rx:988398B/s,tx:402069B/s tcp=rtt:30312us,var:1116us,retrans:0(total:0),cwnd:68
+[Collector] metric stored: cpu=43.4022% mem=3574538502/17179869184 disk=54483396672/536870912000 net=rx:274628B/s,tx:934595B/s tcp=rtt:26366us,var:2564us,retrans:0(total:0),cwnd:14
+[Collector] metric stored: cpu=6.55108% mem=5405641349/17179869184 disk=44907684195/536870912000 net=rx:444788B/s,tx:701432B/s tcp=rtt:33901us,var:652us,retrans:0(total:0),cwnd:6
+[Collector] metric stored: cpu=46.5107% mem=6851516165/17179869184 disk=84588735312/536870912000 net=rx:18026B/s,tx:966803B/s tcp=rtt:4246us,var:3788us,retrans:0(total:0),cwnd:61
+[Collector] metric stored: cpu=20.7589% mem=8302754078/17179869184 disk=47697984216/536870912000 net=rx:580297B/s,tx:202337B/s tcp=rtt:25599us,var:1636us,retrans:0(total:0),cwnd:46
+[Collector] metric stored: cpu=41.3047% mem=4989680451/17179869184 disk=69264686157/536870912000 net=rx:1016258B/s,tx:343075B/s tcp=rtt:4601us,var:1404us,retrans:0(total:0),cwnd:13
+[Collector] metric stored: cpu=80.5935% mem=6889501645/17179869184 disk=87849396929/536870912000 net=rx:1008807B/s,tx:233741B/s tcp=rtt:47934us,var:1053us,retrans:0(total:0),cwnd:37
+[Collector] metric stored: cpu=84.0325% mem=5247222145/17179869184 disk=85515599176/536870912000 net=rx:835874B/s,tx:740771B/s tcp=rtt:27499us,var:1306us,retrans:0(total:0),cwnd:31
+[Collector] metric stored: cpu=77.9909% mem=414536742/17179869184 disk=35909609534/536870912000 net=rx:956884B/s,tx:315459B/s tcp=rtt:9379us,var:231us,retrans:0(total:0),cwnd:43
+[Collector] metric stored: cpu=53.2436% mem=7622833420/17179869184 disk=17321744242/536870912000 net=rx:899902B/s,tx:583860B/s tcp=rtt:2006us,var:4903us,retrans:0(total:0),cwnd:84
+[Collector] metric stored: cpu=78.0732% mem=5025591052/17179869184 disk=8852920045/536870912000 net=rx:985336B/s,tx:638414B/s tcp=rtt:26767us,var:3798us,retrans:0(total:0),cwnd:97
+[Collector] metric stored: cpu=65.2744% mem=5297058988/17179869184 disk=99827941684/536870912000 net=rx:415004B/s,tx:814978B/s tcp=rtt:31984us,var:718us,retrans:0(total:0),cwnd:75
+[Collector] metric stored: cpu=43.6755% mem=5837428696/17179869184 disk=3673176547/536870912000 net=rx:946447B/s,tx:178274B/s tcp=rtt:9486us,var:1014us,retrans:0(total:0),cwnd:98
+[Collector] metric stored: cpu=81.333% mem=6967374496/17179869184 disk=27870837929/536870912000 net=rx:322743B/s,tx:562596B/s tcp=rtt:46720us,var:3842us,retrans:0(total:0),cwnd:6
+[Collector] metric stored: cpu=90.4278% mem=187019421/17179869184 disk=48932930147/536870912000 net=rx:259346B/s,tx:973462B/s tcp=rtt:17576us,var:2727us,retrans:0(total:0),cwnd:3
+[Collector] metric stored: cpu=11.3913% mem=5403962658/17179869184 disk=74571439029/536870912000 net=rx:159270B/s,tx:394541B/s tcp=rtt:4098us,var:679us,retrans:0(total:0),cwnd:84
+[Collector] metric stored: cpu=53.8088% mem=2897355293/17179869184 disk=24105988702/536870912000 net=rx:839291B/s,tx:299913B/s tcp=rtt:41403us,var:1211us,retrans:0(total:0),cwnd:62
+[Collector] metric stored: cpu=48.3286% mem=5582349830/17179869184 disk=22710059002/536870912000 net=rx:443410B/s,tx:722229B/s tcp=rtt:43854us,var:3987us,retrans:0(total:0),cwnd:53
+[Collector] metric stored: cpu=54.6075% mem=8080026983/17179869184 disk=23560774286/536870912000 net=rx:657730B/s,tx:249638B/s tcp=rtt:28647us,var:913us,retrans:0(total:0),cwnd:51
+[Collector] metric stored: cpu=70.9835% mem=3102385844/17179869184 disk=24152574126/536870912000 net=rx:926813B/s,tx:816325B/s tcp=rtt:15488us,var:3575us,retrans:0(total:0),cwnd:5
+[Collector] metric stored: cpu=27.7923% mem=7927005168/17179869184 disk=81741919223/536870912000 net=rx:594583B/s,tx:672684B/s tcp=rtt:23644us,var:1174us,retrans:0(total:0),cwnd:39
+[Collector] metric stored: cpu=30.2006% mem=7617328814/17179869184 disk=50903880138/536870912000 net=rx:876277B/s,tx:195821B/s tcp=rtt:14465us,var:3969us,retrans:0(total:0),cwnd:80
+[Collector] metric stored: cpu=41.7436% mem=6599801709/17179869184 disk=26473622332/536870912000 net=rx:193487B/s,tx:121387B/s tcp=rtt:20007us,var:3061us,retrans:0(total:0),cwnd:60
+[Collector] metric stored: cpu=63.2532% mem=7211950990/17179869184 disk=67449261327/536870912000 net=rx:623618B/s,tx:874002B/s tcp=rtt:39593us,var:4528us,retrans:0(total:0),cwnd:27
+[Collector] metric stored: cpu=23.7776% mem=5781656142/17179869184 disk=50121516000/536870912000 net=rx:611757B/s,tx:57344B/s tcp=rtt:34495us,var:3598us,retrans:0(total:0),cwnd:72
+[Collector] metric stored: cpu=25.1323% mem=6734081229/17179869184 disk=62346322091/536870912000 net=rx:901209B/s,tx:278966B/s tcp=rtt:1585us,var:1698us,retrans:0(total:0),cwnd:16
+[Collector] metric stored: cpu=36.2455% mem=7953392265/17179869184 disk=81644093695/536870912000 net=rx:688569B/s,tx:397048B/s tcp=rtt:19440us,var:3695us,retrans:0(total:0),cwnd:11
+[Collector] metric stored: cpu=32.0753% mem=4986028316/17179869184 disk=28781088868/536870912000 net=rx:1032591B/s,tx:1029798B/s tcp=rtt:49434us,var:4998us,retrans:0(total:0),cwnd:9
+[Collector] metric stored: cpu=22.3733% mem=5142613030/17179869184 disk=54080264523/536870912000 net=rx:392990B/s,tx:375973B/s tcp=rtt:42085us,var:4046us,retrans:0(total:0),cwnd:64
+[Collector] metric stored: cpu=60.6471% mem=246217892/17179869184 disk=72062396260/536870912000 net=rx:415037B/s,tx:257622B/s tcp=rtt:36904us,var:4023us,retrans:0(total:0),cwnd:42
+[Collector] metric stored: cpu=46.2977% mem=5889000739/17179869184 disk=84715895637/536870912000 net=rx:63817B/s,tx:56045B/s tcp=rtt:47411us,var:2803us,retrans:0(total:0),cwnd:84
+[Collector] metric stored: cpu=42.146% mem=5740933431/17179869184 disk=8755340343/536870912000 net=rx:648410B/s,tx:111521B/s tcp=rtt:29115us,var:3140us,retrans:0(total:0),cwnd:3
+[Collector] metric stored: cpu=32.3886% mem=4159843133/17179869184 disk=26516994906/536870912000 net=rx:979377B/s,tx:785558B/s tcp=rtt:8580us,var:2163us,retrans:0(total:0),cwnd:70
+[Collector] metric stored: cpu=40.9177% mem=6389281535/17179869184 disk=50036349719/536870912000 net=rx:1007551B/s,tx:250187B/s tcp=rtt:39406us,var:1280us,retrans:0(total:0),cwnd:23
+[Collector] metric stored: cpu=14.7197% mem=8022718038/17179869184 disk=13370887452/536870912000 net=rx:330054B/s,tx:595273B/s tcp=rtt:21583us,var:2777us,retrans:0(total:0),cwnd:86
+[Collector] metric stored: cpu=48.0493% mem=4876967732/17179869184 disk=33185854168/536870912000 net=rx:898895B/s,tx:940113B/s tcp=rtt:25697us,var:3192us,retrans:0(total:0),cwnd:77
+[Collector] metric stored: cpu=0.709899% mem=2549969063/17179869184 disk=18427501145/536870912000 net=rx:9183B/s,tx:564555B/s tcp=rtt:32323us,var:395us,retrans:0(total:0),cwnd:7
+[ResilientSender] connect failed: Connection refused
+[Collector] metric stored: cpu=9.78371% mem=6029324596/17179869184 disk=26492892676/536870912000 net=rx:959776B/s,tx:610961B/s tcp=rtt:22816us,var:772us,retrans:0(total:0),cwnd:92
+[Collector] metric stored: cpu=79.5971% mem=6395308555/17179869184 disk=57039509300/536870912000 net=rx:105594B/s,tx:266608B/s tcp=rtt:11346us,var:4651us,retrans:0(total:0),cwnd:85
+[Collector] metric stored: cpu=10.7118% mem=4410703150/17179869184 disk=72306144198/536870912000 net=rx:376426B/s,tx:695115B/s tcp=rtt:33151us,var:1811us,retrans:0(total:0),cwnd:37
+[Collector] metric stored: cpu=67.6585% mem=3576973606/17179869184 disk=92107875710/536870912000 net=rx:451156B/s,tx:908624B/s tcp=rtt:39315us,var:82us,retrans:0(total:0),cwnd:90
+[Collector] metric stored: cpu=56.0961% mem=7966872969/17179869184 disk=95140570991/536870912000 net=rx:120374B/s,tx:355852B/s tcp=rtt:2911us,var:143us,retrans:0(total:0),cwnd:80
+[Collector] metric stored: cpu=85.1416% mem=2684241845/17179869184 disk=48402903281/536870912000 net=rx:972826B/s,tx:448455B/s tcp=rtt:36845us,var:3996us,retrans:0(total:0),cwnd:68
+[Collector] metric stored: cpu=81.576% mem=3194209751/17179869184 disk=4537651897/536870912000 net=rx:4889B/s,tx:290626B/s tcp=rtt:46684us,var:2915us,retrans:0(total:0),cwnd:10
+[Collector] metric stored: cpu=4.11606% mem=6582675696/17179869184 disk=51580619540/536870912000 net=rx:959091B/s,tx:95161B/s tcp=rtt:24898us,var:4877us,retrans:0(total:0),cwnd:9
+[Collector] metric stored: cpu=50.2127% mem=1188520945/17179869184 disk=43617344035/536870912000 net=rx:359485B/s,tx:787831B/s tcp=rtt:28607us,var:1241us,retrans:0(total:0),cwnd:3
+[Collector] metric stored: cpu=31.304% mem=8094009012/17179869184 disk=87266704479/536870912000 net=rx:887122B/s,tx:94757B/s tcp=rtt:28539us,var:778us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=2.83065% mem=3336690981/17179869184 disk=102187979745/536870912000 net=rx:571690B/s,tx:371590B/s tcp=rtt:23633us,var:415us,retrans:0(total:0),cwnd:90
+[Collector] metric stored: cpu=91.4957% mem=5383760834/17179869184 disk=70712637922/536870912000 net=rx:50185B/s,tx:389097B/s tcp=rtt:6187us,var:1049us,retrans:0(total:0),cwnd:28
+[Collector] metric stored: cpu=33.2925% mem=4499836151/17179869184 disk=98533481944/536870912000 net=rx:269108B/s,tx:80040B/s tcp=rtt:46941us,var:1260us,retrans:0(total:0),cwnd:99
+[Collector] metric stored: cpu=21.5849% mem=513464788/17179869184 disk=11286530350/536870912000 net=rx:1012226B/s,tx:625486B/s tcp=rtt:42347us,var:1399us,retrans:0(total:0),cwnd:65
+[Collector] metric stored: cpu=42.4094% mem=642083925/17179869184 disk=72672458813/536870912000 net=rx:662964B/s,tx:503327B/s tcp=rtt:32206us,var:3703us,retrans:0(total:0),cwnd:29
+[Collector] metric stored: cpu=76.6404% mem=1104360091/17179869184 disk=14983382/536870912000 net=rx:599143B/s,tx:975330B/s tcp=rtt:3739us,var:2488us,retrans:0(total:0),cwnd:82
+[Collector] metric stored: cpu=78.6844% mem=7306511334/17179869184 disk=66189767376/536870912000 net=rx:359940B/s,tx:835335B/s tcp=rtt:45341us,var:2182us,retrans:0(total:0),cwnd:80
+[Collector] metric stored: cpu=99.725% mem=7332565743/17179869184 disk=24115132097/536870912000 net=rx:595249B/s,tx:1040065B/s tcp=rtt:9974us,var:2562us,retrans:0(total:0),cwnd:23
+[Collector] metric stored: cpu=56.382% mem=6720314342/17179869184 disk=34984118294/536870912000 net=rx:1010769B/s,tx:897228B/s tcp=rtt:40394us,var:1759us,retrans:0(total:0),cwnd:30
+[Collector] metric stored: cpu=3.13343% mem=5844667277/17179869184 disk=105026999255/536870912000 net=rx:860631B/s,tx:1042822B/s tcp=rtt:31166us,var:4335us,retrans:0(total:0),cwnd:39
+[Collector] metric stored: cpu=17.3426% mem=2474985454/17179869184 disk=65887186310/536870912000 net=rx:911888B/s,tx:56221B/s tcp=rtt:11494us,var:812us,retrans:0(total:0),cwnd:76
+[Collector] metric stored: cpu=68.7684% mem=7963402144/17179869184 disk=44169943610/536870912000 net=rx:854832B/s,tx:491606B/s tcp=rtt:48674us,var:1534us,retrans:0(total:0),cwnd:12
+[Collector] metric stored: cpu=82.6782% mem=3897779199/17179869184 disk=651852927/536870912000 net=rx:328535B/s,tx:475050B/s tcp=rtt:48799us,var:1647us,retrans:0(total:0),cwnd:28
+[Collector] metric stored: cpu=51.0249% mem=6218837134/17179869184 disk=37697211916/536870912000 net=rx:646976B/s,tx:165104B/s tcp=rtt:9639us,var:299us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=79.8675% mem=2099788594/17179869184 disk=43488104235/536870912000 net=rx:445487B/s,tx:64680B/s tcp=rtt:2534us,var:4984us,retrans:0(total:0),cwnd:64
+[Collector] metric stored: cpu=5.38234% mem=6126036921/17179869184 disk=54289767865/536870912000 net=rx:14147B/s,tx:458603B/s tcp=rtt:19717us,var:3671us,retrans:0(total:0),cwnd:49
+[Collector] metric stored: cpu=51.8246% mem=439535116/17179869184 disk=84987765627/536870912000 net=rx:320835B/s,tx:209755B/s tcp=rtt:43630us,var:4356us,retrans:0(total:0),cwnd:66
+[Collector] metric stored: cpu=3.16209% mem=6402720942/17179869184 disk=28408928788/536870912000 net=rx:1021466B/s,tx:136360B/s tcp=rtt:1502us,var:2758us,retrans:0(total:0),cwnd:48
+[Collector] metric stored: cpu=1.32487% mem=2622569114/17179869184 disk=56374855400/536870912000 net=rx:557856B/s,tx:692136B/s tcp=rtt:49832us,var:3747us,retrans:0(total:0),cwnd:29
+[Collector] metric stored: cpu=14.6804% mem=7805337601/17179869184 disk=73826090285/536870912000 net=rx:996015B/s,tx:888675B/s tcp=rtt:25970us,var:3591us,retrans:0(total:0),cwnd:98
+[Collector] metric stored: cpu=68.038% mem=6003311911/17179869184 disk=105664074537/536870912000 net=rx:197065B/s,tx:780783B/s tcp=rtt:46265us,var:322us,retrans:0(total:0),cwnd:12
+[Collector] metric stored: cpu=41.1499% mem=1402592621/17179869184 disk=50168326726/536870912000 net=rx:656399B/s,tx:141662B/s tcp=rtt:19487us,var:1816us,retrans:0(total:0),cwnd:16
+[Collector] metric stored: cpu=79.7776% mem=2365505119/17179869184 disk=26810010307/536870912000 net=rx:131399B/s,tx:704363B/s tcp=rtt:13738us,var:4237us,retrans:0(total:0),cwnd:32
+[Collector] metric stored: cpu=97.2285% mem=7207617085/17179869184 disk=3421847891/536870912000 net=rx:642727B/s,tx:276357B/s tcp=rtt:22643us,var:1807us,retrans:0(total:0),cwnd:14
+[Collector] metric stored: cpu=53.426% mem=2701117540/17179869184 disk=51355042530/536870912000 net=rx:447834B/s,tx:979705B/s tcp=rtt:25734us,var:1426us,retrans:0(total:0),cwnd:5
+[Collector] metric stored: cpu=24.5871% mem=3503047604/17179869184 disk=73886029525/536870912000 net=rx:859605B/s,tx:340976B/s tcp=rtt:47210us,var:1419us,retrans:0(total:0),cwnd:83
+[Collector] metric stored: cpu=9.84714% mem=1966207339/17179869184 disk=13212975431/536870912000 net=rx:868070B/s,tx:394599B/s tcp=rtt:38873us,var:3471us,retrans:0(total:0),cwnd:84
+[Collector] metric stored: cpu=66.8469% mem=4371360632/17179869184 disk=29825109063/536870912000 net=rx:899652B/s,tx:825119B/s tcp=rtt:13781us,var:680us,retrans:0(total:0),cwnd:71
+[Collector] metric stored: cpu=32.3706% mem=2326431747/17179869184 disk=82897318355/536870912000 net=rx:664865B/s,tx:313252B/s tcp=rtt:5838us,var:2379us,retrans:0(total:0),cwnd:39
+[Collector] metric stored: cpu=43.614% mem=4072220675/17179869184 disk=19211995950/536870912000 net=rx:678345B/s,tx:720398B/s tcp=rtt:37480us,var:2770us,retrans:0(total:0),cwnd:21
+[Collector] metric stored: cpu=99.8466% mem=3603028204/17179869184 disk=101379644/536870912000 net=rx:136958B/s,tx:572457B/s tcp=rtt:23186us,var:1333us,retrans:0(total:0),cwnd:35
+[Collector] metric stored: cpu=45.7439% mem=30472425/17179869184 disk=66743582531/536870912000 net=rx:877932B/s,tx:865115B/s tcp=rtt:11354us,var:49us,retrans:0(total:0),cwnd:62
+[Collector] metric stored: cpu=31.0954% mem=4437597726/17179869184 disk=45265652932/536870912000 net=rx:544755B/s,tx:32056B/s tcp=rtt:22491us,var:4249us,retrans:0(total:0),cwnd:46
+[Collector] metric stored: cpu=81.9387% mem=2586646709/17179869184 disk=50206364502/536870912000 net=rx:522683B/s,tx:855759B/s tcp=rtt:32729us,var:1615us,retrans:0(total:0),cwnd:91
+[Collector] metric stored: cpu=72.2158% mem=3006989684/17179869184 disk=52605406959/536870912000 net=rx:505018B/s,tx:628901B/s tcp=rtt:7043us,var:905us,retrans:0(total:0),cwnd:83
+[Collector] metric stored: cpu=17.023% mem=3359291596/17179869184 disk=9815636141/536870912000 net=rx:163608B/s,tx:926814B/s tcp=rtt:43061us,var:3258us,retrans:0(total:0),cwnd:3
+[Collector] metric stored: cpu=9.29322% mem=1827968894/17179869184 disk=42987294823/536870912000 net=rx:22962B/s,tx:890312B/s tcp=rtt:49390us,var:692us,retrans:0(total:0),cwnd:83
+[Collector] metric stored: cpu=19.7574% mem=7264144639/17179869184 disk=39603920141/536870912000 net=rx:378955B/s,tx:570911B/s tcp=rtt:19704us,var:2398us,retrans:0(total:0),cwnd:38
+[Collector] WebServer로 100건 전송 시도
+[ResilientSender] queued (size=80)
+[ResilientSender] queued (size=81)
+[ResilientSender] queued (size=82)
+[ResilientSender] queued (size=83)
+[ResilientSender] queued (size=84)
+[ResilientSender] queued (size=85)
+[ResilientSender] queued (size=86)
+[ResilientSender] queued (size=87)
+[ResilientSender] queued (size=88)
+[ResilientSender] queued (size=89)
+[ResilientSender] queued (size=90)
+[ResilientSender] queued (size=91)
+[ResilientSender] queued (size=92)
+[ResilientSender] queued (size=93)
+[ResilientSender] queued (size=94)
+[ResilientSender] queued (size=95)
+[ResilientSender] queued (size=96)
+[ResilientSender] queued (size=97)
+[ResilientSender] queued (size=98)
+[ResilientSender] queued (size=99)
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[Collector] metric stored: cpu=53.4121% mem=5546362615/17179869184 disk=18203935528/536870912000 net=rx:752021B/s,tx:890032B/s tcp=rtt:17722us,var:3127us,retrans:0(total:0),cwnd:96
+[Collector] metric stored: cpu=9.31188% mem=4672151034/17179869184 disk=29606498238/536870912000 net=rx:34747B/s,tx:609952B/s tcp=rtt:29550us,var:4615us,retrans:0(total:0),cwnd:88
+[ResilientSender] connect failed: Connection refused
+[Collector] metric stored: cpu=75.0998% mem=6056186515/17179869184 disk=77584399491/536870912000 net=rx:323162B/s,tx:593922B/s tcp=rtt:14040us,var:430us,retrans:0(total:0),cwnd:92
+[Collector] metric stored: cpu=24.0104% mem=4597822309/17179869184 disk=100809732359/536870912000 net=rx:821791B/s,tx:770617B/s tcp=rtt:5189us,var:4592us,retrans:0(total:0),cwnd:83
+[Collector] metric stored: cpu=17.2889% mem=1668274900/17179869184 disk=90356889024/536870912000 net=rx:343688B/s,tx:799390B/s tcp=rtt:27380us,var:4348us,retrans:0(total:0),cwnd:99
+[Collector] metric stored: cpu=37.6509% mem=4157133672/17179869184 disk=29786240655/536870912000 net=rx:528917B/s,tx:459539B/s tcp=rtt:31802us,var:1011us,retrans:0(total:0),cwnd:87
+[Collector] metric stored: cpu=63.4019% mem=7725439296/17179869184 disk=67560081083/536870912000 net=rx:920476B/s,tx:465802B/s tcp=rtt:49355us,var:1957us,retrans:0(total:0),cwnd:90
+[Collector] metric stored: cpu=9.62292% mem=3120621764/17179869184 disk=19439816757/536870912000 net=rx:18667B/s,tx:636202B/s tcp=rtt:6133us,var:3939us,retrans:0(total:0),cwnd:4
+[Collector] metric stored: cpu=85.9677% mem=474820945/17179869184 disk=92402792967/536870912000 net=rx:911686B/s,tx:227915B/s tcp=rtt:38167us,var:911us,retrans:0(total:0),cwnd:83
+[Collector] metric stored: cpu=20.1467% mem=6485417681/17179869184 disk=50517499904/536870912000 net=rx:647302B/s,tx:896834B/s tcp=rtt:2366us,var:4940us,retrans:0(total:0),cwnd:37
+[Collector] metric stored: cpu=59.6921% mem=5400808543/17179869184 disk=6078746405/536870912000 net=rx:280345B/s,tx:3176B/s tcp=rtt:21725us,var:4237us,retrans:0(total:0),cwnd:41
+[Collector] metric stored: cpu=46.4278% mem=1310666047/17179869184 disk=45466117021/536870912000 net=rx:612572B/s,tx:798304B/s tcp=rtt:20800us,var:505us,retrans:0(total:0),cwnd:78
+[Collector] metric stored: cpu=67.8647% mem=5381816913/17179869184 disk=97139163251/536870912000 net=rx:733143B/s,tx:512577B/s tcp=rtt:27115us,var:3488us,retrans:0(total:0),cwnd:65
+[Collector] metric stored: cpu=94.8554% mem=3373318377/17179869184 disk=65896604123/536870912000 net=rx:405262B/s,tx:596276B/s tcp=rtt:35105us,var:1547us,retrans:0(total:0),cwnd:98
+[Collector] metric stored: cpu=52.5732% mem=6255330664/17179869184 disk=43263391371/536870912000 net=rx:114475B/s,tx:98753B/s tcp=rtt:25551us,var:356us,retrans:0(total:0),cwnd:44
+[Collector] metric stored: cpu=11.4617% mem=3002073408/17179869184 disk=40874877425/536870912000 net=rx:1031957B/s,tx:507977B/s tcp=rtt:32048us,var:4340us,retrans:0(total:0),cwnd:89
+[Collector] metric stored: cpu=76.8254% mem=2884292172/17179869184 disk=10580353699/536870912000 net=rx:275698B/s,tx:683733B/s tcp=rtt:27991us,var:4784us,retrans:0(total:0),cwnd:56
+[Collector] metric stored: cpu=69.6934% mem=995593349/17179869184 disk=65237861488/536870912000 net=rx:754306B/s,tx:260532B/s tcp=rtt:37950us,var:3224us,retrans:0(total:0),cwnd:88
+[Collector] metric stored: cpu=96.4938% mem=1114132726/17179869184 disk=56217168037/536870912000 net=rx:971677B/s,tx:510689B/s tcp=rtt:31574us,var:3426us,retrans:0(total:0),cwnd:24
+[Collector] metric stored: cpu=21.5801% mem=4404773775/17179869184 disk=21679939954/536870912000 net=rx:954081B/s,tx:463366B/s tcp=rtt:47516us,var:1354us,retrans:0(total:0),cwnd:79
+[Collector] metric stored: cpu=29.4824% mem=1049807695/17179869184 disk=9524990835/536870912000 net=rx:579072B/s,tx:1047575B/s tcp=rtt:36249us,var:2945us,retrans:0(total:0),cwnd:0
+[Collector] metric stored: cpu=51.4651% mem=5422953815/17179869184 disk=48516985395/536870912000 net=rx:426333B/s,tx:920455B/s tcp=rtt:43317us,var:2287us,retrans:0(total:0),cwnd:47
+[Collector] metric stored: cpu=46.7697% mem=6945544036/17179869184 disk=27572076194/536870912000 net=rx:788888B/s,tx:884251B/s tcp=rtt:38936us,var:1153us,retrans:0(total:0),cwnd:67
+[Collector] metric stored: cpu=13.1571% mem=6208581858/17179869184 disk=103746525777/536870912000 net=rx:528690B/s,tx:875816B/s tcp=rtt:26691us,var:2604us,retrans:0(total:0),cwnd:79
+[Collector] metric stored: cpu=93.7761% mem=1356694030/17179869184 disk=71743769685/536870912000 net=rx:1024914B/s,tx:64666B/s tcp=rtt:19711us,var:1347us,retrans:0(total:0),cwnd:58
+[Collector] metric stored: cpu=63.402% mem=1329615139/17179869184 disk=24052635143/536870912000 net=rx:975658B/s,tx:861685B/s tcp=rtt:33016us,var:2564us,retrans:0(total:0),cwnd:50
+[Collector] metric stored: cpu=86.9976% mem=4011222042/17179869184 disk=74820839314/536870912000 net=rx:710218B/s,tx:441547B/s tcp=rtt:32308us,var:3205us,retrans:0(total:0),cwnd:94
+[Collector] metric stored: cpu=31.0218% mem=5098305381/17179869184 disk=6938682268/536870912000 net=rx:780650B/s,tx:713570B/s tcp=rtt:43432us,var:4879us,retrans:0(total:0),cwnd:90
+[Collector] metric stored: cpu=24.101% mem=393632477/17179869184 disk=58145134389/536870912000 net=rx:357593B/s,tx:554528B/s tcp=rtt:8377us,var:2854us,retrans:0(total:0),cwnd:89
+[Collector] metric stored: cpu=33.578% mem=188096460/17179869184 disk=92569003444/536870912000 net=rx:909050B/s,tx:801015B/s tcp=rtt:26511us,var:4388us,retrans:0(total:0),cwnd:80
+[Collector] metric stored: cpu=9.55165% mem=1063874633/17179869184 disk=2006857199/536870912000 net=rx:25954B/s,tx:50326B/s tcp=rtt:39041us,var:700us,retrans:0(total:0),cwnd:83
+[Collector] metric stored: cpu=37.8489% mem=400077611/17179869184 disk=101212835832/536870912000 net=rx:786767B/s,tx:1007998B/s tcp=rtt:30246us,var:3912us,retrans:0(total:0),cwnd:27
+[Collector] metric stored: cpu=0.707046% mem=5476782567/17179869184 disk=104306621781/536870912000 net=rx:1177B/s,tx:726470B/s tcp=rtt:19694us,var:2849us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=79.3769% mem=7039701026/17179869184 disk=58833090230/536870912000 net=rx:513520B/s,tx:321511B/s tcp=rtt:25413us,var:1360us,retrans:0(total:0),cwnd:11
+[Collector] metric stored: cpu=22.3246% mem=285360855/17179869184 disk=88207854168/536870912000 net=rx:314502B/s,tx:825998B/s tcp=rtt:6237us,var:3684us,retrans:0(total:0),cwnd:30
+[Collector] metric stored: cpu=69.2876% mem=4770820709/17179869184 disk=84762268400/536870912000 net=rx:49813B/s,tx:796002B/s tcp=rtt:46622us,var:3463us,retrans:0(total:0),cwnd:67
+[Collector] metric stored: cpu=94.1998% mem=6092589722/17179869184 disk=72501684843/536870912000 net=rx:643247B/s,tx:960097B/s tcp=rtt:33267us,var:3083us,retrans:0(total:0),cwnd:11
+[Collector] metric stored: cpu=51.6257% mem=5429103974/17179869184 disk=45992267088/536870912000 net=rx:19905B/s,tx:786363B/s tcp=rtt:14296us,var:2742us,retrans:0(total:0),cwnd:40
+[Collector] metric stored: cpu=75.7079% mem=4891076371/17179869184 disk=79375986738/536870912000 net=rx:143328B/s,tx:893667B/s tcp=rtt:41066us,var:4749us,retrans:0(total:0),cwnd:22
+[Collector] metric stored: cpu=54.655% mem=6861371835/17179869184 disk=10927563026/536870912000 net=rx:544294B/s,tx:413783B/s tcp=rtt:7717us,var:4538us,retrans:0(total:0),cwnd:6
+[Collector] metric stored: cpu=78.1058% mem=7052680081/17179869184 disk=49066758133/536870912000 net=rx:477368B/s,tx:335290B/s tcp=rtt:12154us,var:1054us,retrans:0(total:0),cwnd:21
+[Collector] metric stored: cpu=96.2021% mem=5103684056/17179869184 disk=17045268118/536870912000 net=rx:987869B/s,tx:229272B/s tcp=rtt:28367us,var:3359us,retrans:0(total:0),cwnd:68
+[Collector] metric stored: cpu=60.545% mem=6255374587/17179869184 disk=55004527533/536870912000 net=rx:478587B/s,tx:392976B/s tcp=rtt:16860us,var:2364us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=63.784% mem=4172218391/17179869184 disk=62284230999/536870912000 net=rx:655903B/s,tx:518443B/s tcp=rtt:43768us,var:3278us,retrans:0(total:0),cwnd:93
+[Collector] metric stored: cpu=33.0193% mem=53555562/17179869184 disk=107036137170/536870912000 net=rx:734576B/s,tx:152003B/s tcp=rtt:47885us,var:3707us,retrans:0(total:0),cwnd:74
+[Collector] metric stored: cpu=20.8935% mem=7669453478/17179869184 disk=54788329001/536870912000 net=rx:442816B/s,tx:255457B/s tcp=rtt:39348us,var:1650us,retrans:0(total:0),cwnd:91
+[Collector] metric stored: cpu=86.7852% mem=5977927516/17179869184 disk=46457480884/536870912000 net=rx:29369B/s,tx:389640B/s tcp=rtt:37121us,var:1681us,retrans:0(total:0),cwnd:2
+[Collector] metric stored: cpu=23.5249% mem=7625279549/17179869184 disk=32852006915/536870912000 net=rx:872258B/s,tx:572736B/s tcp=rtt:7158us,var:2012us,retrans:0(total:0),cwnd:98
+[Collector] metric stored: cpu=89.661% mem=2210252347/17179869184 disk=59003158992/536870912000 net=rx:242593B/s,tx:283280B/s tcp=rtt:38737us,var:2866us,retrans:0(total:0),cwnd:41
+[Collector] metric stored: cpu=76.5362% mem=8076443158/17179869184 disk=28960731652/536870912000 net=rx:952023B/s,tx:128731B/s tcp=rtt:22884us,var:1069us,retrans:0(total:0),cwnd:89
+[Collector] metric stored: cpu=81.9208% mem=1560588397/17179869184 disk=14637833024/536870912000 net=rx:93220B/s,tx:345521B/s tcp=rtt:15147us,var:4913us,retrans:0(total:0),cwnd:71
+[Collector] metric stored: cpu=27.5347% mem=2982013988/17179869184 disk=61478956973/536870912000 net=rx:871559B/s,tx:191392B/s tcp=rtt:2784us,var:3183us,retrans:0(total:0),cwnd:63
+[Collector] metric stored: cpu=5.38339% mem=7424733797/17179869184 disk=73216007233/536870912000 net=rx:698866B/s,tx:860790B/s tcp=rtt:39987us,var:730us,retrans:0(total:0),cwnd:32
+[ResilientSender] connect failed: Connection refused
+[Collector] metric stored: cpu=30.5588% mem=8395736972/17179869184 disk=82584440191/536870912000 net=rx:464181B/s,tx:281252B/s tcp=rtt:11764us,var:911us,retrans:0(total:0),cwnd:59
+[Collector] metric stored: cpu=86.2661% mem=5722495332/17179869184 disk=65953576194/536870912000 net=rx:766452B/s,tx:475850B/s tcp=rtt:7338us,var:1627us,retrans:0(total:0),cwnd:24
+[Collector] metric stored: cpu=62.1938% mem=606863850/17179869184 disk=75087656892/536870912000 net=rx:908565B/s,tx:353504B/s tcp=rtt:37490us,var:1937us,retrans:0(total:0),cwnd:40
+[Collector] metric stored: cpu=64.1843% mem=7764253909/17179869184 disk=45009793573/536870912000 net=rx:856600B/s,tx:563569B/s tcp=rtt:1903us,var:904us,retrans:0(total:0),cwnd:50
+[Collector] metric stored: cpu=66.8255% mem=4225200453/17179869184 disk=3911937291/536870912000 net=rx:463074B/s,tx:65604B/s tcp=rtt:4031us,var:3464us,retrans:0(total:0),cwnd:89
+[Collector] metric stored: cpu=68.914% mem=815425581/17179869184 disk=99889638613/536870912000 net=rx:694391B/s,tx:359539B/s tcp=rtt:11084us,var:4669us,retrans:0(total:0),cwnd:75
+[Collector] metric stored: cpu=91.8518% mem=916010870/17179869184 disk=79408627674/536870912000 net=rx:971105B/s,tx:88478B/s tcp=rtt:45412us,var:684us,retrans:0(total:0),cwnd:86
+[Collector] metric stored: cpu=54.1635% mem=7280416824/17179869184 disk=7022028535/536870912000 net=rx:286231B/s,tx:824335B/s tcp=rtt:25362us,var:1099us,retrans:0(total:0),cwnd:18
+[Collector] metric stored: cpu=58.3696% mem=2438754317/17179869184 disk=45321845606/536870912000 net=rx:378794B/s,tx:1012575B/s tcp=rtt:47579us,var:1988us,retrans:0(total:0),cwnd:22
+[Collector] metric stored: cpu=35.3857% mem=7597630202/17179869184 disk=4484152651/536870912000 net=rx:979588B/s,tx:136663B/s tcp=rtt:10493us,var:4859us,retrans:0(total:0),cwnd:25
+[Collector] metric stored: cpu=52.1361% mem=445649427/17179869184 disk=47043690523/536870912000 net=rx:453945B/s,tx:460797B/s tcp=rtt:14706us,var:4152us,retrans:0(total:0),cwnd:68
+[Collector] metric stored: cpu=13.4662% mem=8377172777/17179869184 disk=33538461876/536870912000 net=rx:686394B/s,tx:925884B/s tcp=rtt:44291us,var:3202us,retrans:0(total:0),cwnd:87
+[Collector] metric stored: cpu=91.5181% mem=4786153781/17179869184 disk=59057179034/536870912000 net=rx:264827B/s,tx:253984B/s tcp=rtt:30214us,var:3938us,retrans:0(total:0),cwnd:59
+[Collector] metric stored: cpu=45.4894% mem=8348371347/17179869184 disk=60249781134/536870912000 net=rx:1035898B/s,tx:1001394B/s tcp=rtt:27191us,var:3035us,retrans:0(total:0),cwnd:88
+[Collector] metric stored: cpu=52.008% mem=6533703356/17179869184 disk=106354702621/536870912000 net=rx:249057B/s,tx:504571B/s tcp=rtt:42271us,var:887us,retrans:0(total:0),cwnd:49
+[Collector] metric stored: cpu=42.0899% mem=2393249886/17179869184 disk=83647380095/536870912000 net=rx:83947B/s,tx:138669B/s tcp=rtt:46739us,var:1034us,retrans:0(total:0),cwnd:79
+[Collector] metric stored: cpu=38.4274% mem=2477464238/17179869184 disk=89122531280/536870912000 net=rx:954653B/s,tx:167016B/s tcp=rtt:16076us,var:697us,retrans:0(total:0),cwnd:16
+[Collector] metric stored: cpu=61.4934% mem=5220363208/17179869184 disk=9527299731/536870912000 net=rx:860655B/s,tx:340219B/s tcp=rtt:17219us,var:3699us,retrans:0(total:0),cwnd:16
+[Collector] metric stored: cpu=57.1533% mem=1964991924/17179869184 disk=57763470016/536870912000 net=rx:914361B/s,tx:479914B/s tcp=rtt:36821us,var:1985us,retrans:0(total:0),cwnd:100
+[Collector] metric stored: cpu=79.2436% mem=4264635460/17179869184 disk=63469764632/536870912000 net=rx:126760B/s,tx:383460B/s tcp=rtt:20748us,var:4518us,retrans:0(total:0),cwnd:36
+[Collector] metric stored: cpu=95.6705% mem=7613859913/17179869184 disk=20613663483/536870912000 net=rx:962311B/s,tx:748316B/s tcp=rtt:45643us,var:1888us,retrans:0(total:0),cwnd:62
+[Collector] metric stored: cpu=85.957% mem=6387026242/17179869184 disk=71529712900/536870912000 net=rx:574248B/s,tx:864515B/s tcp=rtt:21152us,var:4838us,retrans:0(total:0),cwnd:22
+[Collector] metric stored: cpu=92.4009% mem=4030267913/17179869184 disk=44585620870/536870912000 net=rx:752235B/s,tx:134846B/s tcp=rtt:16084us,var:2738us,retrans:0(total:0),cwnd:19
+[Collector] metric stored: cpu=36.963% mem=209836009/17179869184 disk=24429119719/536870912000 net=rx:290003B/s,tx:643860B/s tcp=rtt:15261us,var:3535us,retrans:0(total:0),cwnd:51
+[Collector] metric stored: cpu=58.0321% mem=614527920/17179869184 disk=27110438844/536870912000 net=rx:715416B/s,tx:336941B/s tcp=rtt:41446us,var:2197us,retrans:0(total:0),cwnd:74
+[Collector] metric stored: cpu=78.2556% mem=1346010402/17179869184 disk=5728950611/536870912000 net=rx:91804B/s,tx:613028B/s tcp=rtt:36483us,var:3812us,retrans:0(total:0),cwnd:40
+[Collector] metric stored: cpu=50.6226% mem=396637344/17179869184 disk=100691322613/536870912000 net=rx:302206B/s,tx:312937B/s tcp=rtt:2642us,var:4417us,retrans:0(total:0),cwnd:60
+[Collector] metric stored: cpu=73.8146% mem=1831161208/17179869184 disk=17123060405/536870912000 net=rx:957333B/s,tx:167666B/s tcp=rtt:10042us,var:94us,retrans:0(total:0),cwnd:8
+[Collector] metric stored: cpu=91.2739% mem=2975181476/17179869184 disk=19309638192/536870912000 net=rx:750992B/s,tx:53603B/s tcp=rtt:24487us,var:1224us,retrans:0(total:0),cwnd:16
+[Collector] metric stored: cpu=64.1995% mem=8101446412/17179869184 disk=79641608375/536870912000 net=rx:669996B/s,tx:851652B/s tcp=rtt:45047us,var:4644us,retrans:0(total:0),cwnd:6
+[Collector] metric stored: cpu=52.5832% mem=496621128/17179869184 disk=100315607327/536870912000 net=rx:84902B/s,tx:35855B/s tcp=rtt:6402us,var:2075us,retrans:0(total:0),cwnd:67
+[Collector] metric stored: cpu=68.9946% mem=2093337165/17179869184 disk=79373469937/536870912000 net=rx:520223B/s,tx:382544B/s tcp=rtt:28259us,var:4863us,retrans:0(total:0),cwnd:99
+[Collector] metric stored: cpu=4.90996% mem=8542764477/17179869184 disk=18385446827/536870912000 net=rx:755528B/s,tx:12000B/s tcp=rtt:26322us,var:4706us,retrans:0(total:0),cwnd:4
+[Collector] metric stored: cpu=54.6993% mem=8177896784/17179869184 disk=19029240654/536870912000 net=rx:784944B/s,tx:534189B/s tcp=rtt:4535us,var:4195us,retrans:0(total:0),cwnd:82
+[Collector] metric stored: cpu=91.1547% mem=3656669226/17179869184 disk=75295993359/536870912000 net=rx:818066B/s,tx:786886B/s tcp=rtt:21239us,var:3163us,retrans:0(total:0),cwnd:39
+[Collector] metric stored: cpu=86.5755% mem=6109588643/17179869184 disk=98614850387/536870912000 net=rx:409948B/s,tx:558660B/s tcp=rtt:32581us,var:729us,retrans:0(total:0),cwnd:85
+[Collector] metric stored: cpu=41.0716% mem=7888852929/17179869184 disk=40684633884/536870912000 net=rx:365475B/s,tx:551713B/s tcp=rtt:23135us,var:4393us,retrans:0(total:0),cwnd:78
+[Collector] metric stored: cpu=97.1124% mem=4662167488/17179869184 disk=96854720776/536870912000 net=rx:962535B/s,tx:714400B/s tcp=rtt:39837us,var:151us,retrans:0(total:0),cwnd:39
+[Collector] metric stored: cpu=36.6717% mem=1686447886/17179869184 disk=87158403583/536870912000 net=rx:53716B/s,tx:681955B/s tcp=rtt:20254us,var:4413us,retrans:0(total:0),cwnd:40
+[Collector] metric stored: cpu=44.7971% mem=8008701409/17179869184 disk=107245968569/536870912000 net=rx:966941B/s,tx:63305B/s tcp=rtt:39117us,var:2360us,retrans:0(total:0),cwnd:15
+[Collector] metric stored: cpu=11.7384% mem=4712397355/17179869184 disk=33133948149/536870912000 net=rx:191509B/s,tx:747542B/s tcp=rtt:38896us,var:4590us,retrans:0(total:0),cwnd:42
+[Collector] metric stored: cpu=38.9871% mem=5297096203/17179869184 disk=36294290385/536870912000 net=rx:426761B/s,tx:358571B/s tcp=rtt:15352us,var:1968us,retrans:0(total:0),cwnd:91
+[Collector] metric stored: cpu=22.5773% mem=6612286679/17179869184 disk=73177226457/536870912000 net=rx:234332B/s,tx:489908B/s tcp=rtt:40321us,var:1578us,retrans:0(total:0),cwnd:52
+[Collector] metric stored: cpu=38.4144% mem=2579634010/17179869184 disk=57961844994/536870912000 net=rx:992516B/s,tx:379779B/s tcp=rtt:27176us,var:4092us,retrans:0(total:0),cwnd:80
+[Collector] metric stored: cpu=9.06976% mem=6583171424/17179869184 disk=38508165257/536870912000 net=rx:811266B/s,tx:683196B/s tcp=rtt:46542us,var:2158us,retrans:0(total:0),cwnd:89
+[Collector] metric stored: cpu=38.9923% mem=7038852364/17179869184 disk=81169381755/536870912000 net=rx:445160B/s,tx:676282B/s tcp=rtt:21938us,var:4522us,retrans:0(total:0),cwnd:89
+[Collector] metric stored: cpu=88.395% mem=5150323600/17179869184 disk=32708540517/536870912000 net=rx:258512B/s,tx:838956B/s tcp=rtt:1738us,var:4870us,retrans:0(total:0),cwnd:91
+[Collector] WebServer로 100건 전송 시도
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[Collector] metric stored: cpu=19.9799% mem=2171192743/17179869184 disk=44686003897/536870912000 net=rx:554100B/s,tx:457405B/s tcp=rtt:8475us,var:4441us,retrans:0(total:0),cwnd:51
+[Collector] metric stored: cpu=74.4119% mem=5690125632/17179869184 disk=60368467240/536870912000 net=rx:115004B/s,tx:335466B/s tcp=rtt:15998us,var:4186us,retrans:0(total:0),cwnd:3
+[Collector] metric stored: cpu=75.1476% mem=7941577518/17179869184 disk=11222116355/536870912000 net=rx:732744B/s,tx:176036B/s tcp=rtt:5993us,var:2177us,retrans:0(total:0),cwnd:70
+[ResilientSender] connect failed: Connection refused
+[Collector] metric stored: cpu=19.4297% mem=4579325911/17179869184 disk=32296583250/536870912000 net=rx:553977B/s,tx:695358B/s tcp=rtt:24488us,var:1727us,retrans:0(total:0),cwnd:14
+[Collector] metric stored: cpu=81.4002% mem=8465593971/17179869184 disk=89856662238/536870912000 net=rx:257331B/s,tx:487157B/s tcp=rtt:31992us,var:912us,retrans:0(total:0),cwnd:47
+[Collector] metric stored: cpu=99.4137% mem=4343122934/17179869184 disk=99912214871/536870912000 net=rx:814359B/s,tx:73429B/s tcp=rtt:29215us,var:162us,retrans:0(total:0),cwnd:77
+[Collector] metric stored: cpu=14.9686% mem=4846851896/17179869184 disk=19306924027/536870912000 net=rx:606712B/s,tx:524286B/s tcp=rtt:23906us,var:2241us,retrans:0(total:0),cwnd:14
+[Collector] metric stored: cpu=17.4186% mem=1974810332/17179869184 disk=94832901909/536870912000 net=rx:281734B/s,tx:396017B/s tcp=rtt:34391us,var:977us,retrans:0(total:0),cwnd:20
+[Collector] metric stored: cpu=68.5779% mem=5667920923/17179869184 disk=65724854382/536870912000 net=rx:566852B/s,tx:988801B/s tcp=rtt:46151us,var:2035us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=82.5595% mem=1495919641/17179869184 disk=41558994597/536870912000 net=rx:1042291B/s,tx:204530B/s tcp=rtt:10059us,var:1602us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=89.4986% mem=5334893133/17179869184 disk=72996609394/536870912000 net=rx:836904B/s,tx:816916B/s tcp=rtt:23388us,var:2896us,retrans:0(total:0),cwnd:56
+[Collector] metric stored: cpu=0.197693% mem=5908098017/17179869184 disk=93163504507/536870912000 net=rx:402106B/s,tx:224363B/s tcp=rtt:15879us,var:3947us,retrans:0(total:0),cwnd:52
+[Collector] metric stored: cpu=79.2672% mem=1342344778/17179869184 disk=37776111074/536870912000 net=rx:863849B/s,tx:396932B/s tcp=rtt:28082us,var:831us,retrans:0(total:0),cwnd:9
+[Collector] metric stored: cpu=46.2235% mem=1492673555/17179869184 disk=29813712944/536870912000 net=rx:134170B/s,tx:845067B/s tcp=rtt:24702us,var:983us,retrans:0(total:0),cwnd:60
+[Collector] metric stored: cpu=13.9972% mem=572061524/17179869184 disk=55510228803/536870912000 net=rx:947137B/s,tx:337599B/s tcp=rtt:28060us,var:3467us,retrans:0(total:0),cwnd:4
+[Collector] metric stored: cpu=16.9245% mem=6295632266/17179869184 disk=40537375458/536870912000 net=rx:156185B/s,tx:642092B/s tcp=rtt:4756us,var:4438us,retrans:0(total:0),cwnd:64
+[Collector] metric stored: cpu=20.6532% mem=3637191168/17179869184 disk=37801904173/536870912000 net=rx:431091B/s,tx:90570B/s tcp=rtt:44533us,var:3451us,retrans:0(total:0),cwnd:42
+[Collector] metric stored: cpu=89.6236% mem=3634957832/17179869184 disk=88853937372/536870912000 net=rx:769345B/s,tx:111248B/s tcp=rtt:22707us,var:65us,retrans:0(total:0),cwnd:31
+[Collector] metric stored: cpu=93.7819% mem=3161693668/17179869184 disk=66361302751/536870912000 net=rx:819843B/s,tx:76169B/s tcp=rtt:7878us,var:2837us,retrans:0(total:0),cwnd:95
+[Collector] metric stored: cpu=11.0167% mem=3560477004/17179869184 disk=65538183959/536870912000 net=rx:28821B/s,tx:960240B/s tcp=rtt:22121us,var:3567us,retrans:0(total:0),cwnd:64
+[Collector] metric stored: cpu=84.7683% mem=484982889/17179869184 disk=60625128148/536870912000 net=rx:646079B/s,tx:494722B/s tcp=rtt:30701us,var:2484us,retrans:0(total:0),cwnd:26
+[Collector] metric stored: cpu=45.1258% mem=200202272/17179869184 disk=50695607783/536870912000 net=rx:284109B/s,tx:978063B/s tcp=rtt:34488us,var:879us,retrans:0(total:0),cwnd:68
+[Collector] metric stored: cpu=95.0412% mem=4028017315/17179869184 disk=5772949608/536870912000 net=rx:80006B/s,tx:19984B/s tcp=rtt:16831us,var:4849us,retrans:0(total:0),cwnd:91
+[Collector] metric stored: cpu=32.8276% mem=630595027/17179869184 disk=7468814456/536870912000 net=rx:425683B/s,tx:967068B/s tcp=rtt:45807us,var:3856us,retrans:0(total:0),cwnd:72
+[Collector] metric stored: cpu=97.9114% mem=1935129580/17179869184 disk=72572682423/536870912000 net=rx:29240B/s,tx:731583B/s tcp=rtt:9230us,var:3229us,retrans:0(total:0),cwnd:44
+[Collector] metric stored: cpu=83.2999% mem=5345662534/17179869184 disk=86581694256/536870912000 net=rx:910847B/s,tx:810115B/s tcp=rtt:35000us,var:357us,retrans:0(total:0),cwnd:67
+[Collector] metric stored: cpu=60.1511% mem=8194036555/17179869184 disk=70260667696/536870912000 net=rx:587271B/s,tx:910087B/s tcp=rtt:18505us,var:4854us,retrans:0(total:0),cwnd:98
+[Collector] metric stored: cpu=90.4178% mem=5113669057/17179869184 disk=106283895681/536870912000 net=rx:598863B/s,tx:735918B/s tcp=rtt:7433us,var:1109us,retrans:0(total:0),cwnd:1
+[Collector] metric stored: cpu=40.6036% mem=6948389834/17179869184 disk=85740882918/536870912000 net=rx:970893B/s,tx:408937B/s tcp=rtt:43212us,var:1417us,retrans:0(total:0),cwnd:25
+[Collector] metric stored: cpu=83.8711% mem=6277063749/17179869184 disk=92598978504/536870912000 net=rx:132448B/s,tx:63735B/s tcp=rtt:7272us,var:1094us,retrans:0(total:0),cwnd:96
+[Collector] metric stored: cpu=7.44761% mem=3232925251/17179869184 disk=51932299494/536870912000 net=rx:124244B/s,tx:619281B/s tcp=rtt:37480us,var:2994us,retrans:0(total:0),cwnd:3
+[Collector] metric stored: cpu=68.0096% mem=6674356240/17179869184 disk=64107407471/536870912000 net=rx:1003079B/s,tx:507409B/s tcp=rtt:44127us,var:492us,retrans:0(total:0),cwnd:40
+[Collector] metric stored: cpu=5.18087% mem=6684738957/17179869184 disk=18714015809/536870912000 net=rx:189663B/s,tx:772965B/s tcp=rtt:17469us,var:1824us,retrans:0(total:0),cwnd:34
+[Collector] metric stored: cpu=27.1484% mem=5208995750/17179869184 disk=18243695638/536870912000 net=rx:981557B/s,tx:786410B/s tcp=rtt:10543us,var:3064us,retrans:0(total:0),cwnd:43
+[Collector] metric stored: cpu=97.9747% mem=4463854144/17179869184 disk=31614285297/536870912000 net=rx:526049B/s,tx:585556B/s tcp=rtt:48705us,var:2764us,retrans:0(total:0),cwnd:20
+[Collector] metric stored: cpu=53.7592% mem=7255706957/17179869184 disk=24292655028/536870912000 net=rx:834399B/s,tx:543698B/s tcp=rtt:39215us,var:3611us,retrans:0(total:0),cwnd:13
+[Collector] metric stored: cpu=94.8267% mem=4115834533/17179869184 disk=88231827991/536870912000 net=rx:386024B/s,tx:408747B/s tcp=rtt:42081us,var:4115us,retrans:0(total:0),cwnd:0
+[Collector] metric stored: cpu=18.5511% mem=1759303019/17179869184 disk=12944211993/536870912000 net=rx:780963B/s,tx:916615B/s tcp=rtt:39352us,var:4056us,retrans:0(total:0),cwnd:4
+[Collector] metric stored: cpu=93.6385% mem=6864240494/17179869184 disk=75813064323/536870912000 net=rx:906509B/s,tx:651342B/s tcp=rtt:3923us,var:3245us,retrans:0(total:0),cwnd:21
+[Collector] metric stored: cpu=50.1217% mem=1258922456/17179869184 disk=90898318884/536870912000 net=rx:848584B/s,tx:231195B/s tcp=rtt:3024us,var:3302us,retrans:0(total:0),cwnd:3
+[Collector] metric stored: cpu=79.9863% mem=4077989954/17179869184 disk=22395588097/536870912000 net=rx:602248B/s,tx:507061B/s tcp=rtt:5651us,var:4113us,retrans:0(total:0),cwnd:37
+[Collector] metric stored: cpu=94.5142% mem=1390826216/17179869184 disk=15780621430/536870912000 net=rx:385296B/s,tx:72593B/s tcp=rtt:18571us,var:2688us,retrans:0(total:0),cwnd:3
+[Collector] metric stored: cpu=63.0045% mem=3896831328/17179869184 disk=47790826774/536870912000 net=rx:676003B/s,tx:171832B/s tcp=rtt:41538us,var:4167us,retrans:0(total:0),cwnd:90
+[Collector] metric stored: cpu=72.8717% mem=4685600398/17179869184 disk=76332187234/536870912000 net=rx:443321B/s,tx:216857B/s tcp=rtt:39105us,var:1598us,retrans:0(total:0),cwnd:51
+[Collector] metric stored: cpu=3.4747% mem=2472083841/17179869184 disk=68696781514/536870912000 net=rx:243041B/s,tx:806384B/s tcp=rtt:430us,var:752us,retrans:0(total:0),cwnd:63
+[Collector] metric stored: cpu=99.3999% mem=7939603490/17179869184 disk=86771347402/536870912000 net=rx:518611B/s,tx:100113B/s tcp=rtt:26567us,var:3915us,retrans:0(total:0),cwnd:9
+[Collector] metric stored: cpu=68.7826% mem=7584256412/17179869184 disk=100956420312/536870912000 net=rx:327821B/s,tx:975236B/s tcp=rtt:42040us,var:2808us,retrans:0(total:0),cwnd:64
+[Collector] metric stored: cpu=99.674% mem=4844237606/17179869184 disk=6030887866/536870912000 net=rx:482883B/s,tx:910539B/s tcp=rtt:29015us,var:3071us,retrans:0(total:0),cwnd:11
+[Collector] metric stored: cpu=46.5718% mem=3578725717/17179869184 disk=28029884183/536870912000 net=rx:587488B/s,tx:1010642B/s tcp=rtt:17181us,var:3691us,retrans:0(total:0),cwnd:27
+[Collector] metric stored: cpu=93.1245% mem=8431205116/17179869184 disk=87519286994/536870912000 net=rx:709497B/s,tx:146202B/s tcp=rtt:14676us,var:4224us,retrans:0(total:0),cwnd:97
+[Collector] metric stored: cpu=70.1429% mem=3755419794/17179869184 disk=15327398386/536870912000 net=rx:693923B/s,tx:116601B/s tcp=rtt:48189us,var:1549us,retrans:0(total:0),cwnd:64
+[Collector] metric stored: cpu=22.6778% mem=5989307090/17179869184 disk=106641706114/536870912000 net=rx:767787B/s,tx:681098B/s tcp=rtt:8027us,var:1070us,retrans:0(total:0),cwnd:84
+[Collector] metric stored: cpu=83.0724% mem=4124553505/17179869184 disk=61742232246/536870912000 net=rx:281602B/s,tx:1040021B/s tcp=rtt:34037us,var:2479us,retrans:0(total:0),cwnd:52
+[ResilientSender] connect failed: Connection refused
+[Collector] metric stored: cpu=97.1827% mem=6973273433/17179869184 disk=17081910142/536870912000 net=rx:1033510B/s,tx:604424B/s tcp=rtt:12941us,var:3159us,retrans:0(total:0),cwnd:47
+[Collector] metric stored: cpu=74.9544% mem=4452131117/17179869184 disk=18852459023/536870912000 net=rx:585232B/s,tx:525685B/s tcp=rtt:9417us,var:2498us,retrans:0(total:0),cwnd:25
+[Collector] metric stored: cpu=35.3956% mem=1379806506/17179869184 disk=16075539196/536870912000 net=rx:723297B/s,tx:388013B/s tcp=rtt:2911us,var:1987us,retrans:0(total:0),cwnd:56
+[Collector] metric stored: cpu=30.7046% mem=974570016/17179869184 disk=105761549091/536870912000 net=rx:794105B/s,tx:746565B/s tcp=rtt:30263us,var:1930us,retrans:0(total:0),cwnd:99
+[Collector] metric stored: cpu=78.1188% mem=8318990401/17179869184 disk=62691532074/536870912000 net=rx:618868B/s,tx:94399B/s tcp=rtt:37310us,var:1355us,retrans:0(total:0),cwnd:32
+[Collector] metric stored: cpu=81.8687% mem=4129690532/17179869184 disk=29743513251/536870912000 net=rx:121505B/s,tx:203502B/s tcp=rtt:26333us,var:2790us,retrans:0(total:0),cwnd:61
+[Collector] metric stored: cpu=80.3498% mem=1616220873/17179869184 disk=3178577070/536870912000 net=rx:244637B/s,tx:387052B/s tcp=rtt:15849us,var:58us,retrans:0(total:0),cwnd:5
+[Collector] metric stored: cpu=38.7979% mem=1658850004/17179869184 disk=79600331132/536870912000 net=rx:104516B/s,tx:59299B/s tcp=rtt:33544us,var:265us,retrans:0(total:0),cwnd:95
+[Collector] metric stored: cpu=37.4222% mem=3129700317/17179869184 disk=90520294992/536870912000 net=rx:151838B/s,tx:474616B/s tcp=rtt:1776us,var:3257us,retrans:0(total:0),cwnd:76
+[Collector] metric stored: cpu=6.85098% mem=2840150846/17179869184 disk=1253020761/536870912000 net=rx:1035695B/s,tx:970222B/s tcp=rtt:32538us,var:1984us,retrans:0(total:0),cwnd:7
+[Collector] metric stored: cpu=56.8498% mem=6511403084/17179869184 disk=5606196887/536870912000 net=rx:616133B/s,tx:842040B/s tcp=rtt:8886us,var:3489us,retrans:0(total:0),cwnd:32
+[Collector] metric stored: cpu=15.9315% mem=3604667123/17179869184 disk=21919932555/536870912000 net=rx:95525B/s,tx:169145B/s tcp=rtt:46208us,var:2531us,retrans:0(total:0),cwnd:42
+[Collector] metric stored: cpu=60.9646% mem=2432571806/17179869184 disk=78388696150/536870912000 net=rx:338887B/s,tx:520826B/s tcp=rtt:22943us,var:4620us,retrans:0(total:0),cwnd:25
+[Collector] metric stored: cpu=90.1558% mem=3810408691/17179869184 disk=62324050391/536870912000 net=rx:116053B/s,tx:540970B/s tcp=rtt:47475us,var:2607us,retrans:0(total:0),cwnd:85
+[Collector] metric stored: cpu=21.8998% mem=6323376582/17179869184 disk=189439238/536870912000 net=rx:898224B/s,tx:1033878B/s tcp=rtt:7128us,var:3425us,retrans:0(total:0),cwnd:83
+[Collector] metric stored: cpu=11.3357% mem=5917606386/17179869184 disk=103966523836/536870912000 net=rx:59707B/s,tx:916729B/s tcp=rtt:47740us,var:4436us,retrans:0(total:0),cwnd:58
+[Collector] metric stored: cpu=96.3395% mem=4472907233/17179869184 disk=31674216732/536870912000 net=rx:474636B/s,tx:1040461B/s tcp=rtt:27302us,var:1642us,retrans:0(total:0),cwnd:44
+[Collector] metric stored: cpu=88.1598% mem=37755831/17179869184 disk=35788799297/536870912000 net=rx:971655B/s,tx:841612B/s tcp=rtt:3728us,var:3143us,retrans:0(total:0),cwnd:33
+[Collector] metric stored: cpu=43.7293% mem=550515846/17179869184 disk=68991109806/536870912000 net=rx:884456B/s,tx:992225B/s tcp=rtt:36637us,var:1093us,retrans:0(total:0),cwnd:80
+[Collector] metric stored: cpu=92.6453% mem=2567092863/17179869184 disk=16746641327/536870912000 net=rx:288450B/s,tx:466327B/s tcp=rtt:8724us,var:2033us,retrans:0(total:0),cwnd:48
+[Collector] metric stored: cpu=7.84388% mem=3842632424/17179869184 disk=24575602083/536870912000 net=rx:407650B/s,tx:167366B/s tcp=rtt:18376us,var:3722us,retrans:0(total:0),cwnd:24
+[Collector] metric stored: cpu=66.0244% mem=6803322612/17179869184 disk=99897621756/536870912000 net=rx:648267B/s,tx:331462B/s tcp=rtt:31358us,var:3007us,retrans:0(total:0),cwnd:28
+[Collector] metric stored: cpu=14.2171% mem=1896519635/17179869184 disk=82723732965/536870912000 net=rx:965997B/s,tx:217458B/s tcp=rtt:45378us,var:1079us,retrans:0(total:0),cwnd:92
+[Collector] metric stored: cpu=72.4633% mem=5678856876/17179869184 disk=104146241322/536870912000 net=rx:33398B/s,tx:677091B/s tcp=rtt:11679us,var:1987us,retrans:0(total:0),cwnd:74
+[Collector] metric stored: cpu=40.0497% mem=3150803074/17179869184 disk=13406535692/536870912000 net=rx:171560B/s,tx:795783B/s tcp=rtt:24964us,var:1354us,retrans:0(total:0),cwnd:21
+[Collector] metric stored: cpu=68.9619% mem=5299671341/17179869184 disk=35744884873/536870912000 net=rx:580918B/s,tx:301912B/s tcp=rtt:25214us,var:3455us,retrans:0(total:0),cwnd:1
+[Collector] metric stored: cpu=50.4033% mem=5609880016/17179869184 disk=45097868779/536870912000 net=rx:433109B/s,tx:420677B/s tcp=rtt:35020us,var:771us,retrans:0(total:0),cwnd:49
+[Collector] metric stored: cpu=21.6546% mem=2531990823/17179869184 disk=37121940234/536870912000 net=rx:1032188B/s,tx:112039B/s tcp=rtt:22276us,var:3854us,retrans:0(total:0),cwnd:81
+[Collector] metric stored: cpu=10.4143% mem=6621996389/17179869184 disk=50693079522/536870912000 net=rx:129190B/s,tx:79614B/s tcp=rtt:25640us,var:3914us,retrans:0(total:0),cwnd:16
+[Collector] metric stored: cpu=91.5154% mem=4148696571/17179869184 disk=65845584810/536870912000 net=rx:907974B/s,tx:554967B/s tcp=rtt:35520us,var:3778us,retrans:0(total:0),cwnd:17
+[Collector] metric stored: cpu=83.9291% mem=4730239184/17179869184 disk=36028469099/536870912000 net=rx:453103B/s,tx:432534B/s tcp=rtt:13342us,var:1004us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=77.3699% mem=4670984885/17179869184 disk=33043681031/536870912000 net=rx:959455B/s,tx:430974B/s tcp=rtt:44420us,var:11us,retrans:0(total:0),cwnd:88
+[Collector] metric stored: cpu=74.6834% mem=2292173802/17179869184 disk=70727748170/536870912000 net=rx:982772B/s,tx:663360B/s tcp=rtt:24095us,var:1719us,retrans:0(total:0),cwnd:63
+[Collector] metric stored: cpu=17.9483% mem=8180897707/17179869184 disk=93137534092/536870912000 net=rx:931241B/s,tx:44357B/s tcp=rtt:44707us,var:1912us,retrans:0(total:0),cwnd:15
+[Collector] metric stored: cpu=32.8434% mem=52845878/17179869184 disk=82040753075/536870912000 net=rx:494159B/s,tx:419941B/s tcp=rtt:15703us,var:3590us,retrans:0(total:0),cwnd:88
+[Collector] metric stored: cpu=57.3425% mem=6550364540/17179869184 disk=65929152546/536870912000 net=rx:877771B/s,tx:172218B/s tcp=rtt:36189us,var:2019us,retrans:0(total:0),cwnd:80
+[Collector] metric stored: cpu=9.14237% mem=7719142664/17179869184 disk=20035212623/536870912000 net=rx:612796B/s,tx:636895B/s tcp=rtt:4737us,var:1850us,retrans:0(total:0),cwnd:22
+[Collector] metric stored: cpu=79.0368% mem=3350548972/17179869184 disk=65080247967/536870912000 net=rx:307341B/s,tx:668545B/s tcp=rtt:48548us,var:1432us,retrans:0(total:0),cwnd:97
+[Collector] metric stored: cpu=64.722% mem=3407286651/17179869184 disk=66480801729/536870912000 net=rx:704791B/s,tx:922101B/s tcp=rtt:27096us,var:1703us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=99.0284% mem=4582597186/17179869184 disk=84934473532/536870912000 net=rx:259286B/s,tx:1007159B/s tcp=rtt:45218us,var:313us,retrans:0(total:0),cwnd:82
+[Collector] metric stored: cpu=27.7494% mem=912601992/17179869184 disk=16260713003/536870912000 net=rx:96363B/s,tx:263941B/s tcp=rtt:39116us,var:1393us,retrans:0(total:0),cwnd:37
+[Collector] metric stored: cpu=0.474612% mem=8547800220/17179869184 disk=32927966500/536870912000 net=rx:784064B/s,tx:815802B/s tcp=rtt:25332us,var:2002us,retrans:0(total:0),cwnd:91
+[Collector] metric stored: cpu=34.2639% mem=4060195713/17179869184 disk=49631771649/536870912000 net=rx:113427B/s,tx:125162B/s tcp=rtt:46342us,var:1142us,retrans:0(total:0),cwnd:21
+[Collector] metric stored: cpu=73.0301% mem=3193294487/17179869184 disk=49570131085/536870912000 net=rx:838094B/s,tx:233864B/s tcp=rtt:44614us,var:354us,retrans:0(total:0),cwnd:58
+[Collector] metric stored: cpu=96.509% mem=7857472715/17179869184 disk=25237922524/536870912000 net=rx:816681B/s,tx:870233B/s tcp=rtt:38884us,var:1879us,retrans:0(total:0),cwnd:68
+[Collector] metric stored: cpu=49.2562% mem=7696062628/17179869184 disk=80905754142/536870912000 net=rx:891270B/s,tx:604297B/s tcp=rtt:15400us,var:1921us,retrans:0(total:0),cwnd:33
+[Collector] metric stored: cpu=61.5674% mem=7425110140/17179869184 disk=40772298387/536870912000 net=rx:220009B/s,tx:94903B/s tcp=rtt:47759us,var:1918us,retrans:0(total:0),cwnd:65
+[Collector] metric stored: cpu=51.0929% mem=4578234680/17179869184 disk=19250549527/536870912000 net=rx:199407B/s,tx:352571B/s tcp=rtt:38436us,var:1828us,retrans:0(total:0),cwnd:55
+[Collector] metric stored: cpu=47.5102% mem=595951973/17179869184 disk=92784909404/536870912000 net=rx:670821B/s,tx:771948B/s tcp=rtt:25252us,var:2393us,retrans:0(total:0),cwnd:22
+[Collector] WebServer로 102건 전송 시도
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[Collector] metric stored: cpu=48.9961% mem=4982330697/17179869184 disk=64315624953/536870912000 net=rx:81386B/s,tx:380012B/s tcp=rtt:37770us,var:4860us,retrans:0(total:0),cwnd:53
+[Collector] metric stored: cpu=65.8728% mem=3825913984/17179869184 disk=8590174440/536870912000 net=rx:296439B/s,tx:771930B/s tcp=rtt:29646us,var:1549us,retrans:0(total:0),cwnd:50
+[ResilientSender] connect failed: Connection refused
+[Collector] metric stored: cpu=3.84809% mem=6138200218/17179869184 disk=6076697922/536870912000 net=rx:146389B/s,tx:514520B/s tcp=rtt:49797us,var:2950us,retrans:0(total:0),cwnd:51
+[Collector] metric stored: cpu=49.1371% mem=1384738462/17179869184 disk=52056546970/536870912000 net=rx:590806B/s,tx:517128B/s tcp=rtt:18984us,var:281us,retrans:0(total:0),cwnd:36
+[Collector] metric stored: cpu=30.7001% mem=4232116817/17179869184 disk=36879942853/536870912000 net=rx:923623B/s,tx:987009B/s tcp=rtt:18462us,var:4790us,retrans:0(total:0),cwnd:48
+[Collector] metric stored: cpu=70.6501% mem=905101392/17179869184 disk=68006523291/536870912000 net=rx:766875B/s,tx:812648B/s tcp=rtt:1520us,var:329us,retrans:0(total:0),cwnd:71
+[Collector] metric stored: cpu=39.506% mem=5267721870/17179869184 disk=78248350759/536870912000 net=rx:235935B/s,tx:495284B/s tcp=rtt:10958us,var:2642us,retrans:0(total:0),cwnd:41
+[Collector] metric stored: cpu=47.8597% mem=7325007149/17179869184 disk=40651212480/536870912000 net=rx:804525B/s,tx:1038202B/s tcp=rtt:3952us,var:2240us,retrans:0(total:0),cwnd:76
+[Collector] metric stored: cpu=47.361% mem=3331388180/17179869184 disk=67692084121/536870912000 net=rx:226741B/s,tx:962737B/s tcp=rtt:27397us,var:2118us,retrans:0(total:0),cwnd:33
+[Collector] metric stored: cpu=47.307% mem=444315947/17179869184 disk=33921841723/536870912000 net=rx:686449B/s,tx:930890B/s tcp=rtt:13776us,var:134us,retrans:0(total:0),cwnd:18
+[Collector] metric stored: cpu=63.6265% mem=8309171030/17179869184 disk=36386355702/536870912000 net=rx:825921B/s,tx:436070B/s tcp=rtt:17231us,var:3467us,retrans:0(total:0),cwnd:84
+[Collector] metric stored: cpu=32.6455% mem=3174011355/17179869184 disk=80586308473/536870912000 net=rx:112390B/s,tx:1021173B/s tcp=rtt:29632us,var:1861us,retrans:0(total:0),cwnd:93
+[Collector] metric stored: cpu=21.3761% mem=7818872556/17179869184 disk=42893286881/536870912000 net=rx:460298B/s,tx:142224B/s tcp=rtt:43512us,var:3833us,retrans:0(total:0),cwnd:60
+[Collector] metric stored: cpu=22.9797% mem=6774208270/17179869184 disk=61395539031/536870912000 net=rx:763029B/s,tx:17555B/s tcp=rtt:16397us,var:3429us,retrans:0(total:0),cwnd:46
+[Collector] metric stored: cpu=52.1578% mem=7554750152/17179869184 disk=106270059017/536870912000 net=rx:377330B/s,tx:353292B/s tcp=rtt:27403us,var:1153us,retrans:0(total:0),cwnd:71
+[Collector] metric stored: cpu=81.3014% mem=5706206477/17179869184 disk=73995676611/536870912000 net=rx:488001B/s,tx:1006873B/s tcp=rtt:18389us,var:3333us,retrans:0(total:0),cwnd:13
+[Collector] metric stored: cpu=51.5267% mem=5778774378/17179869184 disk=59280331203/536870912000 net=rx:668919B/s,tx:849632B/s tcp=rtt:15401us,var:2942us,retrans:0(total:0),cwnd:23
+[Collector] metric stored: cpu=8.19734% mem=3959548015/17179869184 disk=95408212564/536870912000 net=rx:938799B/s,tx:91622B/s tcp=rtt:13193us,var:398us,retrans:0(total:0),cwnd:50
+[Collector] metric stored: cpu=62.8887% mem=8485424889/17179869184 disk=99004779779/536870912000 net=rx:302832B/s,tx:248219B/s tcp=rtt:29082us,var:3994us,retrans:0(total:0),cwnd:30
+[Collector] metric stored: cpu=44.4136% mem=6397483397/17179869184 disk=33731796350/536870912000 net=rx:254432B/s,tx:83751B/s tcp=rtt:4414us,var:3341us,retrans:0(total:0),cwnd:60
+[Collector] metric stored: cpu=16.3313% mem=2738772104/17179869184 disk=27514117430/536870912000 net=rx:100381B/s,tx:990601B/s tcp=rtt:6744us,var:164us,retrans:0(total:0),cwnd:18
+[Collector] metric stored: cpu=93.8693% mem=2971567017/17179869184 disk=34633129823/536870912000 net=rx:173452B/s,tx:239772B/s tcp=rtt:23566us,var:1034us,retrans:0(total:0),cwnd:31
+[Collector] metric stored: cpu=99.6902% mem=4989127838/17179869184 disk=44784744198/536870912000 net=rx:8625B/s,tx:341644B/s tcp=rtt:26986us,var:2169us,retrans:0(total:0),cwnd:16
+[Collector] metric stored: cpu=78.0042% mem=5907316237/17179869184 disk=86324643178/536870912000 net=rx:1028147B/s,tx:183221B/s tcp=rtt:3426us,var:488us,retrans:0(total:0),cwnd:72
+[Collector] metric stored: cpu=86.5317% mem=3780324533/17179869184 disk=98824493428/536870912000 net=rx:56531B/s,tx:1032053B/s tcp=rtt:9964us,var:4441us,retrans:0(total:0),cwnd:24
+[Collector] metric stored: cpu=70.5942% mem=8121546597/17179869184 disk=87881216308/536870912000 net=rx:99907B/s,tx:640734B/s tcp=rtt:6993us,var:1029us,retrans:0(total:0),cwnd:61
+[Collector] metric stored: cpu=69.1902% mem=3288594852/17179869184 disk=96585085866/536870912000 net=rx:637185B/s,tx:479049B/s tcp=rtt:28022us,var:4473us,retrans:0(total:0),cwnd:56
+[Collector] metric stored: cpu=82.2012% mem=7420083227/17179869184 disk=71327616420/536870912000 net=rx:824133B/s,tx:197728B/s tcp=rtt:33411us,var:2029us,retrans:0(total:0),cwnd:47
+[Collector] metric stored: cpu=4.4254% mem=2184922799/17179869184 disk=1366727021/536870912000 net=rx:804351B/s,tx:121787B/s tcp=rtt:1637us,var:3643us,retrans:0(total:0),cwnd:22
+[Collector] metric stored: cpu=5.37266% mem=4844244567/17179869184 disk=49012783983/536870912000 net=rx:206720B/s,tx:564742B/s tcp=rtt:34240us,var:1473us,retrans:0(total:0),cwnd:33
+[Collector] metric stored: cpu=20.2522% mem=6437457982/17179869184 disk=45280811717/536870912000 net=rx:580019B/s,tx:950844B/s tcp=rtt:44444us,var:3216us,retrans:0(total:0),cwnd:63
+[Collector] metric stored: cpu=4.54699% mem=4771004839/17179869184 disk=100543453733/536870912000 net=rx:1047925B/s,tx:1002199B/s tcp=rtt:38144us,var:4114us,retrans:0(total:0),cwnd:64
+[Collector] metric stored: cpu=1.14487% mem=8532191347/17179869184 disk=66133096233/536870912000 net=rx:77730B/s,tx:505178B/s tcp=rtt:16748us,var:4548us,retrans:0(total:0),cwnd:86
+[Collector] metric stored: cpu=14.8787% mem=3625436160/17179869184 disk=78051257885/536870912000 net=rx:452358B/s,tx:857901B/s tcp=rtt:31542us,var:4999us,retrans:0(total:0),cwnd:27
+[Collector] metric stored: cpu=26.1987% mem=1869998830/17179869184 disk=80183702981/536870912000 net=rx:716953B/s,tx:237762B/s tcp=rtt:45500us,var:3425us,retrans:0(total:0),cwnd:68
+[Collector] metric stored: cpu=56.1407% mem=5579670541/17179869184 disk=7595997223/536870912000 net=rx:811915B/s,tx:775011B/s tcp=rtt:5932us,var:1666us,retrans:0(total:0),cwnd:50
+[Collector] metric stored: cpu=3.58846% mem=8432628530/17179869184 disk=43788041184/536870912000 net=rx:973755B/s,tx:9108B/s tcp=rtt:883us,var:2619us,retrans:0(total:0),cwnd:5
+[Collector] metric stored: cpu=58.4706% mem=7330637014/17179869184 disk=92466608810/536870912000 net=rx:283869B/s,tx:941636B/s tcp=rtt:18334us,var:3815us,retrans:0(total:0),cwnd:70
+[Collector] metric stored: cpu=38.5103% mem=5325404914/17179869184 disk=3718912281/536870912000 net=rx:843582B/s,tx:417282B/s tcp=rtt:33247us,var:1143us,retrans:0(total:0),cwnd:13
+[Collector] metric stored: cpu=47.1273% mem=3977879031/17179869184 disk=19814262632/536870912000 net=rx:80225B/s,tx:55202B/s tcp=rtt:5114us,var:527us,retrans:0(total:0),cwnd:46
+[Collector] metric stored: cpu=22.3688% mem=3424161224/17179869184 disk=50152347948/536870912000 net=rx:1022626B/s,tx:368358B/s tcp=rtt:30423us,var:3741us,retrans:0(total:0),cwnd:25
+[Collector] metric stored: cpu=71.5621% mem=2977726026/17179869184 disk=16153816828/536870912000 net=rx:476821B/s,tx:1011962B/s tcp=rtt:11918us,var:4325us,retrans:0(total:0),cwnd:2
+[Collector] metric stored: cpu=93.3721% mem=4360897143/17179869184 disk=57711036679/536870912000 net=rx:403671B/s,tx:582490B/s tcp=rtt:38974us,var:2736us,retrans:0(total:0),cwnd:11
+[Collector] metric stored: cpu=2.02415% mem=5798782280/17179869184 disk=83130215090/536870912000 net=rx:746773B/s,tx:634868B/s tcp=rtt:18414us,var:2559us,retrans:0(total:0),cwnd:78
+[Collector] metric stored: cpu=24.4764% mem=161789388/17179869184 disk=59953195871/536870912000 net=rx:404671B/s,tx:475963B/s tcp=rtt:44150us,var:219us,retrans:0(total:0),cwnd:23
+[Collector] metric stored: cpu=71.9722% mem=8325798229/17179869184 disk=77195923546/536870912000 net=rx:982549B/s,tx:80977B/s tcp=rtt:12361us,var:2359us,retrans:0(total:0),cwnd:54
+[Collector] metric stored: cpu=66.3853% mem=4649285763/17179869184 disk=88208120843/536870912000 net=rx:505337B/s,tx:393166B/s tcp=rtt:16911us,var:782us,retrans:0(total:0),cwnd:37
+[Collector] metric stored: cpu=36.277% mem=37701486/17179869184 disk=26479346142/536870912000 net=rx:544375B/s,tx:971597B/s tcp=rtt:20756us,var:3243us,retrans:0(total:0),cwnd:62
+[Collector] metric stored: cpu=82.807% mem=3914239304/17179869184 disk=93003841667/536870912000 net=rx:267851B/s,tx:194530B/s tcp=rtt:19432us,var:3676us,retrans:0(total:0),cwnd:67
+[Collector] metric stored: cpu=41.4135% mem=6209498698/17179869184 disk=91442208582/536870912000 net=rx:67946B/s,tx:279291B/s tcp=rtt:14139us,var:1985us,retrans:0(total:0),cwnd:61
+[Collector] metric stored: cpu=84.7981% mem=3002948092/17179869184 disk=60370988760/536870912000 net=rx:820009B/s,tx:704043B/s tcp=rtt:478us,var:3020us,retrans:0(total:0),cwnd:42
+[Collector] metric stored: cpu=93.4843% mem=6217337429/17179869184 disk=14760384328/536870912000 net=rx:845686B/s,tx:186254B/s tcp=rtt:48078us,var:664us,retrans:0(total:0),cwnd:69
+[ResilientSender] connect failed: Connection refused
+[Collector] metric stored: cpu=16.6162% mem=7392549317/17179869184 disk=95107638302/536870912000 net=rx:686087B/s,tx:261932B/s tcp=rtt:32422us,var:2298us,retrans:0(total:0),cwnd:23
+[Collector] metric stored: cpu=26.5941% mem=4910752466/17179869184 disk=58730209035/536870912000 net=rx:649044B/s,tx:96170B/s tcp=rtt:17348us,var:2288us,retrans:0(total:0),cwnd:77
+[Collector] metric stored: cpu=83.6321% mem=1899196397/17179869184 disk=85838087028/536870912000 net=rx:628148B/s,tx:352786B/s tcp=rtt:14449us,var:3234us,retrans:0(total:0),cwnd:40
+[Collector] metric stored: cpu=93.79% mem=4136679029/17179869184 disk=64832313184/536870912000 net=rx:791754B/s,tx:887004B/s tcp=rtt:27535us,var:2462us,retrans:0(total:0),cwnd:3
+[Collector] metric stored: cpu=51.6079% mem=3481994108/17179869184 disk=97944462651/536870912000 net=rx:658189B/s,tx:1013202B/s tcp=rtt:29027us,var:3887us,retrans:0(total:0),cwnd:13
+[Collector] metric stored: cpu=52.4968% mem=5748850049/17179869184 disk=40534654486/536870912000 net=rx:478968B/s,tx:826587B/s tcp=rtt:30790us,var:4029us,retrans:0(total:0),cwnd:44
+[Collector] metric stored: cpu=93.1% mem=7854537125/17179869184 disk=78307836280/536870912000 net=rx:164187B/s,tx:126535B/s tcp=rtt:969us,var:3968us,retrans:0(total:0),cwnd:67
+[Collector] metric stored: cpu=4.96573% mem=13907298/17179869184 disk=18752639440/536870912000 net=rx:728141B/s,tx:572422B/s tcp=rtt:35241us,var:664us,retrans:0(total:0),cwnd:58
+[Collector] metric stored: cpu=12.1013% mem=687274268/17179869184 disk=9566332615/536870912000 net=rx:696555B/s,tx:568447B/s tcp=rtt:27834us,var:2876us,retrans:0(total:0),cwnd:65
+[Collector] metric stored: cpu=8.03748% mem=8488985993/17179869184 disk=84236838698/536870912000 net=rx:287422B/s,tx:407556B/s tcp=rtt:1064us,var:918us,retrans:0(total:0),cwnd:37
+[Collector] metric stored: cpu=66.6981% mem=5795280195/17179869184 disk=47590027640/536870912000 net=rx:85010B/s,tx:196183B/s tcp=rtt:21769us,var:404us,retrans:0(total:0),cwnd:26
+[Collector] metric stored: cpu=36.4386% mem=7854573277/17179869184 disk=97133655773/536870912000 net=rx:854373B/s,tx:357737B/s tcp=rtt:8496us,var:1806us,retrans:0(total:0),cwnd:28
+[Collector] metric stored: cpu=50.6018% mem=7877039140/17179869184 disk=32421772520/536870912000 net=rx:925059B/s,tx:799307B/s tcp=rtt:2418us,var:4583us,retrans:0(total:0),cwnd:58
+[Collector] metric stored: cpu=11.4313% mem=8093586020/17179869184 disk=34213472832/536870912000 net=rx:153056B/s,tx:622462B/s tcp=rtt:44659us,var:2451us,retrans:0(total:0),cwnd:37
+[Collector] metric stored: cpu=86.7983% mem=6310263910/17179869184 disk=100485182370/536870912000 net=rx:374635B/s,tx:363240B/s tcp=rtt:14411us,var:311us,retrans:0(total:0),cwnd:73
+[Collector] metric stored: cpu=74.6949% mem=7257553046/17179869184 disk=47627081971/536870912000 net=rx:471413B/s,tx:1002608B/s tcp=rtt:4570us,var:530us,retrans:0(total:0),cwnd:9
+[Collector] metric stored: cpu=95.165% mem=5816399739/17179869184 disk=20952335715/536870912000 net=rx:897517B/s,tx:467825B/s tcp=rtt:34311us,var:2906us,retrans:0(total:0),cwnd:23
+[Collector] metric stored: cpu=61.314% mem=2347130050/17179869184 disk=60190604087/536870912000 net=rx:574032B/s,tx:799057B/s tcp=rtt:16154us,var:891us,retrans:0(total:0),cwnd:87
+[Collector] metric stored: cpu=57.7063% mem=5494676738/17179869184 disk=105844404445/536870912000 net=rx:87969B/s,tx:26121B/s tcp=rtt:46596us,var:4981us,retrans:0(total:0),cwnd:37
+[Collector] metric stored: cpu=2.90331% mem=4083786167/17179869184 disk=67426432358/536870912000 net=rx:769772B/s,tx:599789B/s tcp=rtt:45343us,var:4963us,retrans:0(total:0),cwnd:19
+[Collector] metric stored: cpu=97.7819% mem=7291514185/17179869184 disk=94380147839/536870912000 net=rx:768823B/s,tx:694890B/s tcp=rtt:45063us,var:1889us,retrans:0(total:0),cwnd:5
+[Collector] metric stored: cpu=78.5751% mem=4665392114/17179869184 disk=36617667084/536870912000 net=rx:341286B/s,tx:105359B/s tcp=rtt:36515us,var:4175us,retrans:0(total:0),cwnd:35
+[Collector] metric stored: cpu=25.2137% mem=8238687780/17179869184 disk=99457161111/536870912000 net=rx:204413B/s,tx:409467B/s tcp=rtt:45667us,var:300us,retrans:0(total:0),cwnd:43
+[Collector] metric stored: cpu=3.42131% mem=6567807281/17179869184 disk=68552551354/536870912000 net=rx:766069B/s,tx:88906B/s tcp=rtt:48917us,var:2411us,retrans:0(total:0),cwnd:54
+[Collector] metric stored: cpu=23.0146% mem=5784903787/17179869184 disk=78177971928/536870912000 net=rx:910825B/s,tx:244867B/s tcp=rtt:22849us,var:4663us,retrans:0(total:0),cwnd:79
+[Collector] metric stored: cpu=41.2047% mem=7058438347/17179869184 disk=119285316/536870912000 net=rx:12531B/s,tx:673988B/s tcp=rtt:13436us,var:2809us,retrans:0(total:0),cwnd:51
+[Collector] metric stored: cpu=24.05% mem=470815027/17179869184 disk=49216719523/536870912000 net=rx:552571B/s,tx:880584B/s tcp=rtt:27745us,var:724us,retrans:0(total:0),cwnd:31
+[Collector] metric stored: cpu=26.0463% mem=7780444256/17179869184 disk=26837739717/536870912000 net=rx:332269B/s,tx:444243B/s tcp=rtt:17328us,var:4593us,retrans:0(total:0),cwnd:97
+[Collector] metric stored: cpu=69.6039% mem=3707126033/17179869184 disk=98083526520/536870912000 net=rx:786795B/s,tx:592380B/s tcp=rtt:10575us,var:4729us,retrans:0(total:0),cwnd:92
+[Collector] metric stored: cpu=8.01001% mem=5756748621/17179869184 disk=106377118041/536870912000 net=rx:425679B/s,tx:350051B/s tcp=rtt:34128us,var:3957us,retrans:0(total:0),cwnd:12
+[Collector] metric stored: cpu=2.14513% mem=2819891906/17179869184 disk=91498071274/536870912000 net=rx:511656B/s,tx:585103B/s tcp=rtt:28649us,var:4916us,retrans:0(total:0),cwnd:36
+[Collector] metric stored: cpu=13.2406% mem=540584722/17179869184 disk=9029362608/536870912000 net=rx:890266B/s,tx:550472B/s tcp=rtt:17594us,var:3541us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=3.76927% mem=7194366407/17179869184 disk=28569541747/536870912000 net=rx:869224B/s,tx:181015B/s tcp=rtt:18523us,var:1008us,retrans:0(total:0),cwnd:78
+[Collector] metric stored: cpu=9.89322% mem=8228313570/17179869184 disk=67169557245/536870912000 net=rx:90849B/s,tx:705026B/s tcp=rtt:29134us,var:695us,retrans:0(total:0),cwnd:41
+[Collector] metric stored: cpu=65.185% mem=3539725995/17179869184 disk=18786910036/536870912000 net=rx:7227B/s,tx:145300B/s tcp=rtt:29262us,var:4162us,retrans:0(total:0),cwnd:28
+[Collector] metric stored: cpu=52.5668% mem=6875262839/17179869184 disk=77734541200/536870912000 net=rx:550968B/s,tx:963890B/s tcp=rtt:12225us,var:4907us,retrans:0(total:0),cwnd:77
+[Collector] metric stored: cpu=1.67801% mem=1556942416/17179869184 disk=103621833584/536870912000 net=rx:398549B/s,tx:989881B/s tcp=rtt:789us,var:817us,retrans:0(total:0),cwnd:80
+[Collector] metric stored: cpu=22.0512% mem=6696163162/17179869184 disk=70232065901/536870912000 net=rx:319808B/s,tx:650100B/s tcp=rtt:39378us,var:4578us,retrans:0(total:0),cwnd:91
+[Collector] metric stored: cpu=59.2115% mem=8494081898/17179869184 disk=94852233948/536870912000 net=rx:412263B/s,tx:32090B/s tcp=rtt:33982us,var:65us,retrans:0(total:0),cwnd:36
+[Collector] metric stored: cpu=70.0545% mem=1857241439/17179869184 disk=80163811645/536870912000 net=rx:262785B/s,tx:224694B/s tcp=rtt:10256us,var:1231us,retrans:0(total:0),cwnd:35
+[Collector] metric stored: cpu=86.7603% mem=2148523136/17179869184 disk=54501117770/536870912000 net=rx:798653B/s,tx:51393B/s tcp=rtt:5603us,var:2511us,retrans:0(total:0),cwnd:52
+[Collector] metric stored: cpu=37.7791% mem=7366948875/17179869184 disk=53534525868/536870912000 net=rx:588676B/s,tx:862296B/s tcp=rtt:42615us,var:4288us,retrans:0(total:0),cwnd:16
+[Collector] metric stored: cpu=84.1794% mem=2892725388/17179869184 disk=22608244636/536870912000 net=rx:962886B/s,tx:508052B/s tcp=rtt:14343us,var:4946us,retrans:0(total:0),cwnd:97
+[Collector] metric stored: cpu=26.1945% mem=5216614871/17179869184 disk=66480716797/536870912000 net=rx:752293B/s,tx:896228B/s tcp=rtt:20289us,var:3680us,retrans:0(total:0),cwnd:9
+[Collector] metric stored: cpu=34.4842% mem=7823469529/17179869184 disk=95810635074/536870912000 net=rx:559696B/s,tx:606535B/s tcp=rtt:44915us,var:2619us,retrans:0(total:0),cwnd:30
+[Collector] metric stored: cpu=50.6782% mem=4513772711/17179869184 disk=91240379355/536870912000 net=rx:262172B/s,tx:989194B/s tcp=rtt:39387us,var:4639us,retrans:0(total:0),cwnd:94
+[Collector] metric stored: cpu=72.5497% mem=3413061599/17179869184 disk=43487825025/536870912000 net=rx:568330B/s,tx:109904B/s tcp=rtt:7257us,var:1076us,retrans:0(total:0),cwnd:55
+[Collector] metric stored: cpu=44.8287% mem=3037349061/17179869184 disk=29359720645/536870912000 net=rx:153633B/s,tx:986794B/s tcp=rtt:48804us,var:3273us,retrans:0(total:0),cwnd:2
+[Collector] WebServer로 100건 전송 시도
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[Collector] metric stored: cpu=83.1147% mem=7110657848/17179869184 disk=88275254702/536870912000 net=rx:495029B/s,tx:270887B/s tcp=rtt:47474us,var:524us,retrans:0(total:0),cwnd:34
+[Collector] metric stored: cpu=80.4973% mem=2998768813/17179869184 disk=189291431/536870912000 net=rx:1024590B/s,tx:1012774B/s tcp=rtt:35477us,var:2207us,retrans:0(total:0),cwnd:86
+[ResilientSender] connect failed: Connection refused
+[Collector] metric stored: cpu=44.0567% mem=670037691/17179869184 disk=56548809471/536870912000 net=rx:572182B/s,tx:64779B/s tcp=rtt:42003us,var:2591us,retrans:0(total:0),cwnd:95
+[Collector] metric stored: cpu=87.1197% mem=5417414416/17179869184 disk=54160007857/536870912000 net=rx:255404B/s,tx:788714B/s tcp=rtt:42731us,var:3737us,retrans:0(total:0),cwnd:33
+[Collector] metric stored: cpu=97.1675% mem=1977539776/17179869184 disk=54793787082/536870912000 net=rx:250427B/s,tx:500567B/s tcp=rtt:45407us,var:4953us,retrans:0(total:0),cwnd:12
+[Collector] metric stored: cpu=30.6069% mem=6374174930/17179869184 disk=15386946386/536870912000 net=rx:155397B/s,tx:734474B/s tcp=rtt:48751us,var:867us,retrans:0(total:0),cwnd:34
+[Collector] metric stored: cpu=37.3488% mem=289005528/17179869184 disk=32223913946/536870912000 net=rx:557057B/s,tx:411690B/s tcp=rtt:49988us,var:2921us,retrans:0(total:0),cwnd:75
+[Collector] metric stored: cpu=15.5189% mem=3145977527/17179869184 disk=88902792994/536870912000 net=rx:167480B/s,tx:267470B/s tcp=rtt:15582us,var:662us,retrans:0(total:0),cwnd:72
+[Collector] metric stored: cpu=4.88224% mem=4036784023/17179869184 disk=47186929801/536870912000 net=rx:793868B/s,tx:693223B/s tcp=rtt:42804us,var:4084us,retrans:0(total:0),cwnd:79
+[Collector] metric stored: cpu=97.0745% mem=4003733559/17179869184 disk=77217827892/536870912000 net=rx:429717B/s,tx:669262B/s tcp=rtt:34501us,var:2532us,retrans:0(total:0),cwnd:46
+[Collector] metric stored: cpu=45.1578% mem=2701743146/17179869184 disk=86956932240/536870912000 net=rx:166261B/s,tx:457898B/s tcp=rtt:21707us,var:2864us,retrans:0(total:0),cwnd:26
+[Collector] metric stored: cpu=88.5449% mem=7859849089/17179869184 disk=101249839078/536870912000 net=rx:847109B/s,tx:146433B/s tcp=rtt:34680us,var:4335us,retrans:0(total:0),cwnd:99
+[Collector] metric stored: cpu=8.20102% mem=5478417707/17179869184 disk=58825119727/536870912000 net=rx:879802B/s,tx:590916B/s tcp=rtt:33025us,var:2585us,retrans:0(total:0),cwnd:76
+[Collector] metric stored: cpu=57.9987% mem=5863550159/17179869184 disk=42145105543/536870912000 net=rx:54862B/s,tx:947044B/s tcp=rtt:49597us,var:1282us,retrans:0(total:0),cwnd:61
+[Collector] metric stored: cpu=75.3304% mem=544869112/17179869184 disk=23398690242/536870912000 net=rx:277049B/s,tx:310884B/s tcp=rtt:1582us,var:4433us,retrans:0(total:0),cwnd:13
+[Collector] metric stored: cpu=52.2806% mem=7126332738/17179869184 disk=95315334841/536870912000 net=rx:229982B/s,tx:90236B/s tcp=rtt:36952us,var:4614us,retrans:0(total:0),cwnd:53
+[Collector] metric stored: cpu=97.1769% mem=7945647395/17179869184 disk=89677656721/536870912000 net=rx:681975B/s,tx:642971B/s tcp=rtt:38859us,var:328us,retrans:0(total:0),cwnd:46
+[Collector] metric stored: cpu=85.0603% mem=1768915629/17179869184 disk=81274178680/536870912000 net=rx:256827B/s,tx:698412B/s tcp=rtt:14540us,var:3823us,retrans:0(total:0),cwnd:5
+[Collector] metric stored: cpu=58.4475% mem=3012648640/17179869184 disk=30110176092/536870912000 net=rx:746460B/s,tx:749214B/s tcp=rtt:46172us,var:2752us,retrans:0(total:0),cwnd:25
+[Collector] metric stored: cpu=54.8163% mem=6035492825/17179869184 disk=75847017223/536870912000 net=rx:977276B/s,tx:218347B/s tcp=rtt:45759us,var:260us,retrans:0(total:0),cwnd:23
+[Collector] metric stored: cpu=8.87416% mem=3942014730/17179869184 disk=78797503397/536870912000 net=rx:899253B/s,tx:1000142B/s tcp=rtt:47124us,var:2396us,retrans:0(total:0),cwnd:24
+[Collector] metric stored: cpu=71.9575% mem=5995032853/17179869184 disk=56958150672/536870912000 net=rx:259878B/s,tx:329766B/s tcp=rtt:46187us,var:3406us,retrans:0(total:0),cwnd:18
+[Collector] metric stored: cpu=90.7934% mem=8374257381/17179869184 disk=79956380598/536870912000 net=rx:962339B/s,tx:309899B/s tcp=rtt:45627us,var:1904us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=2.86566% mem=4353012738/17179869184 disk=95234944393/536870912000 net=rx:995313B/s,tx:844958B/s tcp=rtt:17336us,var:945us,retrans:0(total:0),cwnd:56
+[Collector] metric stored: cpu=84.311% mem=200118884/17179869184 disk=89534413551/536870912000 net=rx:786633B/s,tx:750327B/s tcp=rtt:1903us,var:2727us,retrans:0(total:0),cwnd:88
+[Collector] metric stored: cpu=50.8423% mem=5811417415/17179869184 disk=52775939053/536870912000 net=rx:807306B/s,tx:784811B/s tcp=rtt:17780us,var:1455us,retrans:0(total:0),cwnd:33
+[Collector] metric stored: cpu=71.6721% mem=7069539061/17179869184 disk=99088075929/536870912000 net=rx:709134B/s,tx:551252B/s tcp=rtt:39038us,var:1340us,retrans:0(total:0),cwnd:8
+[Collector] metric stored: cpu=16.6753% mem=4388038145/17179869184 disk=28896731288/536870912000 net=rx:659130B/s,tx:1011349B/s tcp=rtt:41591us,var:3259us,retrans:0(total:0),cwnd:74
+[Collector] metric stored: cpu=18.7091% mem=332257326/17179869184 disk=50870837485/536870912000 net=rx:249148B/s,tx:652772B/s tcp=rtt:7181us,var:3138us,retrans:0(total:0),cwnd:34
+[Collector] metric stored: cpu=0.768192% mem=6630246246/17179869184 disk=38954716925/536870912000 net=rx:908870B/s,tx:349586B/s tcp=rtt:26420us,var:3260us,retrans:0(total:0),cwnd:33
+[Collector] metric stored: cpu=58.611% mem=3825559381/17179869184 disk=14023747346/536870912000 net=rx:145238B/s,tx:355885B/s tcp=rtt:21958us,var:1232us,retrans:0(total:0),cwnd:92
+[Collector] metric stored: cpu=12.6525% mem=3762004656/17179869184 disk=3552341088/536870912000 net=rx:13111B/s,tx:120939B/s tcp=rtt:36031us,var:1863us,retrans:0(total:0),cwnd:28
+[Collector] metric stored: cpu=48.3177% mem=8175143067/17179869184 disk=98907699570/536870912000 net=rx:354344B/s,tx:693012B/s tcp=rtt:28044us,var:1700us,retrans:0(total:0),cwnd:11
+[Collector] metric stored: cpu=67.0861% mem=7161421670/17179869184 disk=49895352337/536870912000 net=rx:930966B/s,tx:527612B/s tcp=rtt:11895us,var:3990us,retrans:0(total:0),cwnd:69
+[Collector] metric stored: cpu=72.93% mem=2727516829/17179869184 disk=84706055807/536870912000 net=rx:144280B/s,tx:389958B/s tcp=rtt:32101us,var:2644us,retrans:0(total:0),cwnd:53
+[Collector] metric stored: cpu=7.78544% mem=3547907705/17179869184 disk=22575591954/536870912000 net=rx:236630B/s,tx:638356B/s tcp=rtt:15454us,var:4691us,retrans:0(total:0),cwnd:30
+[Collector] metric stored: cpu=0.796591% mem=6454037102/17179869184 disk=1522852212/536870912000 net=rx:933064B/s,tx:627948B/s tcp=rtt:31437us,var:1783us,retrans:0(total:0),cwnd:14
+[Collector] metric stored: cpu=87.9976% mem=8490673186/17179869184 disk=51533857460/536870912000 net=rx:965358B/s,tx:194127B/s tcp=rtt:13711us,var:1243us,retrans:0(total:0),cwnd:3
+[Collector] metric stored: cpu=63.6899% mem=919479574/17179869184 disk=3612878646/536870912000 net=rx:485631B/s,tx:535944B/s tcp=rtt:33298us,var:2270us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=6.55296% mem=1730271870/17179869184 disk=19755011413/536870912000 net=rx:225667B/s,tx:736881B/s tcp=rtt:22879us,var:2768us,retrans:0(total:0),cwnd:70
+[Collector] metric stored: cpu=35.4751% mem=4249493495/17179869184 disk=71083216869/536870912000 net=rx:1045920B/s,tx:928222B/s tcp=rtt:40909us,var:2576us,retrans:0(total:0),cwnd:76
+[Collector] metric stored: cpu=99.3052% mem=47997763/17179869184 disk=101087056002/536870912000 net=rx:195006B/s,tx:399271B/s tcp=rtt:33975us,var:1415us,retrans:0(total:0),cwnd:2
+[Collector] metric stored: cpu=8.03834% mem=3239706362/17179869184 disk=20621167810/536870912000 net=rx:496492B/s,tx:150684B/s tcp=rtt:12269us,var:3941us,retrans:0(total:0),cwnd:66
+[Collector] metric stored: cpu=65.0255% mem=2408091111/17179869184 disk=82087669337/536870912000 net=rx:136245B/s,tx:107347B/s tcp=rtt:27573us,var:1875us,retrans:0(total:0),cwnd:65
+[Collector] metric stored: cpu=44.3195% mem=837566599/17179869184 disk=88061960109/536870912000 net=rx:104026B/s,tx:419991B/s tcp=rtt:8220us,var:4242us,retrans:0(total:0),cwnd:80
+[Collector] metric stored: cpu=47.9604% mem=1132863865/17179869184 disk=15230554668/536870912000 net=rx:583139B/s,tx:283925B/s tcp=rtt:48844us,var:2502us,retrans:0(total:0),cwnd:52
+[Collector] metric stored: cpu=54.7904% mem=7137215263/17179869184 disk=91187154012/536870912000 net=rx:859888B/s,tx:579011B/s tcp=rtt:9181us,var:409us,retrans:0(total:0),cwnd:97
+[Collector] metric stored: cpu=20.442% mem=5834110252/17179869184 disk=66530744007/536870912000 net=rx:651078B/s,tx:154998B/s tcp=rtt:16189us,var:4032us,retrans:0(total:0),cwnd:91
+[Collector] metric stored: cpu=57.2062% mem=5641184581/17179869184 disk=106267130515/536870912000 net=rx:162966B/s,tx:527067B/s tcp=rtt:36893us,var:3952us,retrans:0(total:0),cwnd:11
+[Collector] metric stored: cpu=79.9047% mem=5129729596/17179869184 disk=38445124780/536870912000 net=rx:211118B/s,tx:1000771B/s tcp=rtt:15172us,var:4448us,retrans:0(total:0),cwnd:34
+[Collector] metric stored: cpu=35.1046% mem=5813637691/17179869184 disk=14418511130/536870912000 net=rx:720664B/s,tx:812982B/s tcp=rtt:40749us,var:759us,retrans:0(total:0),cwnd:28
+[ResilientSender] connect failed: Connection refused
+[Collector] metric stored: cpu=68.4058% mem=148280351/17179869184 disk=69395124112/536870912000 net=rx:10360B/s,tx:141395B/s tcp=rtt:43651us,var:2210us,retrans:0(total:0),cwnd:96
+[Collector] metric stored: cpu=12.334% mem=5685394598/17179869184 disk=99986335704/536870912000 net=rx:358968B/s,tx:946584B/s tcp=rtt:30547us,var:976us,retrans:0(total:0),cwnd:20
+[Collector] metric stored: cpu=85.7159% mem=7799968627/17179869184 disk=73376889434/536870912000 net=rx:610321B/s,tx:811918B/s tcp=rtt:49462us,var:2672us,retrans:0(total:0),cwnd:88
+[Collector] metric stored: cpu=54.72% mem=2033797075/17179869184 disk=76156371985/536870912000 net=rx:874403B/s,tx:310137B/s tcp=rtt:46733us,var:3366us,retrans:0(total:0),cwnd:41
+[Collector] metric stored: cpu=93.9885% mem=3111108595/17179869184 disk=89907107528/536870912000 net=rx:38908B/s,tx:875222B/s tcp=rtt:9880us,var:630us,retrans:0(total:0),cwnd:49
+[Collector] metric stored: cpu=10.4512% mem=432866676/17179869184 disk=8771559485/536870912000 net=rx:164303B/s,tx:1931B/s tcp=rtt:28253us,var:4118us,retrans:0(total:0),cwnd:73
+[Collector] metric stored: cpu=21.2502% mem=225088348/17179869184 disk=65771879542/536870912000 net=rx:912419B/s,tx:66142B/s tcp=rtt:32309us,var:4122us,retrans:0(total:0),cwnd:79
+[Collector] metric stored: cpu=68.0803% mem=5951896818/17179869184 disk=14673284939/536870912000 net=rx:667318B/s,tx:208717B/s tcp=rtt:26463us,var:2203us,retrans:0(total:0),cwnd:86
+[Collector] metric stored: cpu=23.5697% mem=4914214489/17179869184 disk=66817935028/536870912000 net=rx:1043362B/s,tx:528896B/s tcp=rtt:4710us,var:644us,retrans:0(total:0),cwnd:35
+[Collector] metric stored: cpu=96.4853% mem=3582593513/17179869184 disk=70702032030/536870912000 net=rx:262013B/s,tx:752263B/s tcp=rtt:45280us,var:4262us,retrans:0(total:0),cwnd:62
+[Collector] metric stored: cpu=92.4209% mem=4881580699/17179869184 disk=23762384960/536870912000 net=rx:557786B/s,tx:261692B/s tcp=rtt:28174us,var:1334us,retrans:0(total:0),cwnd:37
+[Collector] metric stored: cpu=48.0039% mem=1020020990/17179869184 disk=85750698251/536870912000 net=rx:73507B/s,tx:671186B/s tcp=rtt:13762us,var:341us,retrans:0(total:0),cwnd:43
+[Collector] metric stored: cpu=57.5322% mem=8395722416/17179869184 disk=27035197667/536870912000 net=rx:959530B/s,tx:1038515B/s tcp=rtt:31821us,var:961us,retrans:0(total:0),cwnd:36
+[Collector] metric stored: cpu=46.4806% mem=7402384155/17179869184 disk=48443167203/536870912000 net=rx:80970B/s,tx:39181B/s tcp=rtt:35306us,var:981us,retrans:0(total:0),cwnd:30
+[Collector] metric stored: cpu=25.6294% mem=6774528265/17179869184 disk=88627452543/536870912000 net=rx:339151B/s,tx:577499B/s tcp=rtt:12943us,var:3787us,retrans:0(total:0),cwnd:7
+[Collector] metric stored: cpu=54.673% mem=7766636517/17179869184 disk=37656008909/536870912000 net=rx:545087B/s,tx:229736B/s tcp=rtt:11925us,var:4022us,retrans:0(total:0),cwnd:15
+[Collector] metric stored: cpu=78.6158% mem=6464762351/17179869184 disk=49531086155/536870912000 net=rx:939036B/s,tx:971332B/s tcp=rtt:27633us,var:2574us,retrans:0(total:0),cwnd:82
+[Collector] metric stored: cpu=74.8659% mem=4150608732/17179869184 disk=77701270247/536870912000 net=rx:263427B/s,tx:234428B/s tcp=rtt:14699us,var:153us,retrans:0(total:0),cwnd:60
+[Collector] metric stored: cpu=83.1643% mem=7586924096/17179869184 disk=10585889932/536870912000 net=rx:943621B/s,tx:675267B/s tcp=rtt:45733us,var:4320us,retrans:0(total:0),cwnd:66
+[Collector] metric stored: cpu=30.8632% mem=4302988014/17179869184 disk=19259961945/536870912000 net=rx:872928B/s,tx:988304B/s tcp=rtt:37840us,var:1848us,retrans:0(total:0),cwnd:42
+[Collector] metric stored: cpu=19.1076% mem=1581947560/17179869184 disk=3102697806/536870912000 net=rx:370246B/s,tx:844152B/s tcp=rtt:40388us,var:441us,retrans:0(total:0),cwnd:38
+[Collector] metric stored: cpu=63.4764% mem=2797804897/17179869184 disk=29152573186/536870912000 net=rx:908631B/s,tx:561646B/s tcp=rtt:678us,var:3926us,retrans:0(total:0),cwnd:41
+[Collector] metric stored: cpu=44.6927% mem=729832674/17179869184 disk=38031738949/536870912000 net=rx:780783B/s,tx:372473B/s tcp=rtt:5415us,var:72us,retrans:0(total:0),cwnd:20
+[Collector] metric stored: cpu=23.1192% mem=6692774970/17179869184 disk=51850821622/536870912000 net=rx:3184B/s,tx:656650B/s tcp=rtt:47389us,var:3816us,retrans:0(total:0),cwnd:6
+[Collector] metric stored: cpu=56.4875% mem=8263203283/17179869184 disk=58791762893/536870912000 net=rx:806217B/s,tx:1005370B/s tcp=rtt:23026us,var:772us,retrans:0(total:0),cwnd:38
+[Collector] metric stored: cpu=89.5011% mem=4614702881/17179869184 disk=21095559842/536870912000 net=rx:975530B/s,tx:584785B/s tcp=rtt:21157us,var:118us,retrans:0(total:0),cwnd:19
+[Collector] metric stored: cpu=63.1446% mem=5987284058/17179869184 disk=39274018650/536870912000 net=rx:550319B/s,tx:57502B/s tcp=rtt:26614us,var:3558us,retrans:0(total:0),cwnd:10
+[Collector] metric stored: cpu=24.7238% mem=3112804746/17179869184 disk=100044018723/536870912000 net=rx:552224B/s,tx:437465B/s tcp=rtt:14494us,var:4551us,retrans:0(total:0),cwnd:5
+[Collector] metric stored: cpu=59.6777% mem=3362854102/17179869184 disk=45837063064/536870912000 net=rx:591222B/s,tx:886349B/s tcp=rtt:19874us,var:3072us,retrans:0(total:0),cwnd:93
+[Collector] metric stored: cpu=31.7381% mem=1770474952/17179869184 disk=32916496388/536870912000 net=rx:1012553B/s,tx:614079B/s tcp=rtt:9067us,var:2163us,retrans:0(total:0),cwnd:63
+[Collector] metric stored: cpu=88.4762% mem=2913971528/17179869184 disk=100057291666/536870912000 net=rx:371718B/s,tx:523368B/s tcp=rtt:24817us,var:3900us,retrans:0(total:0),cwnd:67
+[Collector] metric stored: cpu=39.5853% mem=3403531165/17179869184 disk=59517050021/536870912000 net=rx:1022401B/s,tx:386159B/s tcp=rtt:49487us,var:3311us,retrans:0(total:0),cwnd:67
+[Collector] metric stored: cpu=21.9191% mem=7476441123/17179869184 disk=7869190684/536870912000 net=rx:616437B/s,tx:292843B/s tcp=rtt:24744us,var:4780us,retrans:0(total:0),cwnd:45
+[Collector] metric stored: cpu=21.9397% mem=2246311614/17179869184 disk=96612017095/536870912000 net=rx:773951B/s,tx:351560B/s tcp=rtt:6209us,var:2018us,retrans:0(total:0),cwnd:85
+[Collector] metric stored: cpu=0.922373% mem=1224226733/17179869184 disk=93124917006/536870912000 net=rx:1010803B/s,tx:988222B/s tcp=rtt:24386us,var:674us,retrans:0(total:0),cwnd:35
+[Collector] metric stored: cpu=69.0946% mem=2165072701/17179869184 disk=37358707473/536870912000 net=rx:494405B/s,tx:565222B/s tcp=rtt:29943us,var:4998us,retrans:0(total:0),cwnd:48
+[Collector] metric stored: cpu=77.3059% mem=4601794310/17179869184 disk=76697694462/536870912000 net=rx:98454B/s,tx:560684B/s tcp=rtt:43231us,var:1694us,retrans:0(total:0),cwnd:10
+[Collector] metric stored: cpu=62.8796% mem=6895702807/17179869184 disk=47437908294/536870912000 net=rx:693777B/s,tx:762974B/s tcp=rtt:7184us,var:3972us,retrans:0(total:0),cwnd:42
+[Collector] metric stored: cpu=40.2482% mem=6746428866/17179869184 disk=35078784812/536870912000 net=rx:641999B/s,tx:617774B/s tcp=rtt:3220us,var:2768us,retrans:0(total:0),cwnd:35
+[Collector] metric stored: cpu=62.9163% mem=2515415638/17179869184 disk=33207599118/536870912000 net=rx:360875B/s,tx:555832B/s tcp=rtt:40157us,var:804us,retrans:0(total:0),cwnd:94
+[Collector] metric stored: cpu=6.37471% mem=7001750742/17179869184 disk=47550118384/536870912000 net=rx:556568B/s,tx:910321B/s tcp=rtt:37481us,var:3579us,retrans:0(total:0),cwnd:90
+[Collector] metric stored: cpu=71.7835% mem=139426607/17179869184 disk=57971326348/536870912000 net=rx:687668B/s,tx:712117B/s tcp=rtt:33562us,var:3910us,retrans:0(total:0),cwnd:18
+[Collector] metric stored: cpu=13.5154% mem=8160566486/17179869184 disk=41537695604/536870912000 net=rx:130917B/s,tx:411701B/s tcp=rtt:43802us,var:3820us,retrans:0(total:0),cwnd:52
+[Collector] metric stored: cpu=79.7025% mem=8216638326/17179869184 disk=84484467143/536870912000 net=rx:863866B/s,tx:839718B/s tcp=rtt:13905us,var:4384us,retrans:0(total:0),cwnd:95
+[Collector] metric stored: cpu=32.6776% mem=4227867266/17179869184 disk=23061326233/536870912000 net=rx:521737B/s,tx:551641B/s tcp=rtt:44846us,var:2528us,retrans:0(total:0),cwnd:15
+[Collector] metric stored: cpu=36.5164% mem=8037362579/17179869184 disk=104832914095/536870912000 net=rx:646105B/s,tx:815265B/s tcp=rtt:17051us,var:2053us,retrans:0(total:0),cwnd:26
+[Collector] metric stored: cpu=73.353% mem=2932283384/17179869184 disk=50059370345/536870912000 net=rx:315536B/s,tx:345434B/s tcp=rtt:3500us,var:4964us,retrans:0(total:0),cwnd:97
+[Collector] metric stored: cpu=46.4902% mem=4338400620/17179869184 disk=96263931198/536870912000 net=rx:244922B/s,tx:606799B/s tcp=rtt:44103us,var:3138us,retrans:0(total:0),cwnd:89
+[Collector] metric stored: cpu=3.39737% mem=2552283274/17179869184 disk=36396957160/536870912000 net=rx:483035B/s,tx:607639B/s tcp=rtt:16265us,var:418us,retrans:0(total:0),cwnd:53
+[Collector] WebServer로 100건 전송 시도
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[ResilientSender] queue full, dropping oldest buffered item
+[ResilientSender] queued (size=100)
+[Collector] metric stored: cpu=69.5898% mem=8287478222/17179869184 disk=48729217483/536870912000 net=rx:224078B/s,tx:428131B/s tcp=rtt:11145us,var:459us,retrans:0(total:0),cwnd:8
+[Collector] metric stored: cpu=41.1852% mem=7353631062/17179869184 disk=1798748018/536870912000 net=rx:473754B/s,tx:55535B/s tcp=rtt:28673us,var:1339us,retrans:0(total:0),cwnd:88
+[ResilientSender] connect failed: Connection refused
+[Collector] metric stored: cpu=48.0682% mem=6792051757/17179869184 disk=38816461874/536870912000 net=rx:61911B/s,tx:397440B/s tcp=rtt:38113us,var:4224us,retrans:0(total:0),cwnd:88
+[Collector] metric stored: cpu=63.9099% mem=5185562409/17179869184 disk=15201438703/536870912000 net=rx:367376B/s,tx:294500B/s tcp=rtt:46us,var:2698us,retrans:0(total:0),cwnd:55
+[Collector] metric stored: cpu=95.9215% mem=2507398039/17179869184 disk=85716332252/536870912000 net=rx:855520B/s,tx:362971B/s tcp=rtt:26445us,var:2817us,retrans:0(total:0),cwnd:75
+[Collector] metric stored: cpu=99.3668% mem=4932702429/17179869184 disk=103838260291/536870912000 net=rx:407181B/s,tx:490706B/s tcp=rtt:24382us,var:4320us,retrans:0(total:0),cwnd:27
+[Collector] metric stored: cpu=70.136% mem=2772008655/17179869184 disk=353099010/536870912000 net=rx:142863B/s,tx:89259B/s tcp=rtt:36998us,var:492us,retrans:0(total:0),cwnd:6
+[Collector] metric stored: cpu=12.7195% mem=2230872254/17179869184 disk=20144365007/536870912000 net=rx:573625B/s,tx:667212B/s tcp=rtt:45880us,var:1335us,retrans:0(total:0),cwnd:97
+[Collector] metric stored: cpu=20.5821% mem=4579742137/17179869184 disk=1987327512/536870912000 net=rx:63035B/s,tx:148143B/s tcp=rtt:42076us,var:4477us,retrans:0(total:0),cwnd:94
+[Collector] metric stored: cpu=76.7898% mem=2786103496/17179869184 disk=74688027732/536870912000 net=rx:532917B/s,tx:244413B/s tcp=rtt:15330us,var:481us,retrans:0(total:0),cwnd:1
+[Collector] metric stored: cpu=51.0878% mem=4808670646/17179869184 disk=87811168728/536870912000 net=rx:46486B/s,tx:1037503B/s tcp=rtt:26162us,var:781us,retrans:0(total:0),cwnd:40

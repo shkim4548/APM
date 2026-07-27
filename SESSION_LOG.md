@@ -6062,3 +6062,620 @@ int main()
 **검증(WSL)**: `cmake --build build --target Collector` 성공 → `cmake --build build`(전체) 성공(`GW2_CrossPlatformCore`/`APM_Storage`/`APM_Common`/`Collector`/`APM_Common_Tests`/`Agent`/`LoadTester`) → `ctest --test-dir build` `9/9 tests passed`(기존 암호화 테스트, 회귀 없음 — Collector `main()` 자체를 검증하는 유닛테스트는 없음).
 
 실행 관점(Collector 실제 기동 + LoadTester 재실측)은 이번 세션 범위 밖으로 남겨둠 — 필요시 별도로 진행.
+
+---
+
+## 2026-07-27 — 1-7 재실측 중 크래시 발견 + `JobQueue` → 자체 `WorkerQueue` 전환 설계
+
+### 배경
+
+WAL 재검토 논의 끝에 사용자가 "1-5와 동일한 스트레스 매트릭스 재실행"을 선택. `run_load_test.sh`로 6단계(1/10/50/100/100+ramp5s/300 에이전트) 재실행 → **전 단계에서 Collector가 시작 약 10초 만에 크래시**(`connect_fail`이 agents=10부터 이미 발생, agents=1도 뒤늦게 크래시).
+
+### 원인 분석 — `GW2_CrossPlatformCore/Thread/Lock.cpp`의 `WriteUnlock()` 버그
+
+`collector_stdout.log`에서 `[CRASH] cause=LOCK_TIMEOUT ... func=WriteLock` 확인. `Lock.cpp` 재확인 결과:
+
+```cpp
+void Lock::WriteUnlock(const char* name)
+{
+	const uint32 threadId = GetThisThreadId();
+	const uint32 lockThreadId = (_lockFlag.load() & WRITE_THREAD_MASK) >> 16;
+
+	if ((threadId & 0xFFFF) == lockThreadId)
+	{
+		_lockFlag.fetch_add(1);   // 버그: _writeCount를 안 줄이고 무관한 하위 비트만 건드림 -
+		return;                   // WRITE_THREAD_MASK(소유자 스레드 ID)가 절대 안 지워짐.
+	}
+	// ...
+}
+```
+
+소유 스레드가 언락해도 `_lockFlag`의 소유자 ID 비트가 안 지워져, **그 락을 처음 잡은 스레드가 영구 소유한 것처럼 남음**. 다른 스레드가 나중에 같은 락을 잡으려 하면 `WriteLock()`의 CAS가 계속 실패 → 10초(`ACQUIRE_TIMEOUT_TICK`) 스핀 → `CRASH("LOCK_TIMEOUT")`.
+
+1-7 이전엔 `APM_Agent`가 `Lock`/`LockQueue`/`JobQueue`를 전혀 안 써서(이미 조사에서 확인) 이 버그가 한 번도 안 드러났음 — 1-7에서 **네트워크 스레드가 `_jobs.Push()`(락을 처음 잡았다 놓음 → 이 시점부터 락이 네트워크 스레드 소유로 영구 고정)한 뒤, 워커 스레드가 `Execute()`→`PopAll()`에서 같은 락을 잡으려다** 최초로 재현됨.
+
+### 사용자 결정 (2026-07-27)
+
+- `GW2_CrossPlatformCore/Thread/Lock.cpp`는 수정하지 않음 — "여러 프로젝트를 통해 이미 검증한 내용"이라는 사용자 판단.
+- **`APM_Agent` 쪽에서 우회** — `JobQueue` 대신 `std::mutex`/`condition_variable`만 쓰는 자체 큐(`WorkerQueue`)를 새로 만들어 대체하는 방향으로 확정.
+
+### 제안 — `Common/WorkerQueue.h`/`.cpp` (신규, 전체 파일)
+
+**변경 사유**: `JobQueue`가 의존하는 `Lock`은 크로스 스레드(네트워크→워커) 사용에서 크래시하므로 못 씀. 표준 라이브러리 프리미티브만으로 같은 역할(단일 워커 스레드가 순차 소비)을 하는 작은 큐로 대체 — `GW2_CrossPlatformCore/Thread/*`(`JobQueue`/`ThreadManager`/`Lock` 등) 의존을 완전히 제거하므로, 1-7에서 추가했던 9개 헤더 + `<fstream>`/`<execinfo.h>` 우회 코드도 전부 걷어낼 수 있음(부수적으로 코드 단순화).
+
+**`Common/WorkerQueue.h`**
+```cpp
+#pragma once
+#include "pch.h"
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+#include <functional>
+
+/*-------------
+	WorkerQueue
+---------------*/
+// 단일 워커 스레드가 순차적으로 소비하는 스레드 안전 작업 큐. std::mutex/condition_variable만
+// 사용 - GW2_CrossPlatformCore/Thread/JobQueue(+Lock)는 여러 프로젝트에서 이미 검증된 코드라
+// 그대로 두기로 하고(2026-07-27), 대신 이 용도 전용으로 APM_Agent 안에 작은 큐를 새로 둠.
+// 배경: JobQueue가 기대는 Lock::WriteUnlock()이 소유 스레드 비트를 절대 안 지우는 버그가 있어
+// 네트워크 스레드가 한 번 락을 잡았다 놓으면 워커 스레드가 영원히 못 잡고 10초 뒤 크래시함 -
+// 1-7 재실측 중 실제로 재현됨.
+class WorkerQueue
+{
+public:
+	WorkerQueue();
+	~WorkerQueue();
+
+	void Push(std::function<void()> job);
+
+private:
+	void WorkerLoop();
+
+private:
+	std::mutex _mutex;
+	std::condition_variable _cv;
+	std::queue<std::function<void()>> _jobs;
+	bool _stop = false;
+	std::thread _worker;   // 마지막에 선언 - 위 멤버들이 이미 다 만들어진 뒤에 워커 스레드를 기동
+};
+```
+
+**`Common/WorkerQueue.cpp`**
+```cpp
+#include "pch.h"
+#include "WorkerQueue.h"
+
+WorkerQueue::WorkerQueue()
+	: _worker([this]() { WorkerLoop(); })
+{
+}
+
+WorkerQueue::~WorkerQueue()
+{
+	{
+		std::lock_guard<std::mutex> guard(_mutex);
+		_stop = true;
+	}
+	_cv.notify_one();
+	_worker.join();
+}
+
+void WorkerQueue::Push(std::function<void()> job)
+{
+	{
+		std::lock_guard<std::mutex> guard(_mutex);
+		_jobs.push(std::move(job));
+	}
+	_cv.notify_one();
+}
+
+void WorkerQueue::WorkerLoop()
+{
+	while (true)
+	{
+		std::function<void()> job;
+		{
+			std::unique_lock<std::mutex> lock(_mutex);
+			_cv.wait(lock, [this]() { return _stop || !_jobs.empty(); });
+
+			// _stop이 요청됐어도 남은 job은 마저 비우고 종료 - 큐가 실제로 빈 경우에만 탈출.
+			if (_jobs.empty())
+				return;
+
+			job = std::move(_jobs.front());
+			_jobs.pop();
+		}
+
+		job();
+	}
+}
+```
+
+**`Common/CMakeLists.txt`** — `SpanRecorder.cpp` 옆에 한 줄 추가:
+
+수정 전:
+```cmake
+add_library(APM_Common STATIC
+    ApmSession.cpp
+    AriaCipher.cpp
+    AesGcmCipher.cpp
+    AesGcmPayload.cpp
+    HmacUtil.cpp
+    SecurePayload.cpp
+    KeyLoader.cpp
+    PrivilegeDrop.cpp
+    ResourceCollector.cpp
+    MetricScheduler.cpp
+    ResilientSender.cpp
+    PacketHandler.cpp
+    SpanRecorder.cpp
+    ScopedSpan.cpp
+    ../Protocol/Metric.pb.cc
+)
+```
+
+수정 후:
+```cmake
+add_library(APM_Common STATIC
+    ApmSession.cpp
+    AriaCipher.cpp
+    AesGcmCipher.cpp
+    AesGcmPayload.cpp
+    HmacUtil.cpp
+    SecurePayload.cpp
+    KeyLoader.cpp
+    PrivilegeDrop.cpp
+    ResourceCollector.cpp
+    MetricScheduler.cpp
+    ResilientSender.cpp
+    PacketHandler.cpp
+    SpanRecorder.cpp
+    ScopedSpan.cpp
+    WorkerQueue.cpp
+    ../Protocol/Metric.pb.cc
+)
+```
+
+### 제안 — `Collector/main.cpp` 수정 (수정 전 / 수정 후)
+
+**include 블록**
+
+수정 전(1-7 적용분):
+```cpp
+#include "Protocol/Metric.pb.h"
+#include "Storage/MetricStoreFactory.h"
+#include <thread>
+
+// SqliteMetricStore::Store()의 fdatasync가 네트워크 스레드를 블로킹하는 문제(1-5 실측 발견) 개선용
+// - 저장 작업을 전용 워커 스레드로 넘기기 위한 JobQueue 서브시스템. 이 서브시스템은 여태 APM_Agent
+// 어디서도 안 쓰였고, 자신의 pch(CorePch.h)에 기대는 방식이라 자기완결적이지 않음 - 그 pch가 쓰는
+// 순서 그대로 나열해야 컴파일됨(2026-07-27 확인). CoreMacro.h의 PrintStackTrace()/CrashLog()가
+// <fstream>/<execinfo.h>(Windows는 <dbghelp.h>)를 자기 스스로 include 안 해서 빌드 시도 중 추가 발견.
+#include <fstream>
+#ifdef _WIN32
+#include <dbghelp.h>
+#else
+#include <execinfo.h>
+#endif
+#include "CoreMacro.h"      // WRITE_LOCK/USE_LOCK 매크로, GetCurrentTick()
+#include "CoreGlobal.h"     // extern GThreadManager
+#include "CoreTLS.h"        // thread_local LEndTickCount
+#include "Lock.h"           // LockQueue가 쓰는 Lock 클래스
+#include "ObjectPool.h"     // 전역 MakeShared<T>()
+#include "LockQueue.h"      // JobQueue 내부 큐
+#include "JobTimer.h"       // JobQueue가 참조
+#include "JobQueue.h"       // JobQueue, JobQueueRef
+#include "ThreadManager.h"  // GThreadManager->Launch(), DoGlobalQueueWork()
+```
+
+수정 후:
+```cpp
+#include "Protocol/Metric.pb.h"
+#include "Storage/MetricStoreFactory.h"
+#include <thread>
+
+// SqliteMetricStore::Store()의 fdatasync가 네트워크 스레드를 블로킹하는 문제(1-5 실측 발견) 개선용.
+// GW2_CrossPlatformCore/Thread/JobQueue는 재실측 중 Lock::WriteUnlock() 버그로 크로스 스레드
+// 사용 시 크래시하는 게 확인돼(2026-07-27, 이 파일은 검증된 코드라 수정하지 않기로 결정)
+// APM_Agent 자체 WorkerQueue(std::mutex/condition_variable만 사용)로 대체.
+#include "WorkerQueue.h"
+```
+
+**`main()` 함수 전문**
+
+수정 전(1-7 적용분, 현재 디스크 상태):
+```cpp
+int main()
+{
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+    try
+    {
+        AesGcmCipher::Key agentCollectorKey = LoadKeyFromHexFile("certs/agent_collector_aes.key");
+        AesGcmCipher::Key webServerKey = LoadKeyFromHexFile("certs/webserver_aes.key");
+
+        CollectorConfig config = LoadCollectorConfig("collector_config.json");
+
+        auto store = CreateMetricStore(STORAGE_CONNECTION_INFO, config.metricsRetentionDays);
+
+        // 1-7: SqliteMetricStore::Store()의 fdatasync가 네트워크 스레드를 막지 못하게, 저장 호출을
+        // 전용 워커 스레드로 넘기는 큐. storePtr은 store(unique_ptr)가 main() 스코프 내내 살아있는
+        // 것에 기대는 non-owning 포인터 - 워커 스레드도 main()이 끝나기 전까지만 존재하므로 안전.
+        IMetricStore* storePtr = store.get();
+        JobQueueRef metricStoreQueue = MakeShared<JobQueue>();
+
+        // 전용 워커 스레드 1개 - SQLite는 어차피 단일 writer라 여러 개 띄워도 JobQueue 자체가
+        // 직렬화함(늘릴 이유 없음). LEndTickCount를 루프마다 먼저 세팅해야 DoGlobalQueueWork()가
+        // 즉시 break하지 않음(GW2 틱 서버 관례) - ThreadManager.cpp:63 참고.
+        GThreadManager->Launch([]()
+            {
+                while (true)
+                {
+                    LEndTickCount = GetCurrentTick() + 100;
+                    ThreadManager::DistributeReservedJobs();
+                    ThreadManager::DoGlobalQueueWork();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
+            });
+
+        // Collector가 받은 뒤 아직 WebServer로 안 보낸 메트릭들 - 주기/CLI 트리거로 비워짐.
+        std::vector<apm::Metric> pendingMetrics;
+
+        asio::io_context ioContext;
+
+        // Agent 접속을 받는 서버 역할 컨텍스트(기존)
+        asio::ssl::context sslContext(asio::ssl::context::tls_server);
+        sslContext.use_certificate_chain_file("certs/server.crt");
+        sslContext.use_private_key_file("certs/server.key", asio::ssl::context::pem);
+
+        // WebServer에 접속하는 클라이언트 역할 컨텍스트(신규) - Agent용과 모드가 달라 별도 필요.
+        asio::ssl::context webServerSslContext(asio::ssl::context::tls_client);
+        // 테스트용 자체 서명 인증서라 CA 검증 생략(Agent->Collector와 동일한 이유, 프로덕션 금지).
+        webServerSslContext.set_verify_mode(asio::ssl::verify_none);
+
+        ResilientSender webServerSender(ioContext, webServerSslContext,
+            config.webServerHost, config.webServerPort,
+            [webServerKey]() { return std::make_unique<AesGcmPayload>(webServerKey); });
+
+        PacketHandler::Register<apm::Metric>(
+            [storePtr, metricStoreQueue, &pendingMetrics](const apm::Metric& pkt)
+            {
+                // Collector 안에서 "트랜잭션"이라 부를 만한 지점 중 가장 자연스러운 곳 -
+                // Agent가 보낸 메트릭 패킷 하나를 받아 저장하는 구간(2026-07-26 4순위 데모 계측).
+                APM_TRACE_SCOPE("Collector.HandleMetricPacket");
+
+                // store->Store(pkt) 직접 호출(동기, fdatasync 블로킹 포함) 대신 워커 스레드로 위임.
+                // pushOnly=true 필수 - 기본값(false)이면 호출 스레드가 다른 JobQueue::Execute() 안이
+                // 아닐 때 그 자리에서 동기 실행해버려 아무 효과가 없어짐(JobQueue.cpp:18).
+                // pkt은 값 복사로 캡처 - 비동기 실행 시점까지 살아있어야 함.
+                metricStoreQueue->Push(MakeShared<Job>([storePtr, pkt]() { storePtr->Store(pkt); }), /*pushOnly=*/true);
+
+                pendingMetrics.push_back(pkt);
+                // 저장이 이제 비동기라 이 시점엔 아직 안 끝났을 수 있음 - "stored"는 부정확한 표현이라 정정.
+                std::cout << "[Collector] metric received: cpu=" << pkt.cpu_usage_percent()
+                    << "% mem=" << pkt.mem_used_bytes() << "/" << pkt.mem_total_bytes()
+                    << " disk=" << pkt.disk_used_bytes() << "/" << pkt.disk_total_bytes()
+                    << " net=rx:" << pkt.net_rx_bytes_per_sec() << "B/s,tx:" << pkt.net_tx_bytes_per_sec() << "B/s"
+                    << " tcp=rtt:" << pkt.tcp_rtt_us() << "us,var:" << pkt.tcp_rtt_var_us() << "us"
+                    << ",retrans:" << pkt.tcp_retransmits() << "(total:" << pkt.tcp_total_retrans() << ")"
+                    << ",cwnd:" << pkt.tcp_snd_cwnd()
+                    << std::endl;
+            });
+
+        asio::ip::tcp::acceptor acceptor(ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), PORT));
+
+        // 포트바인딩 : 특권이 필요할 수 있는 유일한 단계, 완료 직후 권한 하향
+        PrivilegeDrop::DropTo("nobody");
+
+        std::function<void()> doAccept;
+        doAccept = [&]()
+        {
+            acceptor.async_accept(
+                [&](const asio::error_code &ec, asio::ip::tcp::socket socket)
+                {
+                    if (!ec)
+                    {
+                        std::cout << "[Collector] connection accepted" << std::endl;
+                        auto session = std::make_shared<ApmSession>(std::move(socket), sslContext, SessionMode::Server,
+                            std::make_unique<AesGcmPayload>(agentCollectorKey));
+                        session->Start(nullptr, nullptr, &PacketHandler::Dispatch);
+                    }
+                    else
+                    {
+                        std::cerr << "[Collector] accept error : " << ec.message() << std::endl;
+                    }
+                    doAccept();
+                });
+        };
+        doAccept();
+
+        // pendingMetrics/SpanRecorder에 쌓인 걸 전부 WebServer로 보내고 비움 - 주기 타이머와
+        // CLI 트리거 둘 다 이 함수 하나를 호출함(로직 중복 방지). span 전송을 여기 얹은 이유:
+        // 이미 "주기적으로 WebServer에 밀어넣는" 책임을 지고 있는 함수라 새 타이머를 또
+        // 만들 필요가 없음(2026-07-26 4순위 설계).
+        auto flushToWebServer = [&pendingMetrics, &webServerSender]()
+        {
+            if (!pendingMetrics.empty())
+            {
+                std::cout << "[Collector] WebServer로 " << pendingMetrics.size() << "건 전송 시도" << std::endl;
+                for (const auto& m : pendingMetrics)
+                    webServerSender.Enqueue(m);
+
+                pendingMetrics.clear();
+            }
+
+            auto spans = SpanRecorder::Instance().DrainAll();
+            if (!spans.empty())
+            {
+                std::cout << "[Collector] WebServer로 span " << spans.size() << "건 전송 시도" << std::endl;
+                for (const auto& s : spans)
+                {
+                    apm::TransactionSpan pkt;
+                    pkt.set_operation_name(s.operationName);
+                    pkt.set_duration_us(s.durationUs);
+                    pkt.set_success(s.success);
+                    webServerSender.Enqueue(pkt);
+                }
+            }
+        };
+
+        asio::steady_timer pushTimer(ioContext);
+        std::function<void()> schedulePush;
+        schedulePush = [&]()
+        {
+            pushTimer.expires_after(std::chrono::seconds(config.pushIntervalSeconds));
+            pushTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        flushToWebServer();
+                        schedulePush();
+                    }
+                });
+        };
+        schedulePush();
+
+        // 로컬 저장소(store) 보존 정책 - pushTimer와 같은 패턴, 24시간 간격으로
+        // 오래된 행 정리(TimescaleMetricStore는 내부적으로 no-op, SqliteMetricStore만 실제
+        // DELETE 수행 - IMetricStore::Prune 문서 참고, 2026-07-26 3순위 설계).
+        asio::steady_timer pruneTimer(ioContext);
+        std::function<void()> schedulePrune;
+        schedulePrune = [&]()
+        {
+            pruneTimer.expires_after(std::chrono::hours(24));
+            pruneTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        store->Prune(config.metricsRetentionDays);
+                        schedulePrune();
+                    }
+                });
+        };
+        schedulePrune();
+
+        // Collector 콘솔에 "send"를 입력하면 즉시 전송. stdin 읽기는 블로킹이라 별도 스레드에서
+        // 돌리고, 실제 전송(flushToWebServer)은 asio::post로 io_context 스레드에 넘김 -
+        // pendingMetrics/webServerSender를 항상 단일 스레드에서만 건드리게 되어 락이 불필요함.
+        std::thread cliThread(
+            [&ioContext, &flushToWebServer]()
+            {
+                String line;
+                while (std::getline(std::cin, line))
+                {
+                    if (line == "send")
+                        asio::post(ioContext, flushToWebServer);
+                }
+            });
+        cliThread.detach();
+
+        std::cout << "Collector listening on port " << PORT << " (TLS)" << std::endl;
+        std::cout << "[Collector] WebServer(" << config.webServerHost << ":" << config.webServerPort
+            << ")로 " << config.pushIntervalSeconds << "초마다 전송 (콘솔에 'send' 입력 시 즉시 전송)" << std::endl;
+        ioContext.run();
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "[Collector] fatal: " << e.what() << std::endl;
+        return 1;
+    }
+    return 0;
+}
+```
+
+수정 후(제안, 변경된 부분만 발췌하지 않고 함수 전문 — 바뀐 곳은 선언부와 `PacketHandler::Register` 캡처/`Push` 호출부 두 곳뿐):
+```cpp
+int main()
+{
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+    try
+    {
+        AesGcmCipher::Key agentCollectorKey = LoadKeyFromHexFile("certs/agent_collector_aes.key");
+        AesGcmCipher::Key webServerKey = LoadKeyFromHexFile("certs/webserver_aes.key");
+
+        CollectorConfig config = LoadCollectorConfig("collector_config.json");
+
+        auto store = CreateMetricStore(STORAGE_CONNECTION_INFO, config.metricsRetentionDays);
+
+        // 1-7: SqliteMetricStore::Store()의 fdatasync가 네트워크 스레드를 막지 못하게, 저장 호출을
+        // 전용 워커 스레드로 넘기는 큐. storePtr은 store(unique_ptr)가 main() 스코프 내내 살아있는
+        // 것에 기대는 non-owning 포인터 - 워커 스레드도 main()이 끝나기 전까지만 존재하므로 안전.
+        IMetricStore* storePtr = store.get();
+        WorkerQueue metricStoreQueue;
+
+        // Collector가 받은 뒤 아직 WebServer로 안 보낸 메트릭들 - 주기/CLI 트리거로 비워짐.
+        std::vector<apm::Metric> pendingMetrics;
+
+        asio::io_context ioContext;
+
+        // Agent 접속을 받는 서버 역할 컨텍스트(기존)
+        asio::ssl::context sslContext(asio::ssl::context::tls_server);
+        sslContext.use_certificate_chain_file("certs/server.crt");
+        sslContext.use_private_key_file("certs/server.key", asio::ssl::context::pem);
+
+        // WebServer에 접속하는 클라이언트 역할 컨텍스트(신규) - Agent용과 모드가 달라 별도 필요.
+        asio::ssl::context webServerSslContext(asio::ssl::context::tls_client);
+        // 테스트용 자체 서명 인증서라 CA 검증 생략(Agent->Collector와 동일한 이유, 프로덕션 금지).
+        webServerSslContext.set_verify_mode(asio::ssl::verify_none);
+
+        ResilientSender webServerSender(ioContext, webServerSslContext,
+            config.webServerHost, config.webServerPort,
+            [webServerKey]() { return std::make_unique<AesGcmPayload>(webServerKey); });
+
+        PacketHandler::Register<apm::Metric>(
+            [storePtr, &metricStoreQueue, &pendingMetrics](const apm::Metric& pkt)
+            {
+                // Collector 안에서 "트랜잭션"이라 부를 만한 지점 중 가장 자연스러운 곳 -
+                // Agent가 보낸 메트릭 패킷 하나를 받아 저장하는 구간(2026-07-26 4순위 데모 계측).
+                APM_TRACE_SCOPE("Collector.HandleMetricPacket");
+
+                // store->Store(pkt) 직접 호출(동기, fdatasync 블로킹 포함) 대신 워커 스레드로 위임.
+                // pkt은 값 복사로 캡처 - 비동기 실행 시점까지 살아있어야 함.
+                metricStoreQueue.Push([storePtr, pkt]() { storePtr->Store(pkt); });
+
+                pendingMetrics.push_back(pkt);
+                // 저장이 이제 비동기라 이 시점엔 아직 안 끝났을 수 있음 - "stored"는 부정확한 표현이라 정정.
+                std::cout << "[Collector] metric received: cpu=" << pkt.cpu_usage_percent()
+                    << "% mem=" << pkt.mem_used_bytes() << "/" << pkt.mem_total_bytes()
+                    << " disk=" << pkt.disk_used_bytes() << "/" << pkt.disk_total_bytes()
+                    << " net=rx:" << pkt.net_rx_bytes_per_sec() << "B/s,tx:" << pkt.net_tx_bytes_per_sec() << "B/s"
+                    << " tcp=rtt:" << pkt.tcp_rtt_us() << "us,var:" << pkt.tcp_rtt_var_us() << "us"
+                    << ",retrans:" << pkt.tcp_retransmits() << "(total:" << pkt.tcp_total_retrans() << ")"
+                    << ",cwnd:" << pkt.tcp_snd_cwnd()
+                    << std::endl;
+            });
+
+        asio::ip::tcp::acceptor acceptor(ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), PORT));
+
+        // 포트바인딩 : 특권이 필요할 수 있는 유일한 단계, 완료 직후 권한 하향
+        PrivilegeDrop::DropTo("nobody");
+
+        std::function<void()> doAccept;
+        doAccept = [&]()
+        {
+            acceptor.async_accept(
+                [&](const asio::error_code &ec, asio::ip::tcp::socket socket)
+                {
+                    if (!ec)
+                    {
+                        std::cout << "[Collector] connection accepted" << std::endl;
+                        auto session = std::make_shared<ApmSession>(std::move(socket), sslContext, SessionMode::Server,
+                            std::make_unique<AesGcmPayload>(agentCollectorKey));
+                        session->Start(nullptr, nullptr, &PacketHandler::Dispatch);
+                    }
+                    else
+                    {
+                        std::cerr << "[Collector] accept error : " << ec.message() << std::endl;
+                    }
+                    doAccept();
+                });
+        };
+        doAccept();
+
+        // pendingMetrics/SpanRecorder에 쌓인 걸 전부 WebServer로 보내고 비움 - 주기 타이머와
+        // CLI 트리거 둘 다 이 함수 하나를 호출함(로직 중복 방지). span 전송을 여기 얹은 이유:
+        // 이미 "주기적으로 WebServer에 밀어넣는" 책임을 지고 있는 함수라 새 타이머를 또
+        // 만들 필요가 없음(2026-07-26 4순위 설계).
+        auto flushToWebServer = [&pendingMetrics, &webServerSender]()
+        {
+            if (!pendingMetrics.empty())
+            {
+                std::cout << "[Collector] WebServer로 " << pendingMetrics.size() << "건 전송 시도" << std::endl;
+                for (const auto& m : pendingMetrics)
+                    webServerSender.Enqueue(m);
+
+                pendingMetrics.clear();
+            }
+
+            auto spans = SpanRecorder::Instance().DrainAll();
+            if (!spans.empty())
+            {
+                std::cout << "[Collector] WebServer로 span " << spans.size() << "건 전송 시도" << std::endl;
+                for (const auto& s : spans)
+                {
+                    apm::TransactionSpan pkt;
+                    pkt.set_operation_name(s.operationName);
+                    pkt.set_duration_us(s.durationUs);
+                    pkt.set_success(s.success);
+                    webServerSender.Enqueue(pkt);
+                }
+            }
+        };
+
+        asio::steady_timer pushTimer(ioContext);
+        std::function<void()> schedulePush;
+        schedulePush = [&]()
+        {
+            pushTimer.expires_after(std::chrono::seconds(config.pushIntervalSeconds));
+            pushTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        flushToWebServer();
+                        schedulePush();
+                    }
+                });
+        };
+        schedulePush();
+
+        // 로컬 저장소(store) 보존 정책 - pushTimer와 같은 패턴, 24시간 간격으로
+        // 오래된 행 정리(TimescaleMetricStore는 내부적으로 no-op, SqliteMetricStore만 실제
+        // DELETE 수행 - IMetricStore::Prune 문서 참고, 2026-07-26 3순위 설계).
+        asio::steady_timer pruneTimer(ioContext);
+        std::function<void()> schedulePrune;
+        schedulePrune = [&]()
+        {
+            pruneTimer.expires_after(std::chrono::hours(24));
+            pruneTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        store->Prune(config.metricsRetentionDays);
+                        schedulePrune();
+                    }
+                });
+        };
+        schedulePrune();
+
+        // Collector 콘솔에 "send"를 입력하면 즉시 전송. stdin 읽기는 블로킹이라 별도 스레드에서
+        // 돌리고, 실제 전송(flushToWebServer)은 asio::post로 io_context 스레드에 넘김 -
+        // pendingMetrics/webServerSender를 항상 단일 스레드에서만 건드리게 되어 락이 불필요함.
+        std::thread cliThread(
+            [&ioContext, &flushToWebServer]()
+            {
+                String line;
+                while (std::getline(std::cin, line))
+                {
+                    if (line == "send")
+                        asio::post(ioContext, flushToWebServer);
+                }
+            });
+        cliThread.detach();
+
+        std::cout << "Collector listening on port " << PORT << " (TLS)" << std::endl;
+        std::cout << "[Collector] WebServer(" << config.webServerHost << ":" << config.webServerPort
+            << ")로 " << config.pushIntervalSeconds << "초마다 전송 (콘솔에 'send' 입력 시 즉시 전송)" << std::endl;
+        ioContext.run();
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "[Collector] fatal: " << e.what() << std::endl;
+        return 1;
+    }
+    return 0;
+}
+```
+
+### 결정 사항
+
+- 아직 파일 생성/수정 전 — `CLAUDE.md` 규칙대로 제안 단계. 사용자가 "적용해줘" 하면 신규 2개(`Common/WorkerQueue.h`/`.cpp`) + 수정 2개(`Common/CMakeLists.txt`, `Collector/main.cpp`) 반영 예정.
+- 적용 후 검증 계획: `cmake --build build` 성공 확인 → `run_load_test.sh` 6단계 매트릭스 재실행(이번엔 크래시 없이 끝까지 도는지가 1차 확인 사항) → 결과를 1-5 베이스라인과 비교.

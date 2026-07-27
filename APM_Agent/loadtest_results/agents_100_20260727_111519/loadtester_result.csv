@@ -1,0 +1,9 @@
+metric,value
+sent_total,213
+connect_success,2
+connect_fail,980
+reconnect,0
+queue_drop,0
+latency_p50_ms,0
+latency_p95_ms,0
+latency_p99_ms,1

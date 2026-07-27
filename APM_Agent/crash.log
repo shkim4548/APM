@@ -1,0 +1,6 @@
+[CRASH] cause=LOCK_TIMEOUT file=/home/shkim/dev/APM/GW2_CrossPlatformCore/Thread/Lock.cpp line=52 func=WriteLock
+[CRASH] cause=LOCK_TIMEOUT file=/home/shkim/dev/APM/GW2_CrossPlatformCore/Thread/Lock.cpp line=52 func=WriteLock
+[CRASH] cause=LOCK_TIMEOUT file=/home/shkim/dev/APM/GW2_CrossPlatformCore/Thread/Lock.cpp line=52 func=WriteLock
+[CRASH] cause=LOCK_TIMEOUT file=/home/shkim/dev/APM/GW2_CrossPlatformCore/Thread/Lock.cpp line=52 func=WriteLock
+[CRASH] cause=LOCK_TIMEOUT file=/home/shkim/dev/APM/GW2_CrossPlatformCore/Thread/Lock.cpp line=52 func=WriteLock
+[CRASH] cause=LOCK_TIMEOUT file=/home/shkim/dev/APM/GW2_CrossPlatformCore/Thread/Lock.cpp line=52 func=WriteLock

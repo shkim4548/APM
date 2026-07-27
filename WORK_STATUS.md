@@ -22,7 +22,7 @@
 ## 로드맵 (우선순위 순, 2026-07-26 확정)
 
 ```
-1-7(신규) : Collector Store() 블로킹 개선(JobQueue)   ✅ 코드 적용 + 빌드/테스트 검증 완료
+1-7(신규) : Collector Store() 블로킹 개선                🔴 커밋된 JobQueue 버전이 실사용 중 크래시 확인 — WorkerQueue로 재설계, 적용 대기 (세션 중단)
 1순위 : 부하/스케일 테스트 툴                         ✅ 실측 + 문서화 완료
 2순위 : 알림(alerting, 임계치 기반)                    ✅ 코드 적용 + 빌드/테스트 검증 완료
 3순위 : 데이터 보존 정책(retention)                    ✅ 코드 적용 + 빌드 검증 완료
@@ -36,7 +36,9 @@
 
 ## 작업 목록
 
-### 1-7(신규) — Collector `SqliteMetricStore::Store()` 블로킹 개선 ✅ 코드 적용 + 빌드/테스트 검증 완료
+### 1-7(신규) — Collector `SqliteMetricStore::Store()` 블로킹 개선 🔴 커밋된 버전이 크래시함 — WorkerQueue로 재설계 중, **세션 중단(2026-07-27)**
+
+**⚠️ 다음 세션 시작 시 가장 먼저 확인할 것**: 현재 git에 커밋된 `Collector/main.cpp`(`39a3772` "Move Collector metric storage off the network thread via JobQueue")는 **실제 동시 접속 상황에서 시작 후 약 10초 만에 크래시하는 버그가 있는 버전**이다. 아래 "1-7-b" 절의 `WorkerQueue` 설계(이미 `SESSION_LOG.md`에 코드 전문 작성 완료, 아직 미적용)를 이어서 적용하는 게 최우선 작업.
 
 **배경**: 1-5 실측에서 발견한 핵심 병목 — `Store()`가 SQLite 기본 롤백 저널 모드로 매 INSERT마다 동기 `fdatasync`를 호출하는데, 이게 네트워크 I/O와 **같은 단일 `io_context` 스레드**에서 블로킹으로 실행돼 동시 접속 ~72개에서 하드 리밋을 만듦(상세: `Docs/PROJECT_TECHNICAL_REVIEW.md` §7-4). 사용자가 "이건 관찰만 하고 넘길 문제가 아니라 서버 개발자로서 반드시 고쳐야 하는 문제"라고 판단, 실제 개선 착수 결정.
 
@@ -69,9 +71,37 @@
 - `cmake --build build`(전체) → `GW2_CrossPlatformCore`/`APM_Storage`/`APM_Common`/`Collector`/`APM_Common_Tests`/`Agent`/`LoadTester` 전부 빌드 성공(회귀 없음).
 - `ctest --test-dir build` → `9/9 tests passed`(기존 `AesGcmCipher`/`AesGcmPayload` 테스트, 이번 변경과 직접 관련된 테스트는 없음 — Collector `main()`은 애초에 유닛테스트 대상이 아님).
 
-**남은 선택 사항(코드/빌드 관점에선 1-7 완료, 실행 관점 확인은 선택)**: Collector를 실제로 띄워서(인증서/`collector_config.json` 배치 필요) 워커 스레드가 정상 동작하는지, 그리고 가능하면 LoadTester로 개선 전/후 재실측(1-5와 동일 매트릭스, 72개 동시 접속 하드 리밋이 실제로 풀리는지 비교)해보는 것 — 필수는 아님. 선택: `/apm/traces`에서 `Collector.HandleMetricPacket` span 지연시간 변화 확인(4/5순위 계측 재활용).
+**"남은 선택 사항(실행 관점 확인은 선택)"이라고 적어뒀던 게 틀렸음** — 아래 1-7-b에서 그 "선택 사항"(LoadTester 재실측)을 실제로 해보니 필수였던 심각한 버그가 발견됨. 코드/빌드 검증만으론 못 잡는 문제였음(교훈: 스레드 분리처럼 동시성이 실제로 개입하는 변경은 빌드 성공+단위테스트 통과만으로 "완료"라 부르면 안 됨).
 
-**보류 항목**: WAL(`journal_mode=WAL` + `synchronous=NORMAL`) — 이번엔 정보 부족으로 미적용, 추후 재검토 대상.
+**보류 항목(여전히 유효)**: WAL(`journal_mode=WAL` + `synchronous=NORMAL`) — 정보 부족으로 미적용, 추후 재검토 대상. 아래 1-7-b가 먼저 해결돼야 그다음에 다시 다룰 수 있음.
+
+---
+
+### 1-7-b — 재실측 중 크래시 발견 + `JobQueue` → 자체 `WorkerQueue` 전환 🔴 설계 완료, 적용 대기 — **세션 중단(2026-07-27)**
+
+**무엇이 문제인가**: 위 1-7(JobQueue 버전, 이미 커밋됨 `39a3772`)을 실제로 검증하려고 1-5와 동일한 6단계 LoadTester 매트릭스를 재실행했더니, **6단계 전부 Collector가 시작 후 약 10초 만에 크래시**(`connect_fail`이 agents=10부터 이미 발생, agents=1도 뒤늦게 크래시 — `apm_metrics.db` 파일 하나 재사용하는 게 아니라 완전히 새로 뜬 프로세스가 매번 10초 만에 죽음). 즉 **재실측 6개 결과는 전부 무효** — 1-7의 실제 효과(72개 하드 리밋이 풀렸는지)는 아직 검증 안 된 상태.
+
+**근본 원인**: `collector_stdout.log`에서 `[CRASH] cause=LOCK_TIMEOUT ... file=Lock.cpp line=52 func=WriteLock` 확인. `GW2_CrossPlatformCore/Thread/Lock.cpp`의 `Lock::WriteUnlock()`이 "소유 스레드가 언락할 때" 분기에서 `_writeCount`를 안 줄이고 `_lockFlag`의 무관한 하위 비트만 건드려, **락 소유자 ID 비트(`WRITE_THREAD_MASK`)가 영원히 안 지워짐**. 그 락을 처음 잡았다 놓은 스레드가 그 락을 영구 소유한 것처럼 남아, 다른 스레드가 나중에 같은 락을 잡으려 하면 10초 스핀 후 `CRASH("LOCK_TIMEOUT")`. `JobQueue`(`LockQueue` 내부에서 이 `Lock`을 씀)는 지금까지 `APM_Agent`에서 한 번도 크로스 스레드로 안 쓰였어서(1-7 이전엔 이 서브시스템 자체를 안 씀) 이 버그가 여태 안 드러났었고, 1-7에서 **네트워크 스레드가 `Push()`(락을 처음 잡음), 워커 스레드가 `Execute()`(같은 락을 다른 스레드에서 잡으려 시도)** 하면서 최초로 재현됨.
+
+**사용자 결정(2026-07-27)**: `GW2_CrossPlatformCore/Thread/Lock.cpp`는 수정하지 않음 — "여러 프로젝트를 통해 이미 검증한 내용"이라는 판단. 대신 **`APM_Agent` 안에서 `JobQueue`를 대체할 자체 큐를 새로 만드는 방향**으로 확정.
+
+**설계 완료, 코드 전문 작성 완료 — `SESSION_LOG.md` 2026-07-27 두 번째 항목("1-7 재실측 중 크래시 발견 + `JobQueue` → 자체 `WorkerQueue` 전환 설계") 참고, 아직 파일로는 미반영**:
+- 신규 `Common/WorkerQueue.h`/`.cpp` — `std::mutex`/`std::condition_variable`/`std::queue<std::function<void()>>`만 쓰는 단일 워커 스레드 큐(`SpanRecorder`와 같은 패턴). `GW2_CrossPlatformCore/Thread/*` 의존 완전 제거.
+- `Common/CMakeLists.txt`에 `WorkerQueue.cpp` 한 줄 추가.
+- `Collector/main.cpp`: 1-7에서 추가했던 9개 헤더(`CoreMacro.h` 등) + `<fstream>`/`<execinfo.h>` 우회 코드를 전부 제거하고 `#include "WorkerQueue.h"` 한 줄로 교체. `JobQueueRef metricStoreQueue = MakeShared<JobQueue>(); GThreadManager->Launch(...)` 블록을 `WorkerQueue metricStoreQueue;`(로컬 객체, 생성자에서 워커 스레드 자동 기동)로 교체. `PacketHandler::Register` 람다의 캡처를 `metricStoreQueue`(값 복사) → `&metricStoreQueue`(참조)로, `metricStoreQueue->Push(MakeShared<Job>(...), true)` → `metricStoreQueue.Push([...]{ ... })`로 교체.
+- 부수 효과: `WorkerQueue` 소멸자가 큐를 다 비운 뒤 `join()`하므로, 1-7에 남겨뒀던 "워커 스레드 정상 종료 경로 없음" 캐치사항도 해소됨.
+
+**다음 세션에서 이어서 할 일(순서대로)**:
+1. `SESSION_LOG.md` 2026-07-27 두 번째 항목의 코드 전문대로 4개 파일(신규 2 + 수정 2) 적용 — 사용자 확인("적용해줘") 필요, 아직 안 받음.
+2. `cmake --build build` 전체 빌드 성공 확인.
+3. `run_load_test.sh` 6단계 매트릭스(1/10/50/100/100+ramp5s/300) 재실행 — **이번엔 크래시 없이 끝까지 도는지가 1차 확인 사항**, 그다음 72개 하드 리밋이 실제로 풀렸는지/새로운 병목(메모리 백로그 등, 대화 중 논의함)이 보이는지 확인.
+4. 결과를 1-5 베이스라인과 비교해 README/`PROJECT_TECHNICAL_REVIEW.md`에 반영할지 판단.
+5. 그 이후에 WAL 재검토 이어가기.
+
+**정리 필요한 산출물(다음 세션에서 처리)**:
+- `APM_Agent/crash.log` — 이번 크래시가 만든 파일(untracked), 진단 끝났으니 삭제해도 됨(증거로 남기고 싶으면 유지).
+- `APM_Agent/loadtest_results/agents_*_20260727_11*` (6개, 이번 세션의 무효 재실측 결과) — 크래시로 무효한 데이터라 실측 비교 시 참고하면 안 됨. 삭제하거나 "무효" 표시 후 보관.
+- `APM_Agent/run_load_test.sh` — 실행 권한 비트만 변경됨(`chmod +x`, 내용 변경 없음), 커밋 대상.
 
 ---
 

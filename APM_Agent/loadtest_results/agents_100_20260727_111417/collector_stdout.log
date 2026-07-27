@@ -1,0 +1,58 @@
+[PrivilegeDrop] 이미 비-root 권한으로 실행 중 - 하향 불필요
+Collector listening on port 9000 (TLS)
+[Collector] WebServer(127.0.0.1:9100)로 10초마다 전송 (콘솔에 'send' 입력 시 즉시 전송)
+[ResilientSender] connect failed: Connection refused
+[Collector] connection accepted
+[Collector] connection accepted
+[Collector] connection accepted
+[Collector] connection accepted
+[Collector] connection accepted
+[Collector] connection accepted
+[Collector] connection accepted
+[Collector] connection accepted
+[Collector] connection accepted
+[Collector] connection accepted
+[Collector] connection accepted
+[Collector] connection accepted
+[Collector] connection accepted
+[CRASH] cause=LOCK_TIMEOUT file=/home/shkim/dev/APM/GW2_CrossPlatformCore/Thread/Lock.cpp line=52 func=WriteLock
+[0] ./build/Collector(+0x9fece) [0x63074cde9ece]
+[1] ./build/Collector(+0x9f8a4) [0x63074cde98a4]
+[2] ./build/Collector(+0x99f91) [0x63074cde3f91]
+[3] ./build/Collector(+0x9c06d) [0x63074cde606d]
+[4] ./build/Collector(+0x9bc12) [0x63074cde5c12]
+[5] ./build/Collector(+0x99af6) [0x63074cde3af6]
+[6] ./build/Collector(+0x11218) [0x63074cd5b218]
+[7] ./build/Collector(+0x14a1b) [0x63074cd5ea1b]
+[8] ./build/Collector(+0x140a5) [0x63074cd5e0a5]
+[9] ./build/Collector(+0x13807) [0x63074cd5d807]
+[10] ./build/Collector(+0x2b225) [0x63074cd75225]
+[11] ./build/Collector(+0x27e9e) [0x63074cd71e9e]
+[12] ./build/Collector(+0x33cbd) [0x63074cd7dcbd]
+[13] ./build/Collector(+0x32053) [0x63074cd7c053]
+[14] ./build/Collector(+0x304ed) [0x63074cd7a4ed]
+[15] ./build/Collector(+0x8cbd1) [0x63074cdd6bd1]
+[16] ./build/Collector(+0x8c684) [0x63074cdd6684]
+[17] ./build/Collector(+0x30a60) [0x63074cd7aa60]
+[18] ./build/Collector(+0x2e09c) [0x63074cd7809c]
+[19] ./build/Collector(+0x2b924) [0x63074cd75924]
+[20] ./build/Collector(+0x754f9) [0x63074cdbf4f9]
+[21] ./build/Collector(+0x63d76) [0x63074cdadd76]
+[22] ./build/Collector(+0x639a5) [0x63074cdad9a5]
+[23] ./build/Collector(+0x66168) [0x63074cdb0168]
+[24] ./build/Collector(+0x65c18) [0x63074cdafc18]
+[25] ./build/Collector(+0x6e183) [0x63074cdb8183]
+[26] ./build/Collector(+0x6cce0) [0x63074cdb6ce0]
+[27] ./build/Collector(+0x6b854) [0x63074cdb5854]
+[28] ./build/Collector(+0x6a970) [0x63074cdb4970]
+[29] ./build/Collector(+0x6a20d) [0x63074cdb420d]
+[30] ./build/Collector(+0x69d96) [0x63074cdb3d96]
+[31] ./build/Collector(+0x69297) [0x63074cdb3297]
+[32] ./build/Collector(+0x1c928) [0x63074cd66928]
+[33] ./build/Collector(+0x20c01) [0x63074cd6ac01]
+[34] ./build/Collector(+0x20569) [0x63074cd6a569]
+[35] ./build/Collector(+0x21232) [0x63074cd6b232]
+[36] ./build/Collector(+0x12a6c) [0x63074cd5ca6c]
+[37] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca) [0x71dd4202a1ca]
+[38] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b) [0x71dd4202a28b]
+[39] ./build/Collector(+0x10f65) [0x63074cd5af65]
