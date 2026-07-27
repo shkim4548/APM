@@ -12,6 +12,27 @@
 #include "Storage/MetricStoreFactory.h"
 #include <thread>
 
+// SqliteMetricStore::Store()의 fdatasync가 네트워크 스레드를 블로킹하는 문제(1-5 실측 발견) 개선용
+// - 저장 작업을 전용 워커 스레드로 넘기기 위한 JobQueue 서브시스템. 이 서브시스템은 여태 APM_Agent
+// 어디서도 안 쓰였고, 자신의 pch(CorePch.h)에 기대는 방식이라 자기완결적이지 않음 - 그 pch가 쓰는
+// 순서 그대로 나열해야 컴파일됨(2026-07-27 확인). CoreMacro.h의 PrintStackTrace()/CrashLog()가
+// <fstream>/<execinfo.h>(Windows는 <dbghelp.h>)를 자기 스스로 include 안 해서 빌드 시도 중 추가 발견.
+#include <fstream>
+#ifdef _WIN32
+#include <dbghelp.h>
+#else
+#include <execinfo.h>
+#endif
+#include "CoreMacro.h"      // WRITE_LOCK/USE_LOCK 매크로, GetCurrentTick()
+#include "CoreGlobal.h"     // extern GThreadManager
+#include "CoreTLS.h"        // thread_local LEndTickCount
+#include "Lock.h"           // LockQueue가 쓰는 Lock 클래스
+#include "ObjectPool.h"     // 전역 MakeShared<T>()
+#include "LockQueue.h"      // JobQueue 내부 큐
+#include "JobTimer.h"       // JobQueue가 참조
+#include "JobQueue.h"       // JobQueue, JobQueueRef
+#include "ThreadManager.h"  // GThreadManager->Launch(), DoGlobalQueueWork()
+
 namespace
 {
     constexpr unsigned short PORT = 9000;
@@ -38,6 +59,26 @@ int main()
 
         auto store = CreateMetricStore(STORAGE_CONNECTION_INFO, config.metricsRetentionDays);
 
+        // 1-7: SqliteMetricStore::Store()의 fdatasync가 네트워크 스레드를 막지 못하게, 저장 호출을
+        // 전용 워커 스레드로 넘기는 큐. storePtr은 store(unique_ptr)가 main() 스코프 내내 살아있는
+        // 것에 기대는 non-owning 포인터 - 워커 스레드도 main()이 끝나기 전까지만 존재하므로 안전.
+        IMetricStore* storePtr = store.get();
+        JobQueueRef metricStoreQueue = MakeShared<JobQueue>();
+
+        // 전용 워커 스레드 1개 - SQLite는 어차피 단일 writer라 여러 개 띄워도 JobQueue 자체가
+        // 직렬화함(늘릴 이유 없음). LEndTickCount를 루프마다 먼저 세팅해야 DoGlobalQueueWork()가
+        // 즉시 break하지 않음(GW2 틱 서버 관례) - ThreadManager.cpp:63 참고.
+        GThreadManager->Launch([]()
+            {
+                while (true)
+                {
+                    LEndTickCount = GetCurrentTick() + 100;
+                    ThreadManager::DistributeReservedJobs();
+                    ThreadManager::DoGlobalQueueWork();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
+            });
+
         // Collector가 받은 뒤 아직 WebServer로 안 보낸 메트릭들 - 주기/CLI 트리거로 비워짐.
         std::vector<apm::Metric> pendingMetrics;
 
@@ -58,15 +99,21 @@ int main()
             [webServerKey]() { return std::make_unique<AesGcmPayload>(webServerKey); });
 
         PacketHandler::Register<apm::Metric>(
-            [&store, &pendingMetrics](const apm::Metric& pkt)
+            [storePtr, metricStoreQueue, &pendingMetrics](const apm::Metric& pkt)
             {
                 // Collector 안에서 "트랜잭션"이라 부를 만한 지점 중 가장 자연스러운 곳 -
                 // Agent가 보낸 메트릭 패킷 하나를 받아 저장하는 구간(2026-07-26 4순위 데모 계측).
                 APM_TRACE_SCOPE("Collector.HandleMetricPacket");
 
-                store->Store(pkt);
+                // store->Store(pkt) 직접 호출(동기, fdatasync 블로킹 포함) 대신 워커 스레드로 위임.
+                // pushOnly=true 필수 - 기본값(false)이면 호출 스레드가 다른 JobQueue::Execute() 안이
+                // 아닐 때 그 자리에서 동기 실행해버려 아무 효과가 없어짐(JobQueue.cpp:18).
+                // pkt은 값 복사로 캡처 - 비동기 실행 시점까지 살아있어야 함.
+                metricStoreQueue->Push(MakeShared<Job>([storePtr, pkt]() { storePtr->Store(pkt); }), /*pushOnly=*/true);
+
                 pendingMetrics.push_back(pkt);
-                std::cout << "[Collector] metric stored: cpu=" << pkt.cpu_usage_percent()
+                // 저장이 이제 비동기라 이 시점엔 아직 안 끝났을 수 있음 - "stored"는 부정확한 표현이라 정정.
+                std::cout << "[Collector] metric received: cpu=" << pkt.cpu_usage_percent()
                     << "% mem=" << pkt.mem_used_bytes() << "/" << pkt.mem_total_bytes()
                     << " disk=" << pkt.disk_used_bytes() << "/" << pkt.disk_total_bytes()
                     << " net=rx:" << pkt.net_rx_bytes_per_sec() << "B/s,tx:" << pkt.net_tx_bytes_per_sec() << "B/s"

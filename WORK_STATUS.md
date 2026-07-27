@@ -22,7 +22,8 @@
 ## 로드맵 (우선순위 순, 2026-07-26 확정)
 
 ```
-1순위 : 부하/스케일 테스트 툴                         ⏸️ 구현 완료, 실측 보류
+1-7(신규) : Collector Store() 블로킹 개선(JobQueue)   ✅ 코드 적용 + 빌드/테스트 검증 완료
+1순위 : 부하/스케일 테스트 툴                         ✅ 실측 + 문서화 완료
 2순위 : 알림(alerting, 임계치 기반)                    ✅ 코드 적용 + 빌드/테스트 검증 완료
 3순위 : 데이터 보존 정책(retention)                    ✅ 코드 적용 + 빌드 검증 완료
 4순위 : 함수/트랜잭션 레벨 계측                         ✅ 코드 적용 + protoc 재생성 + 빌드/테스트 검증 완료
@@ -35,7 +36,46 @@
 
 ## 작업 목록
 
-### 1순위 — 부하/스케일 테스트 툴 ⏸️ 구현 완료, 실측 보류
+### 1-7(신규) — Collector `SqliteMetricStore::Store()` 블로킹 개선 ✅ 코드 적용 + 빌드/테스트 검증 완료
+
+**배경**: 1-5 실측에서 발견한 핵심 병목 — `Store()`가 SQLite 기본 롤백 저널 모드로 매 INSERT마다 동기 `fdatasync`를 호출하는데, 이게 네트워크 I/O와 **같은 단일 `io_context` 스레드**에서 블로킹으로 실행돼 동시 접속 ~72개에서 하드 리밋을 만듦(상세: `Docs/PROJECT_TECHNICAL_REVIEW.md` §7-4). 사용자가 "이건 관찰만 하고 넘길 문제가 아니라 서버 개발자로서 반드시 고쳐야 하는 문제"라고 판단, 실제 개선 착수 결정.
+
+**사용자 결정 사항(2026-07-27 확정)**:
+- 개선 방식: **`GW2_CrossPlatformCore/Thread/JobQueue` 재사용해서 저장 작업을 별도 워커 스레드로 넘김**(사용자가 직접 지목) — "시계열/append성 데이터라 원자성·경합 문제는 없다"는 판단.
+- **WAL(`PRAGMA journal_mode=WAL` + `synchronous=NORMAL`) 병행 여부: 이번 라운드는 보류** — 정보 부족 사유(거부 아님, 추후 재검토 대상). WAL 동작 원리·JobQueue와의 관계(서로 다른 계층 — JobQueue는 "어느 스레드가 블로킹되는지"를 고치고, WAL은 "블로킹 비용 자체의 크기"를 줄임, WAL 단독으론 블로킹 문제 자체는 해결 안 됨) 논의 상세는 대화 기록 참고. **이번엔 JobQueue 비동기화만 진행.**
+
+**조사 완료**:
+- `JobQueue`(`enable_shared_from_this`, `Push`/`Execute`)는 한 인스턴스당 동시에 한 스레드만 실행 보장 — SQLite 단일 writer 제약과 자연스럽게 맞음. `GlobalQueue`(대기 큐) + `ThreadManager`(워커 스레드 관리)와 세트로 동작.
+- **핵심 함정 1**: `JobQueue::Push(job, pushOnly=false)`(기본값)는 호출 스레드가 이미 다른 JobQueue의 `Execute()` 안이 아니면(`LCurrentJobQueue == nullptr`) **그 자리에서 동기 실행**해버림 — 워커 스레드로 반드시 넘기려면 `Push(job, /*pushOnly=*/true)`를 명시적으로 호출해야 함(편의 함수 `DoAsync()`는 내부적으로 `pushOnly=false`를 쓰므로 이 용도엔 못 씀, 저수준 `Push()`를 직접 호출해야 함).
+- `ThreadManager::DoGlobalQueueWork()`는 스레드 로컬 `LEndTickCount`(이번 호출에서 큐를 비울 시간 예산)를 기준으로 동작 — 워커 루프에서 매 반복 `LEndTickCount = GetCurrentTick() + 예산ms`를 먼저 세팅해야 함(안 하면 즉시 break, 아무 일도 안 함). GW2 틱 서버 관례.
+- **현재 `APM_Agent`(Agent/Collector/LoadTester)는 이 `Thread/` 서브시스템을 전혀 안 씀** — 워커 스레드가 하나도 안 떠 있는 상태. `GThreadManager->Launch(...)`로 새로 띄워야 함.
+- CMake 변경 불필요 확인 — `GW2_CrossPlatformCore/CMakeLists.txt`가 이미 `Thread/`·`Main/`을 public include 경로로 노출 중(`target_include_directories`).
+- **핵심 함정 2(2026-07-27 정정)**: 지난 세션에 "헤더 5개만 추가하면 된다"고 적어뒀던 게 부정확했음 — `GW2_CrossPlatformCore/Thread/*.h`는 자기완결적이지 않고 자신의 pch(`GW2_CrossPlatformCore/Main/CorePch.h`)가 특정 순서로 먼저 include해줬다는 걸 전제로 짜여 있음(예: `LockQueue.h`는 `USE_LOCK` 매크로를 쓰지만 그 매크로가 정의된 `CoreMacro.h`를 자기 스스로 include 안 함). `APM_Agent/pch.h`는 `CorePch.h`를 안 쓰므로(`Types.h`/`Container.h`만 가져옴), `Collector/main.cpp`가 `CorePch.h`와 동일한 순서로 직접 include해야 함: `CoreMacro.h` → `CoreGlobal.h` → `CoreTLS.h` → `Lock.h` → `ObjectPool.h` → `LockQueue.h` → `JobTimer.h` → `JobQueue.h` → `ThreadManager.h`(9개, `CorePch.h`에도 없어서 마찬가지로 별도 추가 필요 — 이 서브시스템을 실제로 기동하는 코드가 이 프레임워크 어디에도 없었다는 뜻).
+- `JobQueueRef`(=`shared_ptr<JobQueue>`) 타입은 이미 `Main/Types.h`에 정의돼 있음(`USING_SHARED_PTR(JobQueue)`).
+
+**설계 확정, 코드 전문 작성 완료 — `SESSION_LOG.md` 2026-07-27 항목 참고**:
+- `main()`에서 `auto store = CreateMetricStore(...)` 직후: `IMetricStore* storePtr = store.get();` + `JobQueueRef metricStoreQueue = MakeShared<JobQueue>();` 선언 + `GThreadManager->Launch(...)`로 전용 워커 스레드 1개 기동.
+- `PacketHandler::Register<apm::Metric>` 핸들러 안의 `store->Store(pkt)` 직접 호출을 `metricStoreQueue->Push(MakeShared<Job>([storePtr, pkt]{ storePtr->Store(pkt); }), /*pushOnly=*/true);`로 교체, 캡처 리스트도 `[&store, &pendingMetrics]` → `[storePtr, metricStoreQueue, &pendingMetrics]`로 변경.
+- 콘솔 로그 문구 "metric stored" → "metric received"로 변경(저장이 이제 비동기라 로그 시점엔 아직 안 끝났을 수 있음) — **채택 확정**(SESSION_LOG 코드 전문에 반영됨, 지난 세션엔 "확정 아님"이었으나 이번에 그대로 채택).
+- `APM_TRACE_SCOPE("Collector.StoreMetricAsync")` 추가(개선 전/후 지연시간 비교용) — **이번 코드 전문엔 미포함**, 필요시 후속으로 추가 가능(선택 사항으로 남겨둠).
+- **짚어둘 캐치사항**: 워커 스레드가 `while(true)` 무한 루프라 정상 종료 경로가 없음 → 전역 정적 `GThreadManager` 소멸자의 `Join()`이 절대 안 끝남. 다만 `Collector`는 애초에 `ioContext.run()`도 무한 루프(시그널 핸들러 등 종료 처리 없음, kill로만 종료)라 **새로 생기는 문제는 아님** — 기존 관례를 그대로 따름.
+
+**2026-07-27 적용 완료** — 사용자가 "바로 적용해줘"로 명시 확인, `Collector/main.cpp` 1개 파일(include 블록 + `main()` 함수 전문) 실제 반영.
+
+**적용 중 발견해 그 자리에서 고친 문제 1건**: 빌드 시도 중 `CoreMacro.h`(`PrintStackTrace()`/`CrashLog()`)가 `<fstream>`/`<execinfo.h>`(Windows는 `<dbghelp.h>`)를 자기 스스로 include하지 않고 자신의 pch(`CorePch.h`)가 미리 include해줬다는 전제로 짜여 있던 것을 추가로 발견 — 애초 설계 조사 때(9개 헤더 정정) 못 잡았던 부분. `Collector/main.cpp`의 include 블록에 `<fstream>` + `#ifdef _WIN32 <dbghelp.h> #else <execinfo.h> #endif`를 `CoreMacro.h` 앞에 추가해 해결.
+
+**검증 완료(WSL, 2026-07-27)**:
+- `cmake --build build --target Collector` → 최초 시도는 위 헤더 누락으로 컴파일 에러, 수정 후 재시도 성공.
+- `cmake --build build`(전체) → `GW2_CrossPlatformCore`/`APM_Storage`/`APM_Common`/`Collector`/`APM_Common_Tests`/`Agent`/`LoadTester` 전부 빌드 성공(회귀 없음).
+- `ctest --test-dir build` → `9/9 tests passed`(기존 `AesGcmCipher`/`AesGcmPayload` 테스트, 이번 변경과 직접 관련된 테스트는 없음 — Collector `main()`은 애초에 유닛테스트 대상이 아님).
+
+**남은 선택 사항(코드/빌드 관점에선 1-7 완료, 실행 관점 확인은 선택)**: Collector를 실제로 띄워서(인증서/`collector_config.json` 배치 필요) 워커 스레드가 정상 동작하는지, 그리고 가능하면 LoadTester로 개선 전/후 재실측(1-5와 동일 매트릭스, 72개 동시 접속 하드 리밋이 실제로 풀리는지 비교)해보는 것 — 필수는 아님. 선택: `/apm/traces`에서 `Collector.HandleMetricPacket` span 지연시간 변화 확인(4/5순위 계측 재활용).
+
+**보류 항목**: WAL(`journal_mode=WAL` + `synchronous=NORMAL`) — 이번엔 정보 부족으로 미적용, 추후 재검토 대상.
+
+---
+
+### 1순위 — 부하/스케일 테스트 툴 ✅ 실측 + 문서화 완료
 
 | # | 작업 | 상태 | 메모 |
 |---|---|---|---|
@@ -43,8 +83,8 @@
 | 1-2 | LoadTester 아키텍처 설계 제안 | ✅ 완료 (2026-07-26) | in-process asio 다중 연결 시뮬레이터(별도 프로세스 N개 fork 대신), 기존 `ResilientSender`/`AesGcmPayload`/`apm::Metric` 재사용. 상세: `SESSION_LOG.md` 2026-07-26 항목 |
 | 1-3 | 코드 스켈레톤(멤버 변수/함수 시그니처 전체) 제시 | ✅ 완료 (2026-07-26) | `LoadTester/` 신설안 + `ResilientSender` 콜백 추가안 제시. 상세: `SESSION_LOG.md` 2026-07-26 두 번째 항목. **사용자 확인 필요 4건 → 전부 추천안대로 확정 (2026-07-26)** |
 | 1-4 | 구현 + 빌드 검증 | ✅ 완료 (2026-07-26) | `ResilientSender.h/.cpp` 수정 적용(선택적 `SendCallback`/`ConnectionStateCallback` 추가, `Agent/main.cpp`는 기본값 `nullptr`라 무변경). `APM_Agent/LoadTester/` 6개 파일 신규 작성 + `CMakeLists.txt`에 `LoadTester` 타겟 추가. **사용자가 WSL(Ubuntu, GNU 13.3.0)에서 `cmake --build build --target LoadTester` 빌드 성공 확인**(경고 없음 — `GW2_CrossPlatformCore`의 기존 `ASIO_STANDALONE` 재정의 경고만 있고 이번 변경과 무관). 코드 전문은 `SESSION_LOG.md` 2026-07-26 세 번째 항목 참고. |
-| 1-5 | 실측 (N-agent 스케일 syscall/RSS/CPU/처리량/지연) | ⏸️ 보류 (2026-07-26) | 스크립트(`run_load_test.sh`) 완성 + 검증 완료(버그 2건 수정: `set -e`/`pipefail` 조기 종료, `strace` 미설치/키 미생성 진단 메시지 보강). 매트릭스 6단계 중 **1번(agents=1)만 실행 완료**(`sent=593/60s`, 드롭·재연결·실패 0 — 파이프라인 정상 확인). 나머지 5단계(10/50/100/100+ramp-up/300 에이전트)는 사용자 판단으로 보류, 재개 시 `APM_Agent/`에서 아래 명령만 다시 실행하면 됨(키/빌드/strace 세팅 이미 완료된 상태라 재개 비용 낮음): `bash run_load_test.sh 10 60 100 0`, `50 60 100 0`, `100 60 100 0`, `100 60 100 5000`, `300 60 100 5000`. 상세: `SESSION_LOG.md` 2026-07-26 네 번째 항목 |
-| 1-6 | README/`Docs/PROJECT_TECHNICAL_REVIEW.md`에 결과 반영 | 대기 | |
+| 1-5 | 실측 (N-agent 스케일 syscall/RSS/CPU/처리량/지연) | ✅ 완료 (2026-07-26) | 매트릭스 6단계(1/10/50/100/100+ramp-up/300 에이전트) 전부 실행 완료. **핵심 발견**: 동시 접속 성공 수가 71~72개에서 하드 리밋(100/300 요청 모두 동일) — ramp-up으로도 안 바뀜. 지연시간은 50 에이전트부터 절벽(p95 0ms→12초→34초). `queue_drop=0`(유실 없음, 그냥 밀림). CPU/메모리는 병목 아님(RSS 13~19MB 안정, CPU 평균 ~28%로 요청 규모 무관). `strace` 분석 결과 `pwrite64`/`fcntl`/**`fdatasync`**/`write`/저널 파일 관리(`openat`/`unlink`)가 시간의 70%+ 차지 — SQLite 기본 롤백 저널의 매 INSERT마다 동기 `fdatasync`가 네트워크 I/O와 같은 단일 `io_context` 스레드를 블로킹하는 게 근본 원인으로 확인됨(§1-1 가설을 구체적으로 검증). 상세: `SESSION_LOG.md` 2026-07-26 네 번째 항목 |
+| 1-6 | README/`Docs/PROJECT_TECHNICAL_REVIEW.md`에 결과 반영 | ✅ 완료 (2026-07-26) | `README.md`에 스케일 테스트 요약 bullet 추가(+ `.NET xUnit 8개→18개`로 테스트 카운트 오탈자 수정, 5순위까지 반영 안 돼 있던 것 발견해 같이 고침). `Docs/PROJECT_TECHNICAL_REVIEW.md`에 신규 `7-4. Collector 스케일 테스트 — LoadTester로 병목 찾기` 섹션(실측 표 + 발견 4건 + 결론 + 알려진 개선 방향) + 예상 질문 2건 추가 — 기존 문서 스타일(배경/실측/발견/예상 질문) 그대로 따름. |
 
 ### 2순위 — 알림(임계치 기반) ✅ 코드 적용 + 빌드/테스트 검증 완료
 

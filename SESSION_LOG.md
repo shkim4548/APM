@@ -5604,3 +5604,461 @@ public class TracesController : Controller
 - 아직 파일 생성/수정 전 — `CLAUDE.md` 규칙대로 제안 단계(사용자가 이번엔 "5순위로 넘어가자"만 확인, "적용해줘"는 아직). 사용자가 "적용해줘" 하면 위 파일들(신규 5 + 수정 1: `Dashboard/Index.cshtml` — 총 6개)을 전부 실제로 반영 예정.
 - 스키마 변경 없음(4순위에서 만든 인덱스 재사용) — Console 쪽만 닫히는 작업(Agent/Collector 변경 불필요).
 - 빌드 검증: `dotnet build` + `dotnet test`(신규 `PercentileCalculatorTests` 5건 포함 — 기존 13건과 합쳐 18건 통과 기대).
+
+---
+
+## 2026-07-27 — 1-7(신규, Collector `Store()` 블로킹 개선) 설계 확정 + 코드 제안
+
+### 배경
+
+지난 세션(2026-07-26) 중단 지점 재개. 남은 미결정 사항이던 "`PRAGMA journal_mode=WAL` + `synchronous=NORMAL` 병행 여부"를 사용자와 논의:
+- WAL의 동작 원리(롤백 저널 대비 fsync 1회로 감소, `synchronous=NORMAL`은 매 트랜잭션 fsync를 스킵하고 체크포인트 시점에만 동기화), JobQueue 비동기화와의 관계(서로 다른 계층 — JobQueue는 "어느 스레드가 블로킹되는지", WAL은 "블로킹 비용 자체의 크기") 설명.
+- 사용자가 "결국 미루는 것뿐 아닌가, 싱글 스레드 블로킹 문제가 해결되는 게 맞냐"고 정확히 지적 — **맞다**: WAL+NORMAL 단독으로는 블로킹 문제(72개 하드 리밋의 근본 원인)를 해결하지 못함. 체크포인트 순간(기본 ~1000건마다 1회)엔 그 호출 스레드가 몰아서 블로킹을 그대로 맞음 — "평균 블로킹 시간을 줄이고 가끔 몰아서 미룬다"가 정확한 설명. 문제를 구조적으로 해결하는 건 JobQueue(스레드 분리)뿐, WAL은 JobQueue 적용 이후 워커 스레드의 총 부하를 줄여주는 보조 최적화.
+- **사용자 결정**: WAL은 정보 부족으로 이번엔 보류(거부 아님 — 추후 재검토). **이번 세션은 JobQueue 비동기화만 진행.**
+
+### 발견 — 초안(2026-07-26)의 "헤더 5개만 추가하면 됨" 가정이 부정확했음
+
+지난 세션 조사에서 "`Collector/main.cpp`에 `JobQueue.h`/`ObjectPool.h`/`ThreadManager.h`/`CoreGlobal.h`/`CoreTLS.h`만 추가하면 된다"고 적어뒀는데, 이번에 `GW2_CrossPlatformCore/Thread/*.h` 전체를 실제로 열어 의존 관계를 추적해보니 부족했다:
+
+- `JobQueue.h`는 `LockQueue.h`를 include하는데, `LockQueue.h`는 `USE_LOCK`(→ `Lock _locks[1];`) 매크로를 쓰지만 정작 자신은 `CoreMacro.h`(매크로 정의)도 `Lock.h`(`Lock` 클래스 정의)도 include하지 않음 — **포함하는 쪽(TU)이 먼저 include해뒀다는 걸 전제로 짜여진 헤더**(자기완결적이지 않음). `GW2_CrossPlatformCore/Main/CorePch.h`(이 모듈 자신의 pch)를 열어보니 정확히 이 순서로 나열돼 있었음: `CoreMacro.h` → `CoreGlobal.h` → `CoreTLS.h` → `Lock.h` → `ObjectPool.h` → `LockQueue.h` → `JobTimer.h` → `JobQueue.h`.
+- `APM_Agent/pch.h`(Collector가 실제로 쓰는 pch)는 `Types.h`/`Container.h`만 가져오고 `CorePch.h`는 안 씀 — 그래서 저 체인을 `Collector/main.cpp`가 직접 `#include`로 채워줘야 함. `ThreadManager.h`는 `CorePch.h`에도 없어서(이 서브시스템을 실제로 기동하는 코드가 이 프레임워크 어디에도 없었다는 뜻) 마찬가지로 직접 추가 필요.
+- CMake 쪽은 기존 조사(`Main`/`Thread`가 `GW2_CrossPlatformCore`의 public include 디렉터리)가 맞았음 — 재확인 완료, 변경 불필요.
+
+**최종 include 목록(순서 중요, `CorePch.h`와 동일 순서로 추가)**:
+```
+CoreMacro.h → CoreGlobal.h → CoreTLS.h → Lock.h → ObjectPool.h → LockQueue.h → JobTimer.h → JobQueue.h → ThreadManager.h
+```
+
+### 제안 — `Collector/main.cpp` 수정 (수정 전 / 수정 후, 함수 전문)
+
+**변경 사유**: `store->Store(pkt)`가 네트워크 스레드(`ioContext.run()`을 도는 유일한 스레드)를 SQLite `fdatasync` 완료까지 블로킹시키는 게 1-5 실측에서 확인된 근본 원인. `JobQueue` 하나를 전용 워커 스레드에 연결해 `Store()` 호출 자체를 그 워커로 넘기면, 네트워크 스레드는 저장 완료를 기다리지 않고 바로 다음 accept/dispatch로 넘어갈 수 있음. `JobQueue::Push(job, /*pushOnly=*/true)`를 명시적으로 써야 하는 이유: 기본값(`pushOnly=false`)은 호출 스레드가 다른 `JobQueue::Execute()` 안에 있지 않으면 **그 자리에서 동기 실행**해버려서(`JobQueue.cpp:18`), 아무것도 안 바뀐 것처럼 되어버림.
+
+**include 블록 (파일 상단, 수정 전 / 수정 후)**
+
+수정 전:
+```cpp
+#include "pch.h"
+#include "ApmSession.h"
+#include "AesGcmPayload.h"
+#include "ResilientSender.h"
+#include "PrivilegeDrop.h"
+#include "PacketHandler.h"
+#include "KeyLoader.h"
+#include "CollectorConfig.h"
+#include "ScopedSpan.h"
+#include "SpanRecorder.h"
+#include "Protocol/Metric.pb.h"
+#include "Storage/MetricStoreFactory.h"
+#include <thread>
+```
+
+수정 후:
+```cpp
+#include "pch.h"
+#include "ApmSession.h"
+#include "AesGcmPayload.h"
+#include "ResilientSender.h"
+#include "PrivilegeDrop.h"
+#include "PacketHandler.h"
+#include "KeyLoader.h"
+#include "CollectorConfig.h"
+#include "ScopedSpan.h"
+#include "SpanRecorder.h"
+#include "Protocol/Metric.pb.h"
+#include "Storage/MetricStoreFactory.h"
+#include <thread>
+
+// SqliteMetricStore::Store()의 fdatasync가 네트워크 스레드를 블로킹하는 문제(1-5 실측 발견) 개선용
+// - 저장 작업을 전용 워커 스레드로 넘기기 위한 JobQueue 서브시스템. 이 서브시스템은 여태 APM_Agent
+// 어디서도 안 쓰였고, 자신의 pch(CorePch.h)에 기대는 방식이라 자기완결적이지 않음 - 그 pch가 쓰는
+// 순서 그대로 나열해야 컴파일됨(2026-07-27 확인).
+#include "CoreMacro.h"      // WRITE_LOCK/USE_LOCK 매크로, GetCurrentTick()
+#include "CoreGlobal.h"     // extern GThreadManager
+#include "CoreTLS.h"        // thread_local LEndTickCount
+#include "Lock.h"           // LockQueue가 쓰는 Lock 클래스
+#include "ObjectPool.h"     // 전역 MakeShared<T>()
+#include "LockQueue.h"      // JobQueue 내부 큐
+#include "JobTimer.h"       // JobQueue가 참조
+#include "JobQueue.h"       // JobQueue, JobQueueRef
+#include "ThreadManager.h"  // GThreadManager->Launch(), DoGlobalQueueWork()
+```
+
+**`main()` 함수 (수정 전 / 수정 후, 전문)**
+
+수정 전:
+```cpp
+int main()
+{
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+    try
+    {
+        AesGcmCipher::Key agentCollectorKey = LoadKeyFromHexFile("certs/agent_collector_aes.key");
+        AesGcmCipher::Key webServerKey = LoadKeyFromHexFile("certs/webserver_aes.key");
+
+        CollectorConfig config = LoadCollectorConfig("collector_config.json");
+
+        auto store = CreateMetricStore(STORAGE_CONNECTION_INFO, config.metricsRetentionDays);
+
+        std::vector<apm::Metric> pendingMetrics;
+
+        asio::io_context ioContext;
+
+        asio::ssl::context sslContext(asio::ssl::context::tls_server);
+        sslContext.use_certificate_chain_file("certs/server.crt");
+        sslContext.use_private_key_file("certs/server.key", asio::ssl::context::pem);
+
+        asio::ssl::context webServerSslContext(asio::ssl::context::tls_client);
+        webServerSslContext.set_verify_mode(asio::ssl::verify_none);
+
+        ResilientSender webServerSender(ioContext, webServerSslContext,
+            config.webServerHost, config.webServerPort,
+            [webServerKey]() { return std::make_unique<AesGcmPayload>(webServerKey); });
+
+        PacketHandler::Register<apm::Metric>(
+            [&store, &pendingMetrics](const apm::Metric& pkt)
+            {
+                APM_TRACE_SCOPE("Collector.HandleMetricPacket");
+
+                store->Store(pkt);
+                pendingMetrics.push_back(pkt);
+                std::cout << "[Collector] metric stored: cpu=" << pkt.cpu_usage_percent()
+                    << "% mem=" << pkt.mem_used_bytes() << "/" << pkt.mem_total_bytes()
+                    << " disk=" << pkt.disk_used_bytes() << "/" << pkt.disk_total_bytes()
+                    << " net=rx:" << pkt.net_rx_bytes_per_sec() << "B/s,tx:" << pkt.net_tx_bytes_per_sec() << "B/s"
+                    << " tcp=rtt:" << pkt.tcp_rtt_us() << "us,var:" << pkt.tcp_rtt_var_us() << "us"
+                    << ",retrans:" << pkt.tcp_retransmits() << "(total:" << pkt.tcp_total_retrans() << ")"
+                    << ",cwnd:" << pkt.tcp_snd_cwnd()
+                    << std::endl;
+            });
+
+        asio::ip::tcp::acceptor acceptor(ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), PORT));
+
+        PrivilegeDrop::DropTo("nobody");
+
+        std::function<void()> doAccept;
+        doAccept = [&]()
+        {
+            acceptor.async_accept(
+                [&](const asio::error_code &ec, asio::ip::tcp::socket socket)
+                {
+                    if (!ec)
+                    {
+                        std::cout << "[Collector] connection accepted" << std::endl;
+                        auto session = std::make_shared<ApmSession>(std::move(socket), sslContext, SessionMode::Server,
+                            std::make_unique<AesGcmPayload>(agentCollectorKey));
+                        session->Start(nullptr, nullptr, &PacketHandler::Dispatch);
+                    }
+                    else
+                    {
+                        std::cerr << "[Collector] accept error : " << ec.message() << std::endl;
+                    }
+                    doAccept();
+                });
+        };
+        doAccept();
+
+        auto flushToWebServer = [&pendingMetrics, &webServerSender]()
+        {
+            if (!pendingMetrics.empty())
+            {
+                std::cout << "[Collector] WebServer로 " << pendingMetrics.size() << "건 전송 시도" << std::endl;
+                for (const auto& m : pendingMetrics)
+                    webServerSender.Enqueue(m);
+
+                pendingMetrics.clear();
+            }
+
+            auto spans = SpanRecorder::Instance().DrainAll();
+            if (!spans.empty())
+            {
+                std::cout << "[Collector] WebServer로 span " << spans.size() << "건 전송 시도" << std::endl;
+                for (const auto& s : spans)
+                {
+                    apm::TransactionSpan pkt;
+                    pkt.set_operation_name(s.operationName);
+                    pkt.set_duration_us(s.durationUs);
+                    pkt.set_success(s.success);
+                    webServerSender.Enqueue(pkt);
+                }
+            }
+        };
+
+        asio::steady_timer pushTimer(ioContext);
+        std::function<void()> schedulePush;
+        schedulePush = [&]()
+        {
+            pushTimer.expires_after(std::chrono::seconds(config.pushIntervalSeconds));
+            pushTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        flushToWebServer();
+                        schedulePush();
+                    }
+                });
+        };
+        schedulePush();
+
+        asio::steady_timer pruneTimer(ioContext);
+        std::function<void()> schedulePrune;
+        schedulePrune = [&]()
+        {
+            pruneTimer.expires_after(std::chrono::hours(24));
+            pruneTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        store->Prune(config.metricsRetentionDays);
+                        schedulePrune();
+                    }
+                });
+        };
+        schedulePrune();
+
+        std::thread cliThread(
+            [&ioContext, &flushToWebServer]()
+            {
+                String line;
+                while (std::getline(std::cin, line))
+                {
+                    if (line == "send")
+                        asio::post(ioContext, flushToWebServer);
+                }
+            });
+        cliThread.detach();
+
+        std::cout << "Collector listening on port " << PORT << " (TLS)" << std::endl;
+        std::cout << "[Collector] WebServer(" << config.webServerHost << ":" << config.webServerPort
+            << ")로 " << config.pushIntervalSeconds << "초마다 전송 (콘솔에 'send' 입력 시 즉시 전송)" << std::endl;
+        ioContext.run();
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "[Collector] fatal: " << e.what() << std::endl;
+        return 1;
+    }
+    return 0;
+}
+```
+
+수정 후:
+```cpp
+int main()
+{
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+    try
+    {
+        AesGcmCipher::Key agentCollectorKey = LoadKeyFromHexFile("certs/agent_collector_aes.key");
+        AesGcmCipher::Key webServerKey = LoadKeyFromHexFile("certs/webserver_aes.key");
+
+        CollectorConfig config = LoadCollectorConfig("collector_config.json");
+
+        auto store = CreateMetricStore(STORAGE_CONNECTION_INFO, config.metricsRetentionDays);
+
+        // 1-7: SqliteMetricStore::Store()의 fdatasync가 네트워크 스레드를 막지 못하게, 저장 호출을
+        // 전용 워커 스레드로 넘기는 큐. storePtr은 store(unique_ptr)가 main() 스코프 내내 살아있는
+        // 것에 기대는 non-owning 포인터 - 워커 스레드도 main()이 끝나기 전까지만 존재하므로 안전.
+        IMetricStore* storePtr = store.get();
+        JobQueueRef metricStoreQueue = MakeShared<JobQueue>();
+
+        // 전용 워커 스레드 1개 - SQLite는 어차피 단일 writer라 여러 개 띄워도 JobQueue 자체가
+        // 직렬화함(늘릴 이유 없음). LEndTickCount를 루프마다 먼저 세팅해야 DoGlobalQueueWork()가
+        // 즉시 break하지 않음(GW2 틱 서버 관례) - ThreadManager.cpp:63 참고.
+        GThreadManager->Launch([]()
+            {
+                while (true)
+                {
+                    LEndTickCount = GetCurrentTick() + 100;
+                    ThreadManager::DistributeReservedJobs();
+                    ThreadManager::DoGlobalQueueWork();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
+            });
+
+        std::vector<apm::Metric> pendingMetrics;
+
+        asio::io_context ioContext;
+
+        asio::ssl::context sslContext(asio::ssl::context::tls_server);
+        sslContext.use_certificate_chain_file("certs/server.crt");
+        sslContext.use_private_key_file("certs/server.key", asio::ssl::context::pem);
+
+        asio::ssl::context webServerSslContext(asio::ssl::context::tls_client);
+        webServerSslContext.set_verify_mode(asio::ssl::verify_none);
+
+        ResilientSender webServerSender(ioContext, webServerSslContext,
+            config.webServerHost, config.webServerPort,
+            [webServerKey]() { return std::make_unique<AesGcmPayload>(webServerKey); });
+
+        PacketHandler::Register<apm::Metric>(
+            [storePtr, metricStoreQueue, &pendingMetrics](const apm::Metric& pkt)
+            {
+                APM_TRACE_SCOPE("Collector.HandleMetricPacket");
+
+                // store->Store(pkt) 직접 호출(동기, fdatasync 블로킹 포함) 대신 워커 스레드로 위임.
+                // pushOnly=true 필수 - 기본값(false)이면 호출 스레드가 다른 JobQueue::Execute() 안이
+                // 아닐 때 그 자리에서 동기 실행해버려 아무 효과가 없어짐(JobQueue.cpp:18).
+                // pkt은 값 복사로 캡처 - 비동기 실행 시점까지 살아있어야 함.
+                metricStoreQueue->Push(MakeShared<Job>([storePtr, pkt]() { storePtr->Store(pkt); }), /*pushOnly=*/true);
+
+                pendingMetrics.push_back(pkt);
+                // 저장이 이제 비동기라 이 시점엔 아직 안 끝났을 수 있음 - "stored"는 부정확한 표현이라 정정.
+                std::cout << "[Collector] metric received: cpu=" << pkt.cpu_usage_percent()
+                    << "% mem=" << pkt.mem_used_bytes() << "/" << pkt.mem_total_bytes()
+                    << " disk=" << pkt.disk_used_bytes() << "/" << pkt.disk_total_bytes()
+                    << " net=rx:" << pkt.net_rx_bytes_per_sec() << "B/s,tx:" << pkt.net_tx_bytes_per_sec() << "B/s"
+                    << " tcp=rtt:" << pkt.tcp_rtt_us() << "us,var:" << pkt.tcp_rtt_var_us() << "us"
+                    << ",retrans:" << pkt.tcp_retransmits() << "(total:" << pkt.tcp_total_retrans() << ")"
+                    << ",cwnd:" << pkt.tcp_snd_cwnd()
+                    << std::endl;
+            });
+
+        asio::ip::tcp::acceptor acceptor(ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), PORT));
+
+        PrivilegeDrop::DropTo("nobody");
+
+        std::function<void()> doAccept;
+        doAccept = [&]()
+        {
+            acceptor.async_accept(
+                [&](const asio::error_code &ec, asio::ip::tcp::socket socket)
+                {
+                    if (!ec)
+                    {
+                        std::cout << "[Collector] connection accepted" << std::endl;
+                        auto session = std::make_shared<ApmSession>(std::move(socket), sslContext, SessionMode::Server,
+                            std::make_unique<AesGcmPayload>(agentCollectorKey));
+                        session->Start(nullptr, nullptr, &PacketHandler::Dispatch);
+                    }
+                    else
+                    {
+                        std::cerr << "[Collector] accept error : " << ec.message() << std::endl;
+                    }
+                    doAccept();
+                });
+        };
+        doAccept();
+
+        auto flushToWebServer = [&pendingMetrics, &webServerSender]()
+        {
+            if (!pendingMetrics.empty())
+            {
+                std::cout << "[Collector] WebServer로 " << pendingMetrics.size() << "건 전송 시도" << std::endl;
+                for (const auto& m : pendingMetrics)
+                    webServerSender.Enqueue(m);
+
+                pendingMetrics.clear();
+            }
+
+            auto spans = SpanRecorder::Instance().DrainAll();
+            if (!spans.empty())
+            {
+                std::cout << "[Collector] WebServer로 span " << spans.size() << "건 전송 시도" << std::endl;
+                for (const auto& s : spans)
+                {
+                    apm::TransactionSpan pkt;
+                    pkt.set_operation_name(s.operationName);
+                    pkt.set_duration_us(s.durationUs);
+                    pkt.set_success(s.success);
+                    webServerSender.Enqueue(pkt);
+                }
+            }
+        };
+
+        asio::steady_timer pushTimer(ioContext);
+        std::function<void()> schedulePush;
+        schedulePush = [&]()
+        {
+            pushTimer.expires_after(std::chrono::seconds(config.pushIntervalSeconds));
+            pushTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        flushToWebServer();
+                        schedulePush();
+                    }
+                });
+        };
+        schedulePush();
+
+        asio::steady_timer pruneTimer(ioContext);
+        std::function<void()> schedulePrune;
+        schedulePrune = [&]()
+        {
+            pruneTimer.expires_after(std::chrono::hours(24));
+            pruneTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        store->Prune(config.metricsRetentionDays);
+                        schedulePrune();
+                    }
+                });
+        };
+        schedulePrune();
+
+        std::thread cliThread(
+            [&ioContext, &flushToWebServer]()
+            {
+                String line;
+                while (std::getline(std::cin, line))
+                {
+                    if (line == "send")
+                        asio::post(ioContext, flushToWebServer);
+                }
+            });
+        cliThread.detach();
+
+        std::cout << "Collector listening on port " << PORT << " (TLS)" << std::endl;
+        std::cout << "[Collector] WebServer(" << config.webServerHost << ":" << config.webServerPort
+            << ")로 " << config.pushIntervalSeconds << "초마다 전송 (콘솔에 'send' 입력 시 즉시 전송)" << std::endl;
+        ioContext.run();
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "[Collector] fatal: " << e.what() << std::endl;
+        return 1;
+    }
+    return 0;
+}
+```
+
+### 짚어둘 캐치사항 — 워커 스레드는 정상 종료 경로가 없음
+
+`GThreadManager->Launch(...)`로 띄운 워커는 `while(true)` 무한 루프라 빠져나올 방법이 없다. `GThreadManager`는 전역 정적 객체(`CoreGlobal.cpp`의 `GCoreGlobal`)라 그 소멸자가 `ThreadManager::~ThreadManager()` → `Join()`을 호출하는데, `Join()`은 스레드가 끝나길 기다리므로 **이 워커가 도는 한 프로그램이 정상 종료(정적 소멸자 실행 경로)를 절대 못 빠져나옴**. 다만:
+- 지금 `Collector`는 애초에 `ioContext.run()`도 무한 루프고 별도 종료 처리(시그널 핸들러 등)가 없어 "프로세스를 죽여서 끝낸다"가 유일한 종료 방법 - 이 워커 스레드도 그 관례를 그대로 따르는 것뿐이라 **새로 생기는 문제는 아님**.
+- `GThreadManager::Launch`가 GW2 틱 서버 관례(무한 루프 워커, kill로 종료)를 그대로 쓰는 API라 이 패턴이 프레임워크 의도와도 맞음.
+- 정리해서 종료하는 기능이 필요해지면(예: 나중에 graceful shutdown 요구사항이 생기면) 별도로 다뤄야 함 - 이번 범위 밖.
+
+### 결정 사항
+
+- WAL(`journal_mode=WAL` + `synchronous=NORMAL`)은 이번 라운드에서 보류 - 정보 부족 사유, 거부 아님. 다음에 재검토 시 이 항목 다시 열 것.
+- 아직 파일 수정 전 - `CLAUDE.md` 규칙대로 제안 단계. 사용자가 "적용해줘" 하면 `Collector/main.cpp` 1개 파일(include 블록 + `main()` 함수) 반영 예정.
+- 적용 후 검증 계획: `cmake --build build`로 `Collector`/`Agent`/`LoadTester`/`APM_Common_Tests` 빌드 확인 → 가능하면 LoadTester로 개선 전/후 재실측(1-5와 동일 매트릭스, 72개 하드 리밋이 실제로 풀리는지 비교) → `/apm/traces`에서 `Collector.HandleMetricPacket` span 지연시간이 줄었는지 확인(선택, 4/5순위 계측 재활용).
+
+### 적용 완료 (2026-07-27, 같은 세션에서 "바로 적용해줘" 확인)
+
+위 코드 전문 그대로 `Collector/main.cpp`에 반영. 빌드 시도 중 추가로 발견한 문제 1건 — `CoreMacro.h`의 `PrintStackTrace()`/`CrashLog()`가 `backtrace()`/`backtrace_symbols()`(`<execinfo.h>`)와 `ofstream`(`<fstream>`)을 쓰는데 자기 스스로 그 헤더들을 include 안 하고 `CorePch.h`가 먼저 include해줬다는 전제로 짜여 있었음(이번 설계 조사 때 정정한 "9개 헤더" 목록에서도 못 잡았던 부분 — `LockQueue.h`류의 매크로 의존과는 다른 종류의 누락이라 정적으로 안 읽히고 컴파일러가 잡아줌).
+
+**수정 (include 블록, `CoreMacro.h` include 직전에 추가)**:
+```cpp
+#include <fstream>
+#ifdef _WIN32
+#include <dbghelp.h>
+#else
+#include <execinfo.h>
+#endif
+#include "CoreMacro.h"      // WRITE_LOCK/USE_LOCK 매크로, GetCurrentTick()
+```
+
+**검증(WSL)**: `cmake --build build --target Collector` 성공 → `cmake --build build`(전체) 성공(`GW2_CrossPlatformCore`/`APM_Storage`/`APM_Common`/`Collector`/`APM_Common_Tests`/`Agent`/`LoadTester`) → `ctest --test-dir build` `9/9 tests passed`(기존 암호화 테스트, 회귀 없음 — Collector `main()` 자체를 검증하는 유닛테스트는 없음).
+
+실행 관점(Collector 실제 기동 + LoadTester 재실측)은 이번 세션 범위 밖으로 남겨둠 — 필요시 별도로 진행.
