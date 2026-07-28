@@ -6679,3 +6679,534 @@ int main()
 
 - 아직 파일 생성/수정 전 — `CLAUDE.md` 규칙대로 제안 단계. 사용자가 "적용해줘" 하면 신규 2개(`Common/WorkerQueue.h`/`.cpp`) + 수정 2개(`Common/CMakeLists.txt`, `Collector/main.cpp`) 반영 예정.
 - 적용 후 검증 계획: `cmake --build build` 성공 확인 → `run_load_test.sh` 6단계 매트릭스 재실행(이번엔 크래시 없이 끝까지 도는지가 1차 확인 사항) → 결과를 1-5 베이스라인과 비교.
+
+## 2026-07-29 — 콘솔 로깅 병목(300-agent 한정, 1-7-b에서 발견) 설계 제안
+
+### 배경
+
+`WORK_STATUS.md` 1-7-b 절에서 300-agent 재실측 중 새로 발견해 "후속 과제"로만 기록해뒀던 항목. 처리량이 늘자(같은 60초간 처리 로그가 9,625줄→90,276줄, 9.4배 증가) `PacketHandler::Register` 핸들러의 `std::cout << ... << std::endl`(메트릭 1건마다 동기 flush)이 새 병목으로 드러남 — 300-agent 재실측에서 `write` syscall이 전체 시간의 92%를 차지. `queue_drop=0`(유실 없음)이라 심각도는 낮게 기록해뒀으나, 이번 세션에 착수 요청 받아 설계 제안.
+
+### 원인 분석
+
+- `std::endl`은 개행 삽입에 더해 **매번 강제로 스트림을 flush**함(`std::flush` 호출과 동일). 리다이렉트된 파일(예: `run_load_test.sh`가 만드는 `collector_stdout.log`)로 출력할 때 원래라면 비-tty 대상엔 fully-buffered(통상 libc `BUFSIZ`=4096바이트 단위)가 적용돼 `write` syscall이 버퍼가 찰 때만 발생해야 하는데, `std::endl`이 그 버퍼링 이점을 매 줄마다 스스로 무효화시키고 있음.
+- 이 로그 콜백은 `PacketHandler::Dispatch`를 거쳐 **네트워크 스레드(단일 `io_context` 스레드)**에서 실행됨 — 1-5~1-7에서 고쳤던 "SQLite `fdatasync`가 네트워크 스레드를 블로킹하던 문제"와 **같은 스레드, 같은 카테고리의 문제**(다만 원인은 디스크 fsync가 아니라 강제 스트림 flush).
+- SQLite 케이스와 달리 이번엔 "어느 스레드가 블로킹되는가"가 아니라 "**불필요하게 자주 flush를 부르는가**"가 문제라, `WorkerQueue`처럼 별도 워커 스레드로 옮기는 방식(큐잉)까지는 불필요 — `std::endl` → `'\n'` 교체만으로 근본 원인이 해소됨.
+
+### 제안 — `Collector/main.cpp` 수정 (수정 전 / 수정 후, 함수 전문)
+
+`PacketHandler::Register<apm::Metric>(...)`에 넘기는 콜백 람다 전체(다른 `std::cout` 호출부— 연결 수립/주기 전송/시작 배너 등—는 호출 빈도가 메트릭 수신 대비 훨씬 낮아 이번 수정 대상에서 제외):
+
+수정 전:
+```cpp
+        PacketHandler::Register<apm::Metric>(
+            [storePtr, &metricStoreQueue, &pendingMetrics](const apm::Metric& pkt)
+            {
+                // Collector 안에서 "트랜잭션"이라 부를 만한 지점 중 가장 자연스러운 곳 -
+                // Agent가 보낸 메트릭 패킷 하나를 받아 저장하는 구간(2026-07-26 4순위 데모 계측).
+                APM_TRACE_SCOPE("Collector.HandleMetricPacket");
+
+                // store->Store(pkt) 직접 호출(동기, fdatasync 블로킹 포함) 대신 워커 스레드로 위임.
+                // pkt은 값 복사로 캡처 - 비동기 실행 시점까지 살아있어야 함.
+                metricStoreQueue.Push([storePtr, pkt]() { storePtr->Store(pkt); });
+
+                pendingMetrics.push_back(pkt);
+                // 저장이 이제 비동기라 이 시점엔 아직 안 끝났을 수 있음 - "stored"는 부정확한 표현이라 정정.
+                std::cout << "[Collector] metric received: cpu=" << pkt.cpu_usage_percent()
+                    << "% mem=" << pkt.mem_used_bytes() << "/" << pkt.mem_total_bytes()
+                    << " disk=" << pkt.disk_used_bytes() << "/" << pkt.disk_total_bytes()
+                    << " net=rx:" << pkt.net_rx_bytes_per_sec() << "B/s,tx:" << pkt.net_tx_bytes_per_sec() << "B/s"
+                    << " tcp=rtt:" << pkt.tcp_rtt_us() << "us,var:" << pkt.tcp_rtt_var_us() << "us"
+                    << ",retrans:" << pkt.tcp_retransmits() << "(total:" << pkt.tcp_total_retrans() << ")"
+                    << ",cwnd:" << pkt.tcp_snd_cwnd()
+                    << std::endl;
+            });
+```
+
+수정 후:
+```cpp
+        PacketHandler::Register<apm::Metric>(
+            [storePtr, &metricStoreQueue, &pendingMetrics](const apm::Metric& pkt)
+            {
+                // Collector 안에서 "트랜잭션"이라 부를 만한 지점 중 가장 자연스러운 곳 -
+                // Agent가 보낸 메트릭 패킷 하나를 받아 저장하는 구간(2026-07-26 4순위 데모 계측).
+                APM_TRACE_SCOPE("Collector.HandleMetricPacket");
+
+                // store->Store(pkt) 직접 호출(동기, fdatasync 블로킹 포함) 대신 워커 스레드로 위임.
+                // pkt은 값 복사로 캡처 - 비동기 실행 시점까지 살아있어야 함.
+                metricStoreQueue.Push([storePtr, pkt]() { storePtr->Store(pkt); });
+
+                pendingMetrics.push_back(pkt);
+                // 저장이 이제 비동기라 이 시점엔 아직 안 끝났을 수 있음 - "stored"는 부정확한 표현이라 정정.
+                // std::endl -> '\n' : 매 메트릭마다 강제 flush하던 걸 제거(1-7-b 300-agent 재실측에서
+                // write syscall이 전체 시간의 92%를 차지한 원인). 개행만 넣고 flush는 libc 버퍼링에 위임 -
+                // 리다이렉트 대상(파일/파이프)에선 자연히 fully-buffered(통상 4KB 단위)로 동작해 write
+                // 호출 빈도가 줄어듦. 콘솔(tty)로 직접 볼 때는 libc가 line-buffered로 동작하므로 체감 차이 없음.
+                std::cout << "[Collector] metric received: cpu=" << pkt.cpu_usage_percent()
+                    << "% mem=" << pkt.mem_used_bytes() << "/" << pkt.mem_total_bytes()
+                    << " disk=" << pkt.disk_used_bytes() << "/" << pkt.disk_total_bytes()
+                    << " net=rx:" << pkt.net_rx_bytes_per_sec() << "B/s,tx:" << pkt.net_tx_bytes_per_sec() << "B/s"
+                    << " tcp=rtt:" << pkt.tcp_rtt_us() << "us,var:" << pkt.tcp_rtt_var_us() << "us"
+                    << ",retrans:" << pkt.tcp_retransmits() << "(total:" << pkt.tcp_total_retrans() << ")"
+                    << ",cwnd:" << pkt.tcp_snd_cwnd()
+                    << '\n';
+            });
+```
+
+### 트레이드오프 — 짚어둘 것
+
+- 파일/파이프로 리다이렉트된 상태에서 프로세스가 비정상 종료(crash, `kill -9`)되면, 아직 flush 안 된 마지막 버퍼(최대 libc `BUFSIZ` 수준, 통상 4KB)만큼의 콘솔 로그 줄이 유실될 수 있음. 다만 이 로그는 순수 진단용이고, 실제 메트릭 데이터는 이와 무관하게 `metricStoreQueue` → SQLite 경로로 별도 영속화되므로 데이터 유실은 아님. `Collector`가 애초에 정상 종료 경로 없이 `kill`로만 종료되는 기존 관례(1-7 설계 시 이미 짚어둔 사항)와 궤를 같이함 — 새로 생기는 리스크가 아니라 기존 트레이드오프의 연장선.
+- `std::cerr`(라인 108/115의 접속/에러 로그)는 원래 unbuffered라 이번 변경과 무관 — 그대로 둠.
+- 별도 워커 큐로 로깅 자체를 옮기는 방안도 고려했으나, 문제의 본질이 "블로킹 syscall이 다른 스레드를 막는가"가 아니라 "불필요한 flush 빈도"라 큐잉은 과한 해법으로 판단, 채택 안 함.
+
+### 검증 계획(적용 시)
+
+1. `cmake --build build` 성공 확인(회귀 없음).
+2. `strace -f -c`로 300-agent 시나리오 재실측 → 적용 전(`write` 9,270~90,276줄 대비 92% 시간) 대비 `write` syscall 횟수/시간 비교(1-7-d WAL 검증과 동일한 방법론).
+3. `connect_success`/지연시간(p95/p99)에 유의미한 개선이 있는지 확인 — 1-7-b 기록상 이 병목의 심각도가 낮게(`queue_drop=0`) 평가돼 있어, 실측으로 실제 효과 크기를 확인하는 게 목적.
+
+### 결정 사항
+
+- 아직 파일 수정 전 — `CLAUDE.md` 규칙대로 제안 단계. 사용자가 "적용해줘" 하면 `Collector/main.cpp` 1줄(`std::endl` → `'\n'`) 반영 예정, 이후 위 검증 계획대로 빌드 + 300-agent strace 재실측.
+
+## 2026-07-29 — 콘솔 로깅 병목: 2순위(워커 스레드 위임)로 우선순위 변경 + 1순위 일부 결합 설계
+
+### 배경
+
+바로 위 항목(1순위: `std::endl` → `'\n'` + `sync_with_stdio(false)`)을 사용자에게 브리핑한 뒤, 사용자가 "2순위(로깅을 워커 스레드로 위임)를 먼저 적용하는 게 맞아 보인다"고 판단 — 근거로 든 "flush를 안 하면 C++ 특성상 메모리 버퍼에 문제가 생길 것 같다"는 우려에 대해 정정 후, 그 정정 과정에서 드러난 실제 리스크를 반영해 설계를 다시 잡음.
+
+### 정정 — "flush 생략 = 메모리 버퍼 문제"는 사실이 아님
+
+`std::cout`의 내부 `streambuf` 버퍼는 고정 크기(libc 기준 통상 4KB)로, `std::endl` 대신 `'\n'`을 쓰더라도 버퍼가 무한정 커지지 않음 — 버퍼가 차면 라이브러리가 자동으로 flush(`overflow()`/`sync()`)함. 부작용은 (1) 출력 시점이 버퍼가 찰 때/프로그램 정상 종료 시까지 늦어짐, (2) 비정상 종료(`kill -9`, 크래시) 시 마지막 버퍼분(최대 4KB 수준)만 유실 가능 — 둘 다 이미 위 1순위 항목에서 짚어둔 트레이드오프와 동일.
+
+### 실제 리스크 — 2순위를 "그대로"만 적용(std::endl 유지) 시 큐 적체로 인한 메모리 증가
+
+`WorkerQueue`(`Common/WorkerQueue.h`/`.cpp`)는 내부적으로 `std::queue<std::function<void()>>`를 쓰며 **크기 제한이 없음**. 로깅을 워커 스레드로 옮기되 `std::endl`(강제 flush)을 그대로 둔다면 로그 1건 처리 비용 자체는 줄지 않음(1-7-d WAL 검증에서 이미 확인한 교훈과 동일 — 스레드 이동은 "누가 블로킹되는가"만 바꾸고 "비용의 크기"는 안 바꿈). 300-agent 시나리오(초당 ~1,500건 유입)에서 워커 스레드의 flush-포함 처리 속도가 유입 속도를 못 따라가면 `Push`된 작업이 큐에 무한정 쌓여 **실제로 메모리가 계속 증가하는 문제**가 생길 수 있음 — 사용자가 우려한 "메모리 버퍼 문제"가 발생하는 지점은 맞지만, 원인은 flush 생략이 아니라 **flush를 유지한 채 다른 스레드로만 옮기는 것**.
+
+### 결론 — 2순위 + 1순위(`'\n'`) 결합
+
+로깅을 워커 스레드로 위임(2순위, 네트워크 스레드 블로킹 제거)하되, 옮겨진 워커 작업 안에서도 `std::endl` 대신 `'\n'`을 사용(1순위 일부 결합, 워커 스레드 처리 비용 자체를 낮춰 큐 적체 위험을 줄임). `sync_with_stdio(false)`(이 코드베이스는 `std::cout`만 쓰고 C `printf`는 안 써서 순서 꼬임 리스크 없음)도 별도 비용 없이 같이 반영.
+
+### 제안 — `Collector/main.cpp` 수정 (수정 전 / 수정 후, 함수 전문 — `main()`)
+
+수정 전(현재 git에 커밋된 상태, `2d44c72`까지 반영됨):
+```cpp
+int main()
+{
+#ifdef _WIN32
+    // 소스가 UTF-8(/utf-8)로 컴파일되는데 Windows 콘솔 기본 코드페이지(한글 Windows는 949)는
+    // 그와 달라서, std::cout으로 찍는 한글 문자열이 콘솔에서 깨져 보임 - 출력 코드페이지를
+    // UTF-8로 맞춰서 해결. Linux는 기본이 UTF-8이라 이 문제 자체가 없음.
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+    try
+    {
+        // Agent<->Collector, Collector<->WebServer 두 구간 모두 AES-256-GCM(AesGcmPayload) -
+        // 구간별 키는 분리 유지(한 쪽이 유출돼도 다른 구간은 안전). 배경: Docs/ARIA_TO_AES_MIGRATION.md
+        AesGcmCipher::Key agentCollectorKey = LoadKeyFromHexFile("certs/agent_collector_aes.key");
+        AesGcmCipher::Key webServerKey = LoadKeyFromHexFile("certs/webserver_aes.key");
+
+        CollectorConfig config = LoadCollectorConfig("collector_config.json");
+
+        auto store = CreateMetricStore(STORAGE_CONNECTION_INFO, config.metricsRetentionDays);
+
+        // 1-7: SqliteMetricStore::Store()의 fdatasync가 네트워크 스레드를 막지 못하게, 저장 호출을
+        // 전용 워커 스레드로 넘기는 큐. storePtr은 store(unique_ptr)가 main() 스코프 내내 살아있는
+        // 것에 기대는 non-owning 포인터 - 워커 스레드도 main()이 끝나기 전까지만 존재하므로 안전.
+        IMetricStore* storePtr = store.get();
+        WorkerQueue metricStoreQueue;
+
+        // Collector가 받은 뒤 아직 WebServer로 안 보낸 메트릭들 - 주기/CLI 트리거로 비워짐.
+        std::vector<apm::Metric> pendingMetrics;
+
+        asio::io_context ioContext;
+
+        // Agent 접속을 받는 서버 역할 컨텍스트(기존)
+        asio::ssl::context sslContext(asio::ssl::context::tls_server);
+        sslContext.use_certificate_chain_file("certs/server.crt");
+        sslContext.use_private_key_file("certs/server.key", asio::ssl::context::pem);
+
+        // WebServer에 접속하는 클라이언트 역할 컨텍스트(신규) - Agent용과 모드가 달라 별도 필요.
+        asio::ssl::context webServerSslContext(asio::ssl::context::tls_client);
+        // 테스트용 자체 서명 인증서라 CA 검증 생략(Agent->Collector와 동일한 이유, 프로덕션 금지).
+        webServerSslContext.set_verify_mode(asio::ssl::verify_none);
+
+        ResilientSender webServerSender(ioContext, webServerSslContext,
+            config.webServerHost, config.webServerPort,
+            [webServerKey]() { return std::make_unique<AesGcmPayload>(webServerKey); });
+
+        PacketHandler::Register<apm::Metric>(
+            [storePtr, &metricStoreQueue, &pendingMetrics](const apm::Metric& pkt)
+            {
+                // Collector 안에서 "트랜잭션"이라 부를 만한 지점 중 가장 자연스러운 곳 -
+                // Agent가 보낸 메트릭 패킷 하나를 받아 저장하는 구간(2026-07-26 4순위 데모 계측).
+                APM_TRACE_SCOPE("Collector.HandleMetricPacket");
+
+                // store->Store(pkt) 직접 호출(동기, fdatasync 블로킹 포함) 대신 워커 스레드로 위임.
+                // pkt은 값 복사로 캡처 - 비동기 실행 시점까지 살아있어야 함.
+                metricStoreQueue.Push([storePtr, pkt]() { storePtr->Store(pkt); });
+
+                pendingMetrics.push_back(pkt);
+                // 저장이 이제 비동기라 이 시점엔 아직 안 끝났을 수 있음 - "stored"는 부정확한 표현이라 정정.
+                std::cout << "[Collector] metric received: cpu=" << pkt.cpu_usage_percent()
+                    << "% mem=" << pkt.mem_used_bytes() << "/" << pkt.mem_total_bytes()
+                    << " disk=" << pkt.disk_used_bytes() << "/" << pkt.disk_total_bytes()
+                    << " net=rx:" << pkt.net_rx_bytes_per_sec() << "B/s,tx:" << pkt.net_tx_bytes_per_sec() << "B/s"
+                    << " tcp=rtt:" << pkt.tcp_rtt_us() << "us,var:" << pkt.tcp_rtt_var_us() << "us"
+                    << ",retrans:" << pkt.tcp_retransmits() << "(total:" << pkt.tcp_total_retrans() << ")"
+                    << ",cwnd:" << pkt.tcp_snd_cwnd()
+                    << std::endl;
+            });
+
+        asio::ip::tcp::acceptor acceptor(ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), PORT));
+
+        // 포트바인딩 : 특권이 필요할 수 있는 유일한 단계, 완료 직후 권한 하향
+        PrivilegeDrop::DropTo("nobody");
+
+        std::function<void()> doAccept;
+        doAccept = [&]()
+        {
+            acceptor.async_accept(
+                [&](const asio::error_code &ec, asio::ip::tcp::socket socket)
+                {
+                    if (!ec)
+                    {
+                        std::cout << "[Collector] connection accepted" << std::endl;
+                        auto session = std::make_shared<ApmSession>(std::move(socket), sslContext, SessionMode::Server,
+                            std::make_unique<AesGcmPayload>(agentCollectorKey));
+                        session->Start(nullptr, nullptr, &PacketHandler::Dispatch);
+                    }
+                    else
+                    {
+                        std::cerr << "[Collector] accept error : " << ec.message() << std::endl;
+                    }
+                    doAccept();
+                });
+        };
+        doAccept();
+
+        // pendingMetrics/SpanRecorder에 쌓인 걸 전부 WebServer로 보내고 비움 - 주기 타이머와
+        // CLI 트리거 둘 다 이 함수 하나를 호출함(로직 중복 방지). span 전송을 여기 얹은 이유:
+        // 이미 "주기적으로 WebServer에 밀어넣는" 책임을 지고 있는 함수라 새 타이머를 또
+        // 만들 필요가 없음(2026-07-26 4순위 설계).
+        auto flushToWebServer = [&pendingMetrics, &webServerSender]()
+        {
+            if (!pendingMetrics.empty())
+            {
+                std::cout << "[Collector] WebServer로 " << pendingMetrics.size() << "건 전송 시도" << std::endl;
+                for (const auto& m : pendingMetrics)
+                    webServerSender.Enqueue(m);
+
+                pendingMetrics.clear();
+            }
+
+            auto spans = SpanRecorder::Instance().DrainAll();
+            if (!spans.empty())
+            {
+                std::cout << "[Collector] WebServer로 span " << spans.size() << "건 전송 시도" << std::endl;
+                for (const auto& s : spans)
+                {
+                    apm::TransactionSpan pkt;
+                    pkt.set_operation_name(s.operationName);
+                    pkt.set_duration_us(s.durationUs);
+                    pkt.set_success(s.success);
+                    webServerSender.Enqueue(pkt);
+                }
+            }
+        };
+
+        asio::steady_timer pushTimer(ioContext);
+        std::function<void()> schedulePush;
+        schedulePush = [&]()
+        {
+            pushTimer.expires_after(std::chrono::seconds(config.pushIntervalSeconds));
+            pushTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        flushToWebServer();
+                        schedulePush();
+                    }
+                });
+        };
+        schedulePush();
+
+        // 로컬 저장소(store) 보존 정책 - pushTimer와 같은 패턴, 24시간 간격으로
+        // 오래된 행 정리(TimescaleMetricStore는 내부적으로 no-op, SqliteMetricStore만 실제
+        // DELETE 수행 - IMetricStore::Prune 문서 참고, 2026-07-26 3순위 설계).
+        asio::steady_timer pruneTimer(ioContext);
+        std::function<void()> schedulePrune;
+        schedulePrune = [&]()
+        {
+            pruneTimer.expires_after(std::chrono::hours(24));
+            pruneTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        store->Prune(config.metricsRetentionDays);
+                        schedulePrune();
+                    }
+                });
+        };
+        schedulePrune();
+
+        // Collector 콘솔에 "send"를 입력하면 즉시 전송. stdin 읽기는 블로킹이라 별도 스레드에서
+        // 돌리고, 실제 전송(flushToWebServer)은 asio::post로 io_context 스레드에 넘김 -
+        // pendingMetrics/webServerSender를 항상 단일 스레드에서만 건드리게 되어 락이 불필요함.
+        std::thread cliThread(
+            [&ioContext, &flushToWebServer]()
+            {
+                String line;
+                while (std::getline(std::cin, line))
+                {
+                    if (line == "send")
+                        asio::post(ioContext, flushToWebServer);
+                }
+            });
+        cliThread.detach();
+
+        std::cout << "Collector listening on port " << PORT << " (TLS)" << std::endl;
+        std::cout << "[Collector] WebServer(" << config.webServerHost << ":" << config.webServerPort
+            << ")로 " << config.pushIntervalSeconds << "초마다 전송 (콘솔에 'send' 입력 시 즉시 전송)" << std::endl;
+        ioContext.run();
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "[Collector] fatal: " << e.what() << std::endl;
+        return 1;
+    }
+    return 0;
+}
+```
+
+수정 후(변경 지점 4곳 — ① `sync_with_stdio(false)` 추가, ② `consoleLogQueue` 선언 추가, ③ 람다 캡처 목록에 `&consoleLogQueue` 추가, ④ 로그 블록을 `consoleLogQueue.Push(...)`로 위임 + `std::endl`→`'\n'`. 나머지는 변경 없음):
+```cpp
+int main()
+{
+    // std::cout이 C stdio(printf 등)와 동기화되지 않게 함 - 이 코드베이스는 std::cout만 쓰고
+    // C stdio는 안 써서 순서 꼬임 리스크 없음, << 연산의 불필요한 동기화 오버헤드만 제거.
+    std::ios::sync_with_stdio(false);
+
+#ifdef _WIN32
+    // 소스가 UTF-8(/utf-8)로 컴파일되는데 Windows 콘솔 기본 코드페이지(한글 Windows는 949)는
+    // 그와 달라서, std::cout으로 찍는 한글 문자열이 콘솔에서 깨져 보임 - 출력 코드페이지를
+    // UTF-8로 맞춰서 해결. Linux는 기본이 UTF-8이라 이 문제 자체가 없음.
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+    try
+    {
+        // Agent<->Collector, Collector<->WebServer 두 구간 모두 AES-256-GCM(AesGcmPayload) -
+        // 구간별 키는 분리 유지(한 쪽이 유출돼도 다른 구간은 안전). 배경: Docs/ARIA_TO_AES_MIGRATION.md
+        AesGcmCipher::Key agentCollectorKey = LoadKeyFromHexFile("certs/agent_collector_aes.key");
+        AesGcmCipher::Key webServerKey = LoadKeyFromHexFile("certs/webserver_aes.key");
+
+        CollectorConfig config = LoadCollectorConfig("collector_config.json");
+
+        auto store = CreateMetricStore(STORAGE_CONNECTION_INFO, config.metricsRetentionDays);
+
+        // 1-7: SqliteMetricStore::Store()의 fdatasync가 네트워크 스레드를 막지 못하게, 저장 호출을
+        // 전용 워커 스레드로 넘기는 큐. storePtr은 store(unique_ptr)가 main() 스코프 내내 살아있는
+        // 것에 기대는 non-owning 포인터 - 워커 스레드도 main()이 끝나기 전까지만 존재하므로 안전.
+        IMetricStore* storePtr = store.get();
+        WorkerQueue metricStoreQueue;
+
+        // 콘솔 로깅 병목(1-7-b 300-agent 재실측에서 발견) 개선용 - std::cout 조립/출력 자체를
+        // 네트워크 스레드에서 떼어내는 전용 워커 큐. metricStoreQueue와 분리한 이유: 로그 flush
+        // 지연이 메트릭 저장(또는 그 반대)을 밀리게 하지 않도록 책임을 나눔.
+        WorkerQueue consoleLogQueue;
+
+        // Collector가 받은 뒤 아직 WebServer로 안 보낸 메트릭들 - 주기/CLI 트리거로 비워짐.
+        std::vector<apm::Metric> pendingMetrics;
+
+        asio::io_context ioContext;
+
+        // Agent 접속을 받는 서버 역할 컨텍스트(기존)
+        asio::ssl::context sslContext(asio::ssl::context::tls_server);
+        sslContext.use_certificate_chain_file("certs/server.crt");
+        sslContext.use_private_key_file("certs/server.key", asio::ssl::context::pem);
+
+        // WebServer에 접속하는 클라이언트 역할 컨텍스트(신규) - Agent용과 모드가 달라 별도 필요.
+        asio::ssl::context webServerSslContext(asio::ssl::context::tls_client);
+        // 테스트용 자체 서명 인증서라 CA 검증 생략(Agent->Collector와 동일한 이유, 프로덕션 금지).
+        webServerSslContext.set_verify_mode(asio::ssl::verify_none);
+
+        ResilientSender webServerSender(ioContext, webServerSslContext,
+            config.webServerHost, config.webServerPort,
+            [webServerKey]() { return std::make_unique<AesGcmPayload>(webServerKey); });
+
+        PacketHandler::Register<apm::Metric>(
+            [storePtr, &metricStoreQueue, &pendingMetrics, &consoleLogQueue](const apm::Metric& pkt)
+            {
+                // Collector 안에서 "트랜잭션"이라 부를 만한 지점 중 가장 자연스러운 곳 -
+                // Agent가 보낸 메트릭 패킷 하나를 받아 저장하는 구간(2026-07-26 4순위 데모 계측).
+                APM_TRACE_SCOPE("Collector.HandleMetricPacket");
+
+                // store->Store(pkt) 직접 호출(동기, fdatasync 블로킹 포함) 대신 워커 스레드로 위임.
+                // pkt은 값 복사로 캡처 - 비동기 실행 시점까지 살아있어야 함.
+                metricStoreQueue.Push([storePtr, pkt]() { storePtr->Store(pkt); });
+
+                pendingMetrics.push_back(pkt);
+
+                // 콘솔 로그 조립+출력을 네트워크 스레드에서 떼어내 별도 워커로 위임(2순위 채택).
+                // std::endl 대신 '\n' 사용 - 워커 스레드 안에서도 매번 강제 flush하면 로그 1건
+                // 처리 비용 자체는 안 줄어, 유입 속도가 처리 속도를 앞지를 때 WorkerQueue 내부
+                // std::queue(무제한)에 처리 못 한 작업이 계속 쌓여 메모리가 늘어나는 리스크가
+                // 있음(1-7-d WAL 검증 교훈과 동일 - 스레드 이동은 "누가 블로킹되는가"만 바꿈).
+                // '\n'으로 워커 처리 비용 자체를 낮춰 큐 적체 위험을 줄임.
+                // 저장이 이제 비동기라 이 시점엔 아직 안 끝났을 수 있음 - "stored"는 부정확한 표현이라 정정.
+                consoleLogQueue.Push([pkt]()
+                {
+                    std::cout << "[Collector] metric received: cpu=" << pkt.cpu_usage_percent()
+                        << "% mem=" << pkt.mem_used_bytes() << "/" << pkt.mem_total_bytes()
+                        << " disk=" << pkt.disk_used_bytes() << "/" << pkt.disk_total_bytes()
+                        << " net=rx:" << pkt.net_rx_bytes_per_sec() << "B/s,tx:" << pkt.net_tx_bytes_per_sec() << "B/s"
+                        << " tcp=rtt:" << pkt.tcp_rtt_us() << "us,var:" << pkt.tcp_rtt_var_us() << "us"
+                        << ",retrans:" << pkt.tcp_retransmits() << "(total:" << pkt.tcp_total_retrans() << ")"
+                        << ",cwnd:" << pkt.tcp_snd_cwnd()
+                        << '\n';
+                });
+            });
+
+        asio::ip::tcp::acceptor acceptor(ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), PORT));
+
+        // 포트바인딩 : 특권이 필요할 수 있는 유일한 단계, 완료 직후 권한 하향
+        PrivilegeDrop::DropTo("nobody");
+
+        std::function<void()> doAccept;
+        doAccept = [&]()
+        {
+            acceptor.async_accept(
+                [&](const asio::error_code &ec, asio::ip::tcp::socket socket)
+                {
+                    if (!ec)
+                    {
+                        std::cout << "[Collector] connection accepted" << std::endl;
+                        auto session = std::make_shared<ApmSession>(std::move(socket), sslContext, SessionMode::Server,
+                            std::make_unique<AesGcmPayload>(agentCollectorKey));
+                        session->Start(nullptr, nullptr, &PacketHandler::Dispatch);
+                    }
+                    else
+                    {
+                        std::cerr << "[Collector] accept error : " << ec.message() << std::endl;
+                    }
+                    doAccept();
+                });
+        };
+        doAccept();
+
+        // pendingMetrics/SpanRecorder에 쌓인 걸 전부 WebServer로 보내고 비움 - 주기 타이머와
+        // CLI 트리거 둘 다 이 함수 하나를 호출함(로직 중복 방지). span 전송을 여기 얹은 이유:
+        // 이미 "주기적으로 WebServer에 밀어넣는" 책임을 지고 있는 함수라 새 타이머를 또
+        // 만들 필요가 없음(2026-07-26 4순위 설계).
+        auto flushToWebServer = [&pendingMetrics, &webServerSender]()
+        {
+            if (!pendingMetrics.empty())
+            {
+                std::cout << "[Collector] WebServer로 " << pendingMetrics.size() << "건 전송 시도" << std::endl;
+                for (const auto& m : pendingMetrics)
+                    webServerSender.Enqueue(m);
+
+                pendingMetrics.clear();
+            }
+
+            auto spans = SpanRecorder::Instance().DrainAll();
+            if (!spans.empty())
+            {
+                std::cout << "[Collector] WebServer로 span " << spans.size() << "건 전송 시도" << std::endl;
+                for (const auto& s : spans)
+                {
+                    apm::TransactionSpan pkt;
+                    pkt.set_operation_name(s.operationName);
+                    pkt.set_duration_us(s.durationUs);
+                    pkt.set_success(s.success);
+                    webServerSender.Enqueue(pkt);
+                }
+            }
+        };
+
+        asio::steady_timer pushTimer(ioContext);
+        std::function<void()> schedulePush;
+        schedulePush = [&]()
+        {
+            pushTimer.expires_after(std::chrono::seconds(config.pushIntervalSeconds));
+            pushTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        flushToWebServer();
+                        schedulePush();
+                    }
+                });
+        };
+        schedulePush();
+
+        // 로컬 저장소(store) 보존 정책 - pushTimer와 같은 패턴, 24시간 간격으로
+        // 오래된 행 정리(TimescaleMetricStore는 내부적으로 no-op, SqliteMetricStore만 실제
+        // DELETE 수행 - IMetricStore::Prune 문서 참고, 2026-07-26 3순위 설계).
+        asio::steady_timer pruneTimer(ioContext);
+        std::function<void()> schedulePrune;
+        schedulePrune = [&]()
+        {
+            pruneTimer.expires_after(std::chrono::hours(24));
+            pruneTimer.async_wait(
+                [&](const asio::error_code& ec)
+                {
+                    if (!ec)
+                    {
+                        store->Prune(config.metricsRetentionDays);
+                        schedulePrune();
+                    }
+                });
+        };
+        schedulePrune();
+
+        // Collector 콘솔에 "send"를 입력하면 즉시 전송. stdin 읽기는 블로킹이라 별도 스레드에서
+        // 돌리고, 실제 전송(flushToWebServer)은 asio::post로 io_context 스레드에 넘김 -
+        // pendingMetrics/webServerSender를 항상 단일 스레드에서만 건드리게 되어 락이 불필요함.
+        std::thread cliThread(
+            [&ioContext, &flushToWebServer]()
+            {
+                String line;
+                while (std::getline(std::cin, line))
+                {
+                    if (line == "send")
+                        asio::post(ioContext, flushToWebServer);
+                }
+            });
+        cliThread.detach();
+
+        std::cout << "Collector listening on port " << PORT << " (TLS)" << std::endl;
+        std::cout << "[Collector] WebServer(" << config.webServerHost << ":" << config.webServerPort
+            << ")로 " << config.pushIntervalSeconds << "초마다 전송 (콘솔에 'send' 입력 시 즉시 전송)" << std::endl;
+        ioContext.run();
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "[Collector] fatal: " << e.what() << std::endl;
+        return 1;
+    }
+    return 0;
+}
+```
+
+### 트레이드오프 — 짚어둘 것
+
+- `consoleLogQueue`도 `metricStoreQueue`와 마찬가지로 소멸 시 큐를 다 비우고 `join()`(1-7-b 설계와 동일 패턴) - 정상 종료 시 유실 없음. `Collector`가 애초에 정상 종료 경로 없이 `kill`로만 종료되는 기존 관례(1-7에서 이미 짚어둔 사항)라 이 특성 자체는 새로 생기는 리스크가 아님.
+- 워커 스레드가 하나 늘어남(`metricStoreQueue`용 1개 + `consoleLogQueue`용 1개, 총 2개) - 리소스 비용은 스레드 1개 수준으로 낮음.
+- `'\n'`로 바꿔도 큐 적체 위험이 "이론적으로 0"이 되는 건 아님(유입 속도가 극단적으로 치솟으면 여전히 쌓일 수 있음) - 다만 300-agent 실측 범위에선 강제 flush 제거만으로 처리 비용이 크게 줄 것으로 예상(1-7-d WAL 검증에서 `fdatasync` 제거가 -97% 시간 절감을 보인 것과 유사한 성격). 실측으로 큐 깊이/드롭 여부까지 확인 필요.
+
+### 검증 계획(적용 시)
+
+1. `cmake --build build` 성공 확인(회귀 없음).
+2. `strace -f -c`로 300-agent 재실측 → `write` syscall 횟수/시간, `connect_success`/지연시간(p95/p99) 비교(1-7-d와 동일 방법론).
+3. (신규) 로그 큐 적체 여부 확인 — 필요시 `consoleLogQueue`에 현재 대기 중인 작업 수를 노출하는 간단한 카운터를 임시로 추가해 300-agent 시나리오 동안 큐 깊이가 발산하지 않고 수렴하는지 확인(선택 사항, 실측에서 이상 징후 있을 때만).
+
+### 결정 사항
+
+- 아직 파일 수정 전 — `CLAUDE.md` 규칙대로 제안 단계. 사용자가 "적용해줘" 하면 `Collector/main.cpp` 1개 파일(위 4곳) 반영 예정, 이후 위 검증 계획대로 빌드 + 300-agent strace 재실측.
+
+### 적용 완료 (2026-07-29, "적용하자"로 명시 확인)
+
+`Collector/main.cpp` 위 4곳 실제 반영. `cmake --build build` 성공, `ctest` 9/9 통과. `strace -f -c` 300-agent(ramp-up 5s) 재실측 결과와 WAL 적용 후 대비 비교 표는 `WORK_STATUS.md` 신규 "1-7-e" 절 참고 — 요약: connect_success 250/300→**300/300(전원)**, latency p95/p99 소폭 개선(19,890/26,044ms → 19,322/24,970ms, 더 많은 트래픽 처리하면서도), 단 워커 스레드가 1개→2개로 늘며 **futex 경합이 새 지배적 비용(18.19s→49.26s, 36.5%→57.22%)**으로 떠올라 전체 syscall 시간은 오히려 증가(49.81s→86.09s, 메트릭당 정규화 기준 0.345ms→0.501ms) — 1-7-d WAL 트레이드오프와 같은 패턴("한 비용을 줄이면 다른 형태로 비용이 늘 수 있다") 재확인. `queue_drop=0` 유지, 크래시 없음. 실측 산출물: `loadtest_results/straceF_300_afterLogFix_20260729_001310/`. 커밋은 아직 안 함(사용자 요청 시 진행).

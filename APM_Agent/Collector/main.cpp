@@ -27,6 +27,10 @@ namespace
 
 int main()
 {
+    // std::cout이 C stdio(printf 등)와 동기화되지 않게 함 - 이 코드베이스는 std::cout만 쓰고
+    // C stdio는 안 써서 순서 꼬임 리스크 없음, << 연산의 불필요한 동기화 오버헤드만 제거.
+    std::ios::sync_with_stdio(false);
+
 #ifdef _WIN32
     // 소스가 UTF-8(/utf-8)로 컴파일되는데 Windows 콘솔 기본 코드페이지(한글 Windows는 949)는
     // 그와 달라서, std::cout으로 찍는 한글 문자열이 콘솔에서 깨져 보임 - 출력 코드페이지를
@@ -50,6 +54,11 @@ int main()
         IMetricStore* storePtr = store.get();
         WorkerQueue metricStoreQueue;
 
+        // 콘솔 로깅 병목(1-7-b 300-agent 재실측에서 발견) 개선용 - std::cout 조립/출력 자체를
+        // 네트워크 스레드에서 떼어내는 전용 워커 큐. metricStoreQueue와 분리한 이유: 로그 flush
+        // 지연이 메트릭 저장(또는 그 반대)을 밀리게 하지 않도록 책임을 나눔.
+        WorkerQueue consoleLogQueue;
+
         // Collector가 받은 뒤 아직 WebServer로 안 보낸 메트릭들 - 주기/CLI 트리거로 비워짐.
         std::vector<apm::Metric> pendingMetrics;
 
@@ -70,7 +79,7 @@ int main()
             [webServerKey]() { return std::make_unique<AesGcmPayload>(webServerKey); });
 
         PacketHandler::Register<apm::Metric>(
-            [storePtr, &metricStoreQueue, &pendingMetrics](const apm::Metric& pkt)
+            [storePtr, &metricStoreQueue, &pendingMetrics, &consoleLogQueue](const apm::Metric& pkt)
             {
                 // Collector 안에서 "트랜잭션"이라 부를 만한 지점 중 가장 자연스러운 곳 -
                 // Agent가 보낸 메트릭 패킷 하나를 받아 저장하는 구간(2026-07-26 4순위 데모 계측).
@@ -81,15 +90,25 @@ int main()
                 metricStoreQueue.Push([storePtr, pkt]() { storePtr->Store(pkt); });
 
                 pendingMetrics.push_back(pkt);
+
+                // 콘솔 로그 조립+출력을 네트워크 스레드에서 떼어내 별도 워커로 위임(2순위 채택).
+                // std::endl 대신 '\n' 사용 - 워커 스레드 안에서도 매번 강제 flush하면 로그 1건
+                // 처리 비용 자체는 안 줄어, 유입 속도가 처리 속도를 앞지를 때 WorkerQueue 내부
+                // std::queue(무제한)에 처리 못 한 작업이 계속 쌓여 메모리가 늘어나는 리스크가
+                // 있음(1-7-d WAL 검증 교훈과 동일 - 스레드 이동은 "누가 블로킹되는가"만 바꿈).
+                // '\n'으로 워커 처리 비용 자체를 낮춰 큐 적체 위험을 줄임.
                 // 저장이 이제 비동기라 이 시점엔 아직 안 끝났을 수 있음 - "stored"는 부정확한 표현이라 정정.
-                std::cout << "[Collector] metric received: cpu=" << pkt.cpu_usage_percent()
-                    << "% mem=" << pkt.mem_used_bytes() << "/" << pkt.mem_total_bytes()
-                    << " disk=" << pkt.disk_used_bytes() << "/" << pkt.disk_total_bytes()
-                    << " net=rx:" << pkt.net_rx_bytes_per_sec() << "B/s,tx:" << pkt.net_tx_bytes_per_sec() << "B/s"
-                    << " tcp=rtt:" << pkt.tcp_rtt_us() << "us,var:" << pkt.tcp_rtt_var_us() << "us"
-                    << ",retrans:" << pkt.tcp_retransmits() << "(total:" << pkt.tcp_total_retrans() << ")"
-                    << ",cwnd:" << pkt.tcp_snd_cwnd()
-                    << std::endl;
+                consoleLogQueue.Push([pkt]()
+                {
+                    std::cout << "[Collector] metric received: cpu=" << pkt.cpu_usage_percent()
+                        << "% mem=" << pkt.mem_used_bytes() << "/" << pkt.mem_total_bytes()
+                        << " disk=" << pkt.disk_used_bytes() << "/" << pkt.disk_total_bytes()
+                        << " net=rx:" << pkt.net_rx_bytes_per_sec() << "B/s,tx:" << pkt.net_tx_bytes_per_sec() << "B/s"
+                        << " tcp=rtt:" << pkt.tcp_rtt_us() << "us,var:" << pkt.tcp_rtt_var_us() << "us"
+                        << ",retrans:" << pkt.tcp_retransmits() << "(total:" << pkt.tcp_total_retrans() << ")"
+                        << ",cwnd:" << pkt.tcp_snd_cwnd()
+                        << '\n';
+                });
             });
 
         asio::ip::tcp::acceptor acceptor(ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), PORT));
