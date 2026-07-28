@@ -27,12 +27,38 @@ namespace
 	// "지금 - N일"로 재계산(2026-07-26 3순위 설계).
 	constexpr const char* PRUNE_SQL =
 		"DELETE FROM metrics WHERE ts < strftime('%s','now') - (? * 86400);";
+
+	// sqlite3_exec 콜백 - "PRAGMA journal_mode" 같은 SELECT류 PRAGMA가 반환하는 첫 컬럼 값을
+	// out(String* 캐스팅)에 담아 호출자가 실제로 적용됐는지 확인할 수 있게 함.
+	int CapturePragmaResult(void* out, int columnCount, char** columnValues, char**)
+	{
+		if (out && columnCount > 0 && columnValues[0])
+			*static_cast<String*>(out) = columnValues[0];
+		return 0;
+	}
 }
 
 SqliteMetricStore::SqliteMetricStore(const String& dbPath)
 {
 	if (::sqlite3_open(dbPath.c_str(), &_db) != SQLITE_OK)
 		throw std::runtime_error("SqliteMetricStore - open failed: " + String(::sqlite3_errmsg(_db)));
+
+	// WAL(Write-Ahead Logging) - 기본 롤백 저널은 INSERT 1건마다 저널 파일을 열고/쓰고/
+	// fdatasync로 강제 flush하고/지운다. strace -f로 저장 워커 스레드까지 추적해 실측한 결과
+	// fdatasync/pwrite64/fcntl이 전체 syscall 시간의 약 25%를 차지하는 걸 확인한 뒤 도입
+	// (2026-07-28, Docs/PROJECT_TECHNICAL_REVIEW.md §7-6). WAL은 커밋마다 새 저널 파일을
+	// 만드는 대신 하나의 -wal 파일에 append만 하고, 체크포인트 시점에만 fsync한다.
+	// synchronous=NORMAL은 WAL과 짝을 이루는 표준 조합 - 매 커밋마다 fsync하지 않으므로
+	// OS 크래시/정전 시 마지막 몇 건의 커밋을 잃을 수 있다(앱 크래시엔 안전 - WAL 자체가
+	// 원자적). 메트릭은 계속 흘러들어오는 시계열 관측 데이터라 이 손실 범위를 감내할 수
+	// 있다고 판단해 선택. journal_mode는 실패해도 예외를 던지지 않고(레거시 저널로 계속
+	// 동작 가능) 로그만 남김 - 저장 자체가 안 되는 것보다 낫다는 판단.
+	String journalMode;
+	::sqlite3_exec(_db, "PRAGMA journal_mode = WAL;", CapturePragmaResult, &journalMode, nullptr);
+	if (journalMode != "wal")
+		std::cerr << "[SqliteMetricStore] WAL 모드 전환 실패 - 현재 journal_mode=" << journalMode << std::endl;
+
+	::sqlite3_exec(_db, "PRAGMA synchronous = NORMAL;", nullptr, nullptr, nullptr);
 
 	// DELETE만으로는 SQLite 파일 크기가 줄지 않음(빈 페이지가 파일 내부에서 재사용될 뿐 OS에
 	// 반환되지 않음) - incremental_vacuum 모드로 열어두면 Prune() 직후 PRAGMA incremental_vacuum

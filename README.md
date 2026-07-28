@@ -19,6 +19,7 @@
 - **실측 성능(Agent 정상 동작)**: syscall 1,921회/19.4ms(5분), RSS 13.8MB 고정(누수 없음), CPU 평균 0.017%
 - **스케일 테스트(Collector)**: 자체 제작 `LoadTester`로 최대 300 동시 연결까지 부하 실측 — 동시 접속 ~72개에서 하드 리밋 발견, `strace` 분석으로 원인이 SQLite 동기 `fdatasync`(단일 스레드 이벤트 루프를 블로킹)임을 확인(CPU/메모리는 병목 아님). 상세: `Docs/PROJECT_TECHNICAL_REVIEW.md` §7-4
 - **스케일 병목 개선 + 재실측**: SQLite 저장 호출을 전용 워커 스레드로 분리해 100개 이하 동시 접속의 하드 리밋을 완전히 해소(전원 접속 성공, p95/p99 사실상 0ms). syscall 분석으로 SQLite 관련 호출이 네트워크 스레드에서 실제로 사라졌음을 확인. 300개 규모에서는 접속 성공이 71→229로 3배 이상 늘었으나, 이번엔 콘솔 로깅이 새 병목으로 드러남(후속 과제). 상세: `Docs/PROJECT_TECHNICAL_REVIEW.md` §7-5
+- **멀티스레드 프로파일링 + WAL 도입**: `strace -f`로 워커 스레드까지 추적해 "syscall이 안 보인다"가 "비용이 사라졌다"를 의미하지 않음을 확인(`fdatasync`가 워커 스레드로 이동했을 뿐 실제로는 전체 syscall 시간의 25%를 차지) → `journal_mode=WAL`+`synchronous=NORMAL` 도입 → `fdatasync` 호출 99% 감소(9,008→54회), 단 WAL 공유메모리 락(`fcntl`) 비용이 5배 늘어나는 트레이드오프 확인, 전체 syscall 시간 21% 감소. 상세: `Docs/PROJECT_TECHNICAL_REVIEW.md` §7-6
 
 자세한 아키텍처·설계 의사결정·발견한 버그는 [`Docs/PROJECT_TECHNICAL_REVIEW.md`](Docs/PROJECT_TECHNICAL_REVIEW.md) 또는 [`Docs/portfolio_apm.html`](Docs/portfolio_apm.html)을 참고.
 

@@ -22,7 +22,7 @@
 ## 로드맵 (우선순위 순, 2026-07-26 확정)
 
 ```
-1-7(신규) : Collector Store() 블로킹 개선                ✅ WorkerQueue 재설계 적용 + 빌드/재실측 검증 완료(2026-07-28) — 100 이하 하드 리밋 해소
+1-7(신규) : Collector Store() 블로킹 개선                ✅ WorkerQueue + WAL 적용 + 빌드/재실측 검증 완료(2026-07-28) — 100 이하 하드 리밋 해소, fdatasync -97%
 1순위 : 부하/스케일 테스트 툴                         ✅ 실측 + 문서화 완료
 2순위 : 알림(alerting, 임계치 기반)                    ✅ 코드 적용 + 빌드/테스트 검증 완료
 3순위 : 데이터 보존 정책(retention)                    ✅ 코드 적용 + 빌드 검증 완료
@@ -116,12 +116,42 @@
 
 **README.md**/`Docs/PROJECT_TECHNICAL_REVIEW.md`(신규 §7-5) 반영 완료(2026-07-28) — 사용자가 "문서화만 하고 로깅 병목은 넘어가기"로 확정, 로깅 병목은 후속 과제로만 기록.
 
-**남은 것**: git 커밋 아직 안 함(오늘 변경분 — `WorkerQueue.h`/`.cpp` 신규, `Common/CMakeLists.txt`/`Collector/main.cpp`/`README.md`/`Docs/PROJECT_TECHNICAL_REVIEW.md` 수정 + `loadtest_results/agents_*_20260728_*` 6개 신규 산출물). WAL 재검토는 여전히 보류 상태(다음에 다룰 경우 재검토).
+**git 커밋 완료(2026-07-28, `2050b498` "APM 2차 마무리")** — 위 변경분 전부 반영됨. 참고: `git add -A` 방식으로 커밋된 것으로 보여 `crash.log`/2026-07-27 무효 재실측 결과 6개도 같이 딸려 들어감(아래 "정리 필요한 산출물" 참고, 급한 문제는 아님).
 
-**정리 필요한 산출물(다음 세션에서 처리)**:
-- `APM_Agent/crash.log` — 이번 크래시가 만든 파일(untracked), 진단 끝났으니 삭제해도 됨(증거로 남기고 싶으면 유지).
-- `APM_Agent/loadtest_results/agents_*_20260727_11*` (6개, 이번 세션의 무효 재실측 결과) — 크래시로 무효한 데이터라 실측 비교 시 참고하면 안 됨. 삭제하거나 "무효" 표시 후 보관.
-- `APM_Agent/run_load_test.sh` — 실행 권한 비트만 변경됨(`chmod +x`, 내용 변경 없음), 커밋 대상.
+**정리 필요한 산출물(git에 이미 커밋됨, 원하면 별도 정리 커밋으로 제거 가능)**:
+- `APM_Agent/crash.log` — 진단 끝난 파일.
+- `APM_Agent/loadtest_results/agents_*_20260727_11*` (6개) — 크래시로 무효한 데이터, 실측 비교 시 참고하면 안 됨.
+
+---
+
+### 1-7-d — WAL(`journal_mode=WAL`+`synchronous=NORMAL`) 도입 ✅ 완료(2026-07-28)
+
+**배경**: 1-7-b(`strace -c`, 네트워크 스레드만 추적) 요약에서 `fdatasync`가 8회로 급감한 걸 근거로 "SQLite 저장 비용이 사라졌다"고 정리했으나, `strace`가 기본적으로 새 스레드를 안 따라간다는 걸 감안하면 이건 착시일 수 있다는 논의가 나옴. WAL 도입 여부를 결정하기 전에 **워커 스레드 자체까지 실측**하기로 함(사용자 요청: "이 과정 대신 시행해줄 수는 없는건가" — `wsl.exe`로 직접 WSL 안에 들어가 빌드/테스트/부하테스트를 대행할 수 있음을 이번에 확인, 이후 직접 실행).
+
+**측정(`strace -f -c`, 300-agent, WAL 적용 전)**: `fdatasync`가 다시 나타남 — 9,008회, 10.8초(17.1%). `fdatasync`+`pwrite64`+`fcntl` 합산 전체 syscall 시간의 약 25%. 착시였음을 확인, WAL 도입 근거 확보.
+
+**적용 완료** — 사용자가 "문서화하고 WAL 적용하자"로 명시 확인, `APM_Agent/Storage/SqliteMetricStore.cpp` 생성자에 `PRAGMA journal_mode = WAL;`(결과를 `CapturePragmaResult` 콜백으로 확인해 실패 시 로그) + `PRAGMA synchronous = NORMAL;` 추가. `.gitignore`에 `*.db-wal`/`*.db-shm`/`*.db-journal` 추가(WAL 사이드카 파일이 `*.db` 패턴에 안 걸려 실수로 커밋될 뻔한 걸 미리 방지).
+
+**검증 완료(WSL, `wsl.exe`로 직접 실행, 2026-07-28)**:
+- `cmake --build build` 성공, `ctest` 9/9 통과.
+- 스모크 테스트: Collector 짧게 실행 후 `apm_metrics.db-wal`/`-shm` 파일 생성 확인 + "WAL 모드 전환 실패" 로그 없음 → WAL 정상 활성화 확인.
+- 재실측(`strace -f -c`, 300-agent, WAL 적용 후) vs 적용 전 비교:
+
+| syscall | 적용 전 | 적용 후 | 변화 |
+|---|---|---|---|
+| `fdatasync` | 10.81s(17.1%), 9,008회 | 0.34s(0.7%), 54회 | -97% 시간 |
+| `pwrite64` | 3.05s(4.8%), 22,677회 | 4.92s(9.9%), 34,212회 | +61% |
+| `fcntl` | 2.31s(3.7%), 20,280회 | 12.41s(24.9%), 98,972회 | +437% |
+| `futex` | 30.41s(48.0%) | 18.19s(36.5%) | -40% |
+| `write`(로깅) | 11.34s(17.9%) | 12.75s(25.6%) | 거의 동일 |
+| 전체 syscall 시간 | 63.33s | 49.81s | **-21%** |
+| connect_success | 246/300 | 250/300 | 유의미한 차이 없음 |
+
+**결론**: `fdatasync`는 거의 제거됐지만(-97%), WAL의 공유메모리 인덱스 락(`fcntl`)이 5배 넘게 늘어 fsync 비용의 상당 부분이 락 비용으로 형태만 바뀜(전체 -21%는 실제 순이득). 300-agent 극단값에서 `connect_success`/지연시간은 유의미하게 안 바뀜 — 이 규모에선 이미 `write`(콘솔 로깅)/`futex`(락 대기)가 더 크게 지배. 100개 이하 구간(1-7-b에서 이미 0~1ms로 해소)엔 체감 효과 작음, 장기 운영 시 디스크 I/O 총량 감소 의미.
+
+**문서 반영 완료**: `Docs/PROJECT_TECHNICAL_REVIEW.md`(신규 §7-6, §7-4/§7-5 관련 서술 갱신), `README.md`.
+
+**남은 것**: 이번 세션 변경분(`SqliteMetricStore.cpp`, `.gitignore`, 문서, `loadtest_results/straceF_300_*` 2개 신규) 아직 커밋 안 됨. 콘솔 로깅 병목(1-7-b에서 발견)은 여전히 후속 과제로만 남아있음.
 
 ---
 
