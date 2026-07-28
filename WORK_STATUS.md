@@ -22,7 +22,7 @@
 ## 로드맵 (우선순위 순, 2026-07-26 확정)
 
 ```
-1-7(신규) : Collector Store() 블로킹 개선                🔴 커밋된 JobQueue 버전이 실사용 중 크래시 확인 — WorkerQueue로 재설계, 적용 대기 (세션 중단)
+1-7(신규) : Collector Store() 블로킹 개선                ✅ WorkerQueue 재설계 적용 + 빌드/재실측 검증 완료(2026-07-28) — 100 이하 하드 리밋 해소
 1순위 : 부하/스케일 테스트 툴                         ✅ 실측 + 문서화 완료
 2순위 : 알림(alerting, 임계치 기반)                    ✅ 코드 적용 + 빌드/테스트 검증 완료
 3순위 : 데이터 보존 정책(retention)                    ✅ 코드 적용 + 빌드 검증 완료
@@ -77,7 +77,7 @@
 
 ---
 
-### 1-7-b — 재실측 중 크래시 발견 + `JobQueue` → 자체 `WorkerQueue` 전환 🔴 설계 완료, 적용 대기 — **세션 중단(2026-07-27)**
+### 1-7-b — 재실측 중 크래시 발견 + `JobQueue` → 자체 `WorkerQueue` 전환 ✅ 코드 적용 + 빌드 + 재실측 검증 완료(2026-07-28)
 
 **무엇이 문제인가**: 위 1-7(JobQueue 버전, 이미 커밋됨 `39a3772`)을 실제로 검증하려고 1-5와 동일한 6단계 LoadTester 매트릭스를 재실행했더니, **6단계 전부 Collector가 시작 후 약 10초 만에 크래시**(`connect_fail`이 agents=10부터 이미 발생, agents=1도 뒤늦게 크래시 — `apm_metrics.db` 파일 하나 재사용하는 게 아니라 완전히 새로 뜬 프로세스가 매번 10초 만에 죽음). 즉 **재실측 6개 결과는 전부 무효** — 1-7의 실제 효과(72개 하드 리밋이 풀렸는지)는 아직 검증 안 된 상태.
 
@@ -91,12 +91,32 @@
 - `Collector/main.cpp`: 1-7에서 추가했던 9개 헤더(`CoreMacro.h` 등) + `<fstream>`/`<execinfo.h>` 우회 코드를 전부 제거하고 `#include "WorkerQueue.h"` 한 줄로 교체. `JobQueueRef metricStoreQueue = MakeShared<JobQueue>(); GThreadManager->Launch(...)` 블록을 `WorkerQueue metricStoreQueue;`(로컬 객체, 생성자에서 워커 스레드 자동 기동)로 교체. `PacketHandler::Register` 람다의 캡처를 `metricStoreQueue`(값 복사) → `&metricStoreQueue`(참조)로, `metricStoreQueue->Push(MakeShared<Job>(...), true)` → `metricStoreQueue.Push([...]{ ... })`로 교체.
 - 부수 효과: `WorkerQueue` 소멸자가 큐를 다 비운 뒤 `join()`하므로, 1-7에 남겨뒀던 "워커 스레드 정상 종료 경로 없음" 캐치사항도 해소됨.
 
-**다음 세션에서 이어서 할 일(순서대로)**:
-1. `SESSION_LOG.md` 2026-07-27 두 번째 항목의 코드 전문대로 4개 파일(신규 2 + 수정 2) 적용 — 사용자 확인("적용해줘") 필요, 아직 안 받음.
-2. `cmake --build build` 전체 빌드 성공 확인.
-3. `run_load_test.sh` 6단계 매트릭스(1/10/50/100/100+ramp5s/300) 재실행 — **이번엔 크래시 없이 끝까지 도는지가 1차 확인 사항**, 그다음 72개 하드 리밋이 실제로 풀렸는지/새로운 병목(메모리 백로그 등, 대화 중 논의함)이 보이는지 확인.
-4. 결과를 1-5 베이스라인과 비교해 README/`PROJECT_TECHNICAL_REVIEW.md`에 반영할지 판단.
-5. 그 이후에 WAL 재검토 이어가기.
+**2026-07-28 적용 완료** — 사용자가 "적용해줘"로 명시 확인, 아래 4개 파일 실제 반영:
+- 신규 2개: `Common/WorkerQueue.h`/`.cpp`(단일 워커 스레드, `std::mutex`/`condition_variable`/`std::queue`만 사용, `GW2_CrossPlatformCore/Thread/*` 의존 제거)
+- 수정 2개: `Common/CMakeLists.txt`(`WorkerQueue.cpp` 한 줄 추가), `Collector/main.cpp`(include 블록에서 9개 헤더 + `<fstream>`/`<execinfo.h>`/`<dbghelp.h>` 우회 코드 제거하고 `#include "WorkerQueue.h"`로 교체, `JobQueueRef metricStoreQueue = MakeShared<JobQueue>()` + `GThreadManager->Launch(...)` 블록을 `WorkerQueue metricStoreQueue;` 로컬 객체로 교체, `PacketHandler::Register` 람다 캡처 `metricStoreQueue`(값) → `&metricStoreQueue`(참조), `Push(MakeShared<Job>(...), true)` → `Push([...]{...})`로 교체)
+
+적용 후 disk 상태가 `SESSION_LOG.md` 설계안과 일치함을 재확인 완료.
+
+**검증 완료(사용자, WSL, 2026-07-28)**: `cmake --build build` → `GW2_CrossPlatformCore`/`APM_Storage`/`APM_Common`(신규 `WorkerQueue.cpp.o` 포함)/`Collector`/`Agent`/`LoadTester`/`APM_Common_Tests` 전부 빌드 성공.
+
+**재실측 완료(사용자, WSL, 2026-07-28)** — `run_load_test.sh` 6단계 매트릭스(1/10/50/100/100+ramp5s/300) 재실행, **6단계 전부 크래시 없이 60초 끝까지 정상 종료**(`loadtest_results/agents_*_20260728_*` 6개). 1-5 베이스라인과 비교:
+
+| agents | 개선 전 접속 성공 | 개선 전 p95/p99 | 개선 후 접속 성공 | 개선 후 p95/p99 |
+|---|---|---|---|---|
+| 1 | 1 | 0/1ms | 1 | 0/1ms |
+| 10 | 10 | 0/1ms | 10 | 0/1ms |
+| 50 | 50 | 12,051/22,177ms | 50 | **0/1ms** |
+| 100 | 72(하드 리밋) | 34,212/48,412ms | **100(전원)** | 0/1,010ms |
+| 100(ramp5s) | 72 | 31,572/45,213ms | **100(전원)** | 0/1ms |
+| 300(ramp5s) | 71 | 33,467/47,732ms | **229**(3배↑) | 20,512/26,994ms |
+
+`strace` 요약으로 300-agent 기준 네트워크 스레드의 `fdatasync`(9,270→8회)/`pwrite64`(23,340→11회)가 급감한 것도 확인 — SQLite 저장이 워커 스레드로 실제로 이동했음을 syscall 레벨로 검증. **100개 이하 구간의 하드 리밋은 완전히 해소**(전원 접속 성공, 지연시간 사실상 0ms).
+
+**새로 발견한 병목(300-agent 한정, 이번 라운드 범위 밖으로 기록만)**: 처리량이 늘자(같은 60초간 처리 로그가 9,625줄→90,276줄로 9.4배 증가) `PacketHandler::Register` 핸들러의 `std::cout << ... << std::endl`(메트릭 1건마다 동기 flush)이 새 병목으로 드러남 — 300-agent 재실측에서 `write` syscall이 전체 시간의 92% 차지. `queue_drop=0`(유실 없음)이라 심각도 낮음. 다음에 다룰 경우 후보: `std::endl` → `'\n'` 교체 또는 로깅 빈도/버퍼링 조정.
+
+**README.md**/`Docs/PROJECT_TECHNICAL_REVIEW.md`(신규 §7-5) 반영 완료(2026-07-28) — 사용자가 "문서화만 하고 로깅 병목은 넘어가기"로 확정, 로깅 병목은 후속 과제로만 기록.
+
+**남은 것**: git 커밋 아직 안 함(오늘 변경분 — `WorkerQueue.h`/`.cpp` 신규, `Common/CMakeLists.txt`/`Collector/main.cpp`/`README.md`/`Docs/PROJECT_TECHNICAL_REVIEW.md` 수정 + `loadtest_results/agents_*_20260728_*` 6개 신규 산출물). WAL 재검토는 여전히 보류 상태(다음에 다룰 경우 재검토).
 
 **정리 필요한 산출물(다음 세션에서 처리)**:
 - `APM_Agent/crash.log` — 이번 크래시가 만든 파일(untracked), 진단 끝났으니 삭제해도 됨(증거로 남기고 싶으면 유지).

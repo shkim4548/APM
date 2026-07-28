@@ -13,6 +13,7 @@ add_library(APM_Common STATIC
     PacketHandler.cpp
     SpanRecorder.cpp
     ScopedSpan.cpp
+    WorkerQueue.cpp
     ../Protocol/Metric.pb.cc
 )
 
