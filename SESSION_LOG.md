@@ -7209,4 +7209,146 @@ int main()
 
 ### 적용 완료 (2026-07-29, "적용하자"로 명시 확인)
 
-`Collector/main.cpp` 위 4곳 실제 반영. `cmake --build build` 성공, `ctest` 9/9 통과. `strace -f -c` 300-agent(ramp-up 5s) 재실측 결과와 WAL 적용 후 대비 비교 표는 `WORK_STATUS.md` 신규 "1-7-e" 절 참고 — 요약: connect_success 250/300→**300/300(전원)**, latency p95/p99 소폭 개선(19,890/26,044ms → 19,322/24,970ms, 더 많은 트래픽 처리하면서도), 단 워커 스레드가 1개→2개로 늘며 **futex 경합이 새 지배적 비용(18.19s→49.26s, 36.5%→57.22%)**으로 떠올라 전체 syscall 시간은 오히려 증가(49.81s→86.09s, 메트릭당 정규화 기준 0.345ms→0.501ms) — 1-7-d WAL 트레이드오프와 같은 패턴("한 비용을 줄이면 다른 형태로 비용이 늘 수 있다") 재확인. `queue_drop=0` 유지, 크래시 없음. 실측 산출물: `loadtest_results/straceF_300_afterLogFix_20260729_001310/`. 커밋은 아직 안 함(사용자 요청 시 진행).
+`Collector/main.cpp` 위 4곳 실제 반영. `cmake --build build` 성공, `ctest` 9/9 통과. `strace -f -c` 300-agent(ramp-up 5s) 재실측 결과와 WAL 적용 후 대비 비교 표는 `WORK_STATUS.md` 신규 "1-7-e" 절 참고 — 요약: connect_success 250/300→**300/300(전원)**, latency p95/p99 소폭 개선(19,890/26,044ms → 19,322/24,970ms, 더 많은 트래픽 처리하면서도), 단 워커 스레드가 1개→2개로 늘며 **futex 경합이 새 지배적 비용(18.19s→49.26s, 36.5%→57.22%)**으로 떠올라 전체 syscall 시간은 오히려 증가(49.81s→86.09s, 메트릭당 정규화 기준 0.345ms→0.501ms) — 1-7-d WAL 트레이드오프와 같은 패턴("한 비용을 줄이면 다른 형태로 비용이 늘 수 있다") 재확인. `queue_drop=0` 유지, 크래시 없음. 실측 산출물: `loadtest_results/straceF_300_afterLogFix_20260729_001310/`. 커밋 완료(`83f3761`).
+
+## 2026-07-29 — 100-agent 재검증 중 발견한 버그: `sync_with_stdio(false)` + 다중 스레드 `cout` 동시 쓰기 레이스
+
+### 배경
+
+사용자가 "Collector 1대 : Agent 100개"를 성능 기준으로 삼고 싶다며 WAL+로깅 개선 적용 후 100-agent 규모에서 실제로 개선됐는지 확인을 요청. 100-agent `run_load_test.sh` 재실측 결과, 메인 스레드 전용 `strace -c` 요약에서 `write`가 여전히 62.36%(7.5초, 102,809회)로 지배적이어서 — 1-7-e에서 콘솔 로그를 `consoleLogQueue`로 옮겼는데도 왜 아직 이렇게 큰지 확인하려고 `strace -f`로 스레드별 실제 실행 위치를 직접 계측(임시 진단 코드: 각 작업 람다 안에 `std::cerr << "[DIAG] ... thread=" << std::this_thread::get_id()` 삽입).
+
+### 발견 — 진단 로그 자체가 스레드 간 레이스로 깨짐
+
+20-agent 진단 실행 결과, `consoleLogQueue`/`metricStoreQueue`/네트워크 스레드가 실제로 서로 다른 3개의 OS 스레드(`std::this_thread::get_id()` 값이 전부 다름)라는 건 확인됐으나, 진단 로그 자체가 이렇게 깨져 나옴:
+```
+[DIAG] log thread=[DIAG] store thread=131728022697664
+[DIAG] log thread=[DIAG] log thread=[DIAG] store thread=131728014304960131728014304960
+```
+서로 다른 스레드가 같은 `std::cout`/`std::cerr`에 동시에 쓰면서 문자 단위로 뒤섞인 것 — 이론적 우려가 아니라 실제로 재현된 데이터 레이스.
+
+### 원인 분석
+
+1-7-e에서 `consoleLogQueue`(메트릭 로그 전용 워커 스레드) 분리 자체는 정확히 동작했지만(위 진단으로 스레드 ID가 실제로 다름을 확인), **네트워크 스레드가 여전히 `connection accepted`/`accept error`/`WebServer로 N건 전송 시도`(메트릭·span 2곳)를 직접 `std::cout`/`std::cerr`로 찍고 있었음** — 즉 두 스레드가 같은 스트림에 동시 접근. 1-7-e에서 함께 넣은 `sync_with_stdio(false)`가 std::cout을 C stdio의 내부 락(스레드 안전장치)에서 분리시켜, 이 동시 접근이 실제 레이스로 이어져 버퍼가 깨짐.
+
+**영향 범위**: 콘솔 로그 텍스트 가독성 문제일 뿐 — SQLite에 저장되는 실제 메트릭 데이터, `queue_drop`, 이미 측정한 syscall 레벨 지표(write 횟수/시간, connect_success, 지연시간)에는 영향 없음(로그 내용과 무관한 지표들). 다만 방치하면 운영 중 콘솔 로그를 신뢰할 수 없음.
+
+### 수정 — `Collector/main.cpp` (수정 전 / 수정 후)
+
+**① `doAccept` 콜백** (accept 완료 핸들러):
+
+수정 전:
+```cpp
+                    if (!ec)
+                    {
+                        std::cout << "[Collector] connection accepted" << std::endl;
+                        auto session = std::make_shared<ApmSession>(std::move(socket), sslContext, SessionMode::Server,
+                            std::make_unique<AesGcmPayload>(agentCollectorKey));
+                        session->Start(nullptr, nullptr, &PacketHandler::Dispatch);
+                    }
+                    else
+                    {
+                        std::cerr << "[Collector] accept error : " << ec.message() << std::endl;
+                    }
+```
+
+수정 후:
+```cpp
+                    if (!ec)
+                    {
+                        // 네트워크 스레드가 cout을 직접 건드리지 않게 consoleLogQueue로 위임 -
+                        // sync_with_stdio(false) 상태에서 여러 스레드가 동시에 cout/cerr에 쓰면
+                        // 내부 버퍼가 레이스로 깨질 수 있음(재실측 중 발견, 진단 로그가 실제로
+                        // 스레드 간 뒤섞여 깨지는 걸 확인). consoleLogQueue 워커 스레드 하나만
+                        // 런타임 중 스트림을 쓰도록 통일해 레이스를 원천 차단.
+                        consoleLogQueue.Push([]() { std::cout << "[Collector] connection accepted\n"; });
+                        auto session = std::make_shared<ApmSession>(std::move(socket), sslContext, SessionMode::Server,
+                            std::make_unique<AesGcmPayload>(agentCollectorKey));
+                        session->Start(nullptr, nullptr, &PacketHandler::Dispatch);
+                    }
+                    else
+                    {
+                        std::string errMsg = ec.message();
+                        consoleLogQueue.Push([errMsg]() { std::cerr << "[Collector] accept error : " << errMsg << '\n'; });
+                    }
+```
+
+**② `flushToWebServer`** (전체 함수):
+
+수정 전:
+```cpp
+        auto flushToWebServer = [&pendingMetrics, &webServerSender]()
+        {
+            if (!pendingMetrics.empty())
+            {
+                std::cout << "[Collector] WebServer로 " << pendingMetrics.size() << "건 전송 시도" << std::endl;
+                for (const auto& m : pendingMetrics)
+                    webServerSender.Enqueue(m);
+
+                pendingMetrics.clear();
+            }
+
+            auto spans = SpanRecorder::Instance().DrainAll();
+            if (!spans.empty())
+            {
+                std::cout << "[Collector] WebServer로 span " << spans.size() << "건 전송 시도" << std::endl;
+                for (const auto& s : spans)
+                {
+                    apm::TransactionSpan pkt;
+                    pkt.set_operation_name(s.operationName);
+                    pkt.set_duration_us(s.durationUs);
+                    pkt.set_success(s.success);
+                    webServerSender.Enqueue(pkt);
+                }
+            }
+        };
+```
+
+수정 후:
+```cpp
+        auto flushToWebServer = [&pendingMetrics, &webServerSender, &consoleLogQueue]()
+        {
+            if (!pendingMetrics.empty())
+            {
+                // consoleLogQueue로 위임(위 accept 핸들러와 같은 이유) - pendingMetrics는 이 직후
+                // clear()되므로 크기를 미리 값으로 캡처(워커 스레드 실행 시점엔 이미 비어있을 수 있음).
+                size_t count = pendingMetrics.size();
+                consoleLogQueue.Push([count]() { std::cout << "[Collector] WebServer로 " << count << "건 전송 시도\n"; });
+                for (const auto& m : pendingMetrics)
+                    webServerSender.Enqueue(m);
+
+                pendingMetrics.clear();
+            }
+
+            auto spans = SpanRecorder::Instance().DrainAll();
+            if (!spans.empty())
+            {
+                size_t spanCount = spans.size();
+                consoleLogQueue.Push([spanCount]() { std::cout << "[Collector] WebServer로 span " << spanCount << "건 전송 시도\n"; });
+                for (const auto& s : spans)
+                {
+                    apm::TransactionSpan pkt;
+                    pkt.set_operation_name(s.operationName);
+                    pkt.set_duration_us(s.durationUs);
+                    pkt.set_success(s.success);
+                    webServerSender.Enqueue(pkt);
+                }
+            }
+        };
+```
+
+startup 배너 2줄(`"Collector listening on port..."`, `"[Collector] WebServer(...)..."`)과 최상위 `catch`의 `std::cerr << "[Collector] fatal: ..."`는 그대로 둠 — 전자는 `ioContext.run()` 시작 전(아직 다른 스레드가 스트림에 안 씀), 후자는 예외로 프로세스가 곧 종료되는 경로라 동시 접근 위험이 낮음.
+
+### 검증 완료(WSL, 2026-07-29)
+
+- `cmake --build build` 성공, `ctest` 9/9 통과.
+- 100-agent(interval 50ms, ramp 2s, 10초) 스트레스로 레이스 재현 여부 확인: 수정 후 81,381줄 전부 정상 접두어로 시작 — "metric received" 포함 줄(17,803건)과 `^[Collector] metric received`로 시작하는 줄(17,803건)이 정확히 일치, 깨진 줄 0건.
+- 100-agent 표준 재실측(`run_load_test.sh 100`): connect_success 100/100, p95/p99 0/2,053ms — 레이스 수정 전(2,049ms)과 사실상 동일. **레이스 수정이 성능 지표 자체를 바꾸지 않음을 확인**(스레드 배치만 정리했을 뿐 총 작업량은 그대로라 예상된 결과).
+- 300-agent `strace -f -c` 재검증: futex 57.78%(51.10s), write 13.15%(11.63s), 전체 88.45s, connect_success 300/300, 로그 98,600줄 전부 정상. 직전 1-7-e 보고값(futex 57.22%/49.26s, write 13.29%/11.44s, 전체 86.09s)과 오차범위 내로 일치 — **1-7-e에 이미 기록한 300-agent 비교 표 수치는 그대로 유효, 갱신 불필요**.
+
+### 100-agent 기준 질문에 대한 결론
+
+WAL+로깅 개선은 100-agent 규모에선 1-7-b(WorkerQueue)에서 이미 해소된 하드 리밋(72→100)에 **추가 이득을 주지 않음** — 오히려 p99가 소폭 늘어남(1,010ms→2,053ms), 워커 스레드가 1개→3개로 늘며 생기는 동기화 오버헤드로 보임(300-agent futex 경합 증가와 같은 패턴, 규모만 작을 뿐). 이 개선의 실질 효과는 300-agent 같은 고부하 구간(접속 성공 250→300)에 있음 — **100-agent를 기준으로 삼는다면 "이번 라운드 개선은 이 규모에선 순효과가 거의 없거나 근소하게 손해"가 정확한 결론**.
+
+### 결정 사항
+
+사용자가 "진행하자"로 명시 확인, `Collector/main.cpp` 위 2곳(4개 호출) 실제 반영 완료. 임시 진단 코드(`std::this_thread::get_id()` 출력)는 원인 확인 후 즉시 되돌림(커밋 대상 아님). 커밋은 사용자 요청 시 진행.

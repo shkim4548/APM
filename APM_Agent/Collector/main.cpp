@@ -124,14 +124,20 @@ int main()
                 {
                     if (!ec)
                     {
-                        std::cout << "[Collector] connection accepted" << std::endl;
+                        // 네트워크 스레드가 cout을 직접 건드리지 않게 consoleLogQueue로 위임 -
+                        // sync_with_stdio(false) 상태에서 여러 스레드가 동시에 cout/cerr에 쓰면
+                        // 내부 버퍼가 레이스로 깨질 수 있음(재실측 중 발견, 진단 로그가 실제로
+                        // 스레드 간 뒤섞여 깨지는 걸 확인). consoleLogQueue 워커 스레드 하나만
+                        // 런타임 중 스트림을 쓰도록 통일해 레이스를 원천 차단.
+                        consoleLogQueue.Push([]() { std::cout << "[Collector] connection accepted\n"; });
                         auto session = std::make_shared<ApmSession>(std::move(socket), sslContext, SessionMode::Server,
                             std::make_unique<AesGcmPayload>(agentCollectorKey));
                         session->Start(nullptr, nullptr, &PacketHandler::Dispatch);
                     }
                     else
                     {
-                        std::cerr << "[Collector] accept error : " << ec.message() << std::endl;
+                        std::string errMsg = ec.message();
+                        consoleLogQueue.Push([errMsg]() { std::cerr << "[Collector] accept error : " << errMsg << '\n'; });
                     }
                     doAccept();
                 });
@@ -142,11 +148,14 @@ int main()
         // CLI 트리거 둘 다 이 함수 하나를 호출함(로직 중복 방지). span 전송을 여기 얹은 이유:
         // 이미 "주기적으로 WebServer에 밀어넣는" 책임을 지고 있는 함수라 새 타이머를 또
         // 만들 필요가 없음(2026-07-26 4순위 설계).
-        auto flushToWebServer = [&pendingMetrics, &webServerSender]()
+        auto flushToWebServer = [&pendingMetrics, &webServerSender, &consoleLogQueue]()
         {
             if (!pendingMetrics.empty())
             {
-                std::cout << "[Collector] WebServer로 " << pendingMetrics.size() << "건 전송 시도" << std::endl;
+                // consoleLogQueue로 위임(위 accept 핸들러와 같은 이유) - pendingMetrics는 이 직후
+                // clear()되므로 크기를 미리 값으로 캡처(워커 스레드 실행 시점엔 이미 비어있을 수 있음).
+                size_t count = pendingMetrics.size();
+                consoleLogQueue.Push([count]() { std::cout << "[Collector] WebServer로 " << count << "건 전송 시도\n"; });
                 for (const auto& m : pendingMetrics)
                     webServerSender.Enqueue(m);
 
@@ -156,7 +165,8 @@ int main()
             auto spans = SpanRecorder::Instance().DrainAll();
             if (!spans.empty())
             {
-                std::cout << "[Collector] WebServer로 span " << spans.size() << "건 전송 시도" << std::endl;
+                size_t spanCount = spans.size();
+                consoleLogQueue.Push([spanCount]() { std::cout << "[Collector] WebServer로 span " << spanCount << "건 전송 시도\n"; });
                 for (const auto& s : spans)
                 {
                     apm::TransactionSpan pkt;
