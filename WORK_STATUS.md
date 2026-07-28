@@ -231,7 +231,11 @@
   - 스크린샷 자리 3장→4장으로 확장(터미널/부하테스트 실행 로그 자리 추가) — 신규 섹션(`#metric-impl`)에 대응하는 시각 자료 자리 확보.
   - 아티팩트 같은 링크로 재게시 완료.
 
-**3차 검증 갱신(같은 날)** — 문서 전체(1259줄)를 다시 읽고 `PROJECT_TECHNICAL_REVIEW.md` §3~5(보안/프로토콜/저장) 나머지 부분까지 재확인, 구조 이상 없음(태그 균형/교차참조 방향/"게임" 네이밍 원칙 위반 없음) 확인 후 실제 갭 2건 반영:
+**스크린샷 4장 실제 촬영 완료(2026-07-29)** — 사용자가 `sudo apt-get install libnss3 libnspr4 libasound2t64`(headless Chromium 구동용) + `sudo apt-get install fonts-noto-cjk`(한글 렌더링용, 1차 촬영에서 한글이 전부 □로 깨져 나와 추가 요청) 실행. Playwright(Node 18 호환을 위해 1.47.0 핀 고정, 스크래치패드에 로컬 설치)로 실제 캡처:
+- Collector+Console을 클린 상태로 다시 띄우고 `LoadTester`로 실 트래픽 생성, CPU 임계치를 일부러 낮춰 활성 알림까지 렌더링되게 만든 뒤 `/apm/dashboard`/`/apm/alerts`/`/apm/traces` 3장 캡처.
+- 4번째("터미널")는 raw 터미널 캡처 대신, 실제 로그 내용(이번 세션 Collector `metric received` 라인 + 기존 커밋된 300-agent `loadtester_result.csv`의 `connected=300` 요약)을 페이지 다크 테마와 맞춘 HTML로 재현해 스크린샷 — 내용 자체는 전부 실측/실 로그 원문.
+- `Docs/screenshots/{dashboard,alerts,traces,terminal}.png` 4개 파일로 저장, `#screenshots` 섹션의 placeholder `<div>` 4개를 실제 `<img src="screenshots/...">`로 교체(상대 경로, `aspect-ratio` 유지).
+- 아티팩트 재게시 완료. **참고**: Claude 아티팩트는 단일 파일만 렌더링하는 self-contained 제약이 있어, 상대 경로 이미지가 아티팩트 미리보기에서는 안 보일 수 있음(레포 파일 자체를 열면 정상 렌더링) — 채팅에서 4장 다 직접 확인시켜드림. — 문서 전체(1259줄)를 다시 읽고 `PROJECT_TECHNICAL_REVIEW.md` §3~5(보안/프로토콜/저장) 나머지 부분까지 재확인, 구조 이상 없음(태그 균형/교차참조 방향/"게임" 네이밍 원칙 위반 없음) 확인 후 실제 갭 2건 반영:
 - hero 태그에 알림/보존/트랜잭션 추적/백분위 통계 + 부하 테스트/strace 프로파일링 태그 추가 — 기존 태그가 전부 초기 파이프라인(암호화/저장/닷넷)만 나열해 스크롤 전 첫인상에서 새 기능/스케일 테스트가 안 보였음.
 - 설계 결정 카드 `// 11`(Collector↔Console 관계 — JSON 설정 파일을 쓴 이유 + stdin 별도 스레드/asio::post로 락 불필요하게 만든 동시성 설계) 신규 추가 — §3-7 내용 중 유일하게 반영 안 돼 있던 부분.
 - 아티팩트 같은 링크로 재게시 완료.

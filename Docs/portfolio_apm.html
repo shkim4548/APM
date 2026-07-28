@@ -512,53 +512,40 @@
 </section>
 
 <!--
-  SCREENSHOTS — placeholder slots, swap for real <img> once captured.
-  실제 스크린샷을 찍은 뒤 아래 4개 <div class="screenshot-frame">...</div> 블록을 통째로
-  <img src="screenshots/dashboard.png" alt="..." style="width:100%; aspect-ratio:16/10; object-fit:cover; border-radius:8px;">
-  형태로 교체하면 됨(aspect-ratio를 같이 줘야 레이아웃이 안 흔들림). 캡션(.screenshot-caption)은 그대로 두고 이미지만 교체.
+  SCREENSHOTS — real captures (Docs/screenshots/*.png), taken 2026-07-29 with Collector+Console
+  both running and LoadTester driving real traffic. terminal.png is a themed HTML re-render of
+  actual console log lines (not a raw terminal grab) so it matches the page's dark theme.
 -->
 <section id="screenshots">
   <div class="section-inner fade-in">
     <div class="section-label">// Running, Not Just Built</div>
     <h2 class="section-title">실제 실행 화면</h2>
-    <p class="section-sub">스크린샷 촬영 예정 — 아래 4개 화면 전부 Collector+Console을 함께 띄우고 실 트래픽을 흘려 동작을 직접 확인함(2026-07-29).</p>
+    <p class="section-sub">Collector+Console을 함께 띄우고 실 트래픽을 흘려 직접 촬영(2026-07-29) — 4개 화면 전부 실제 데이터.</p>
 
     <div class="screenshot-grid">
       <div>
-        <div class="screenshot-frame">
-          <span class="ph-icon">▤</span>
-          <span class="ph-label">스크린샷 촬영 예정</span>
-        </div>
+        <img src="screenshots/dashboard.png" alt="/apm/dashboard 실행 화면" style="width:100%; aspect-ratio:16/10; object-fit:cover; object-position:top; border-radius:8px; border:1px solid var(--border);">
         <div class="screenshot-caption">
           <span class="path">/apm/dashboard</span>
           <span class="desc">Chart.js 그래프 5개(CPU/메모리/디스크/네트워크/TCP RTT) + SignalR 실시간 갱신, 최근 메트릭 표 11컬럼.</span>
         </div>
       </div>
       <div>
-        <div class="screenshot-frame">
-          <span class="ph-icon">⚠</span>
-          <span class="ph-label">스크린샷 촬영 예정</span>
-        </div>
+        <img src="screenshots/alerts.png" alt="/apm/alerts 실행 화면" style="width:100%; aspect-ratio:16/10; object-fit:cover; object-position:top; border-radius:8px; border:1px solid var(--border);">
         <div class="screenshot-caption">
           <span class="path">/apm/alerts</span>
           <span class="desc">임계치 편집 + 활성 알림 목록. 실제로 임계치를 낮춰 알림이 열리고 렌더링되는 것까지 실 트래픽으로 확인 완료.</span>
         </div>
       </div>
       <div>
-        <div class="screenshot-frame">
-          <span class="ph-icon">📈</span>
-          <span class="ph-label">스크린샷 촬영 예정</span>
-        </div>
+        <img src="screenshots/traces.png" alt="/apm/traces 실행 화면" style="width:100%; aspect-ratio:16/10; object-fit:cover; object-position:top; border-radius:8px; border:1px solid var(--border);">
         <div class="screenshot-caption">
           <span class="path">/apm/traces</span>
           <span class="desc">시간 창(1h/24h/7d) 전환 가능한 p50/p95/p99 백분위 통계 — 실제 span 데이터로 렌더링 확인.</span>
         </div>
       </div>
       <div>
-        <div class="screenshot-frame">
-          <span class="ph-icon">▶_</span>
-          <span class="ph-label">스크린샷 촬영 예정</span>
-        </div>
+        <img src="screenshots/terminal.png" alt="터미널 실행 화면" style="width:100%; aspect-ratio:16/10; object-fit:cover; object-position:top; border-radius:8px; border:1px solid var(--border);">
         <div class="screenshot-caption">
           <span class="path">터미널 — Agent / Collector / LoadTester</span>
           <span class="desc">jiffies 델타 CPU%, MemAvailable 기반 메모리, TCP_INFO RTT 등 실측값이 실제로 콘솔에 찍히는 모습 + 300-agent 부하 테스트 실행 로그.</span>
