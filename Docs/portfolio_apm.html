@@ -219,6 +219,34 @@
     .opt-table .before { color: var(--danger); font-family: 'Fira Code'; font-size: 0.78rem; }
     .opt-table .after  { color: var(--success); font-family: 'Fira Code'; font-size: 0.78rem; }
 
+    /* ── SCREENSHOTS (placeholder — swap for real <img> once captured) ── */
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+    .screenshot-frame {
+      aspect-ratio: 16 / 10;
+      background:
+        repeating-linear-gradient(135deg, rgba(255,255,255,0.02) 0 2px, transparent 2px 12px),
+        var(--card2);
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 0.5rem; padding: 1rem; text-align: center;
+    }
+    .screenshot-frame .ph-icon { font-size: 1.6rem; color: var(--text-3); opacity: 0.6; }
+    .screenshot-frame .ph-label {
+      font-family: 'Fira Code'; font-size: 0.75rem; color: var(--text-3);
+    }
+    .screenshot-caption { margin-top: 0.75rem; }
+    .screenshot-caption .path {
+      font-family: 'JetBrains Mono'; font-weight: 600; font-size: 0.85rem; color: var(--accent);
+      display: block; margin-bottom: 0.3rem;
+    }
+    .screenshot-caption .desc { font-size: 0.82rem; color: var(--text-2); }
+
     /* ── SKILLS ── */
     .skills-grid {
       display: grid;
@@ -297,7 +325,11 @@
   <span class="nav-logo">APM_Agent · APM_Console</span>
   <div class="nav-links">
     <a href="#arch">아키텍처</a>
+    <a href="#metric-impl">지표 수집</a>
+    <a href="#screenshots">실행 화면</a>
     <a href="#decisions">설계 결정</a>
+    <a href="#features">기능</a>
+    <a href="#scale">스케일 테스트</a>
     <a href="#spotlight">버그 발견</a>
     <a href="#metrics">실측 지표</a>
     <a href="#skills">기술 스택</a>
@@ -327,6 +359,8 @@
       <span class="tag success">SignalR + Chart.js</span>
       <span class="tag success">Razor Class Library 플러그인</span>
       <span class="tag accent">크로스플랫폼: Linux + Windows 빌드/실행 검증</span>
+      <span class="tag">알림 / 보존정책 / 트랜잭션 추적 / 백분위 통계</span>
+      <span class="tag accent">부하 테스트(LoadTester) + strace 프로파일링</span>
     </div>
     <div class="hero-stats">
       <div class="hero-stat">
@@ -334,12 +368,12 @@
         <span class="hero-stat-label">수집 지표 종류(CPU/메모리/디스크/네트워크/TCP)</span>
       </div>
       <div class="hero-stat">
-        <span class="hero-stat-val">17</span>
-        <span class="hero-stat-label">단위 테스트 전부 통과</span>
+        <span class="hero-stat-val">27</span>
+        <span class="hero-stat-label">단위 테스트 전부 통과(C++ 9 + .NET 18)</span>
       </div>
       <div class="hero-stat">
-        <span class="hero-stat-val">0.017%</span>
-        <span class="hero-stat-label">에이전트 유휴 CPU 사용률</span>
+        <span class="hero-stat-val">300</span>
+        <span class="hero-stat-label">동시 접속 부하 테스트(자체 제작 LoadTester)</span>
       </div>
       <div class="hero-stat">
         <span class="hero-stat-val">13.8MB</span>
@@ -348,6 +382,10 @@
       <div class="hero-stat">
         <span class="hero-stat-val">2/2</span>
         <span class="hero-stat-label">OS 빌드+실행 검증(Linux, Windows)</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-val">10</span>
+        <span class="hero-stat-label">실행 검증 중 발견·수정한 버그</span>
       </div>
     </div>
   </div>
@@ -408,6 +446,122 @@
         <div style="font-size:0.82rem; color:var(--text-2);">
           .NET 진영과의 상호운용성과 AEAD의 구조적 이점(패딩 오라클 공격면 자체가 없음)을 위해 채택.
           두 구간 모두 <code style="font-family:'Fira Code'; color:var(--accent);">IPayloadSealer</code> 인터페이스로 추상화되어 있어 세션은 암호 방식을 모르고, 키는 구간별로 분리되어 있다.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- METRIC IMPLEMENTATION DETAIL -->
+<section id="metric-impl">
+  <div class="section-inner fade-in">
+    <div class="section-label">// How The Numbers Are Actually Computed</div>
+    <h2 class="section-title">지표 수집 — OS 커널에서 직접</h2>
+    <p class="section-sub"><code style="font-family:'Fira Code'; color:var(--accent);">ResourceCollector</code>(C++, Linux)가 <code style="font-family:'Fira Code'; color:var(--accent);">/proc</code> 파일시스템·소켓 옵션을 직접 파싱해서 지표를 만든다 — 라이브러리 뒤에 숨지 않고 계산 방식 하나하나를 직접 결정했다.</p>
+
+    <table class="opt-table">
+      <thead>
+        <tr><th>지표</th><th>소스</th><th>핵심 포인트</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>CPU 사용률</td>
+          <td><code style="font-family:'Fira Code'">/proc/stat</code></td>
+          <td>부팅 이후 누적 jiffies라 한 시점 값만으론 의미 없음 — 두 샘플 사이의 <strong>델타</strong>로 계산. <code style="font-family:'Fira Code'">iowait</code>도 idle에 합산(표준 관례).</td>
+        </tr>
+        <tr>
+          <td>메모리 사용량</td>
+          <td><code style="font-family:'Fira Code'">/proc/meminfo</code></td>
+          <td><code style="font-family:'Fira Code'">MemFree</code>가 아니라 <code style="font-family:'Fira Code'">MemAvailable</code> 사용 — 아래 상세 참고.</td>
+        </tr>
+        <tr>
+          <td>네트워크 대역폭</td>
+          <td><code style="font-family:'Fira Code'">/proc/net/dev</code></td>
+          <td>인터페이스별 누적 바이트를 델타 계산, <code style="font-family:'Fira Code'">steady_clock</code>으로 실제 경과시간 측정(고정 주기 가정 안 함). <code style="font-family:'Fira Code'">lo</code>(루프백)는 제외.</td>
+        </tr>
+        <tr>
+          <td>TCP 연결 품질</td>
+          <td><code style="font-family:'Fira Code'">getsockopt(TCP_INFO)</code></td>
+          <td>RTT/재전송/혼잡윈도우를 애플리케이션이 재측정하지 않고 커널이 이미 추적 중인 값을 그대로 조회 — 아래 상세 참고.</td>
+        </tr>
+        <tr>
+          <td>디스크 사용량</td>
+          <td><code style="font-family:'Fira Code'">statvfs()</code></td>
+          <td>POSIX 표준 함수로 블록 수×블록 크기를 바이트로 환산.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="decision-grid" style="grid-template-columns: 1fr 1fr; margin-top:1.5rem;">
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:8px; padding:1.25rem;">
+        <div style="font-family:'Fira Code'; font-size:0.72rem; color:var(--text-3); margin-bottom:0.4rem;">// MemFree가 아니라 MemAvailable</div>
+        <div style="font-size:0.82rem; color:var(--text-2);">
+          Linux는 남는 메모리를 페이지 캐시로 적극 활용한다 — <code style="font-family:'Fira Code';color:var(--accent);">MemFree</code>(완전 여유분)만 보면 "메모리가 거의 다 찼다"는 착시가 생긴다.
+          <code style="font-family:'Fira Code';color:var(--accent);">MemAvailable</code>은 캐시처럼 필요시 즉시 회수 가능한 부분까지 커널이 직접 계산해 제공하는 값 — 실제 체감 여유 메모리에 훨씬 가깝다.
+        </div>
+      </div>
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:8px; padding:1.25rem;">
+        <div style="font-family:'Fira Code'; font-size:0.72rem; color:var(--text-3); margin-bottom:0.4rem;">// TCP 품질을 왜 커널 값으로 조회하나</div>
+        <div style="font-size:0.82rem; color:var(--text-2);">
+          커널의 TCP 스택은 흐름/혼잡 제어를 위해 RTT·재전송 횟수를 이미 실시간으로 추적하고 있다. <code style="font-family:'Fira Code';color:var(--accent);">getsockopt(fd, IPPROTO_TCP, TCP_INFO, ...)</code>로 그 값을 그대로 읽어오면 되는데,
+          애플리케이션이 별도로 재측정하면 정확도는 떨어지고 오버헤드만 늘어난다. TLS 아래 순수 TCP 계층 정보라 암호화 여부와 무관하게 조회 가능.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!--
+  SCREENSHOTS — placeholder slots, swap for real <img> once captured.
+  실제 스크린샷을 찍은 뒤 아래 4개 <div class="screenshot-frame">...</div> 블록을 통째로
+  <img src="screenshots/dashboard.png" alt="..." style="width:100%; aspect-ratio:16/10; object-fit:cover; border-radius:8px;">
+  형태로 교체하면 됨(aspect-ratio를 같이 줘야 레이아웃이 안 흔들림). 캡션(.screenshot-caption)은 그대로 두고 이미지만 교체.
+-->
+<section id="screenshots">
+  <div class="section-inner fade-in">
+    <div class="section-label">// Running, Not Just Built</div>
+    <h2 class="section-title">실제 실행 화면</h2>
+    <p class="section-sub">스크린샷 촬영 예정 — 아래 4개 화면 전부 Collector+Console을 함께 띄우고 실 트래픽을 흘려 동작을 직접 확인함(2026-07-29).</p>
+
+    <div class="screenshot-grid">
+      <div>
+        <div class="screenshot-frame">
+          <span class="ph-icon">▤</span>
+          <span class="ph-label">스크린샷 촬영 예정</span>
+        </div>
+        <div class="screenshot-caption">
+          <span class="path">/apm/dashboard</span>
+          <span class="desc">Chart.js 그래프 5개(CPU/메모리/디스크/네트워크/TCP RTT) + SignalR 실시간 갱신, 최근 메트릭 표 11컬럼.</span>
+        </div>
+      </div>
+      <div>
+        <div class="screenshot-frame">
+          <span class="ph-icon">⚠</span>
+          <span class="ph-label">스크린샷 촬영 예정</span>
+        </div>
+        <div class="screenshot-caption">
+          <span class="path">/apm/alerts</span>
+          <span class="desc">임계치 편집 + 활성 알림 목록. 실제로 임계치를 낮춰 알림이 열리고 렌더링되는 것까지 실 트래픽으로 확인 완료.</span>
+        </div>
+      </div>
+      <div>
+        <div class="screenshot-frame">
+          <span class="ph-icon">📈</span>
+          <span class="ph-label">스크린샷 촬영 예정</span>
+        </div>
+        <div class="screenshot-caption">
+          <span class="path">/apm/traces</span>
+          <span class="desc">시간 창(1h/24h/7d) 전환 가능한 p50/p95/p99 백분위 통계 — 실제 span 데이터로 렌더링 확인.</span>
+        </div>
+      </div>
+      <div>
+        <div class="screenshot-frame">
+          <span class="ph-icon">▶_</span>
+          <span class="ph-label">스크린샷 촬영 예정</span>
+        </div>
+        <div class="screenshot-caption">
+          <span class="path">터미널 — Agent / Collector / LoadTester</span>
+          <span class="desc">jiffies 델타 CPU%, MemAvailable 기반 메모리, TCP_INFO RTT 등 실측값이 실제로 콘솔에 찍히는 모습 + 300-agent 부하 테스트 실행 로그.</span>
         </div>
       </div>
     </div>
@@ -574,6 +728,212 @@
           <span class="decision-text resolved">WinAPI(GetSystemTimes/GlobalMemoryStatusEx/GetIfTable2/SIO_TCP_INFO)로 수집 로직 이식 + vcpkg <code style="font-family:'Fira Code';color:var(--accent)">x64-windows-static</code> 트리플릿으로 재구성 — <code style="font-family:'Fira Code';color:var(--accent)">Collector.exe</code>/<code style="font-family:'Fira Code';color:var(--accent)">Agent.exe</code>가 외부 DLL 0개로 완전 정적 빌드되어 SAC 차단을 코드 변경 없이 우회. TLS+AES-GCM 통신·실측 리소스 수집·SQLite 저장까지 전체 파이프라인을 Windows에서 실제 실행으로 재검증.</span>
         </div>
       </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 10</div>
+        <div class="decision-title">테스트 전략 — 전체 커버리지 대신 핵심 위험 지점 우선</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">포트폴리오 프로젝트는 시간 예산이 정해져 있다 — 모든 코드를 같은 강도로 테스트하는 건 "안 하는 것"과 실질적으로 같은 결과를 낳는다(어디에도 깊이가 없음).</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">"실수하면 조용히 실패하고 파급력이 큰" 두 영역만 우선 — 암호화(AES-GCM 왕복/nonce/변조 거부)와 TCP 프레이밍(부분 수신 같은 비결정적 상황 재현). <code style="font-family:'Fira Code';color:var(--accent)">MetricsReceiverService</code>의 <code style="font-family:'Fira Code';color:var(--accent)">private</code> 로직은 인스턴스 필드 의존을 없애 파라미터 받는 <code style="font-family:'Fira Code';color:var(--accent)">static</code> 메서드로 리팩터링(테스트 가능한 설계는 저절로 안 되고 의도적으로 만들어야 함).</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">C++ GoogleTest 9개 + .NET xUnit 18개, 전부 통과. 테스트 없는 영역(예: 실제 소켓에 강결합된 프레이밍 재조립 로직)도 명확히 인지하고 우선순위상 미룬 것이라 설명 가능 — "빈틈이 없다"가 아니라 "빈틈을 알고 있다"는 게 요점.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 11</div>
+        <div class="decision-title">Collector↔Console 관계 — 암묵적 전제를 명시적 네트워크 관계로</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">초기엔 두 프로세스가 "같은 장비의 SQLite 파일을 각자 다른 시점에 연다"는 방식이었다 — 두 프로세스가 항상 같은 장비에 있어야만 동작하는, 암묵적이고 깨지기 쉬운 전제.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">Collector가 능동적으로 전송하고 Console이 자기 소유 DB에 저장하는 실제 네트워크 관계로 전환. 설정 파일을 평문 대신 <strong>JSON</strong>으로 택한 이유도 같은 맥락 — 지금은 로컬 파일이지만, 나중에 웹에서 이 설정(전송 주기 등)을 편집하게 될 가능성을 열어두려면 웹 쪽과 자연스럽게 주고받을 수 있는 포맷이 유리하다고 판단.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">stdin은 별도 스레드에서 읽고, 실제 전송은 <code style="font-family:'Fira Code';color:var(--accent)">asio::post()</code>로 <code style="font-family:'Fira Code';color:var(--accent)">io_context</code> 스레드에 위임 — 공유 상태(전송 큐 등)를 항상 단일 스레드에서만 건드리게 되어 <strong>락 자체가 불필요</strong>해지는 설계.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="section-inner fade-in">
+    <div class="section-label">// Operational Features</div>
+    <h2 class="section-title">"메트릭 수집기"에서 "APM"으로</h2>
+    <p class="section-sub">시스템 리소스만 재는 걸 넘어, 운영 중 실제로 쓰는 4가지 기능을 순서대로 추가.</p>
+
+    <div class="decision-grid">
+      <div class="decision-card">
+        <div class="decision-num">// 임계치 기반 알림</div>
+        <div class="decision-title">상태 전이 시에만 알림 (Zabbix/Nagios 방식)</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">메트릭은 계속 쌓이는데, 이상 상황을 알아채려면 누군가 대시보드를 계속 보고 있어야 했다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">임계치를 넘을 때마다가 아니라 <strong>상태가 바뀔 때(OK→Alert, Alert→Resolved)</strong>만 기록·알림 — 업계 표준 패턴. 임계치는 DB 저장+UI 편집(재배포 없이 조정), 현재 상태는 메모리 캐시가 아니라 <strong>매번 DB 재조회</strong>로 판단해 프로세스 재시작에도 상태가 안 깨지게 함.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">상태 전이 로직만 순수 함수(<code style="font-family:'Fira Code';color:var(--accent)">AlertEvaluator</code>)로 분리해 단위테스트 대상으로 삼음. 이번 세션에 실제로 CPU 임계치를 실 트래픽보다 낮게 걸어, 알림이 열리고 화면에 렌더링되는 것까지 end-to-end로 재현·확인.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 데이터 보존 정책</div>
+        <div class="decision-title">백엔드별로 다르게 구현, API는 하나로 통일</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">저장소가 SQLite/TimescaleDB 두 종류인 데다, Collector 로컬 저장소와 Console 중앙 저장소까지 두 군데 — 어느 쪽이든 무한정 쌓이면 안 된다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">TimescaleDB는 네이티브 <code style="font-family:'Fira Code';color:var(--accent)">add_retention_policy()</code>로 청크째 드롭(거의 공짜), SQLite는 직접 <code style="font-family:'Fira Code';color:var(--accent)">DELETE</code>+점진적 vacuum, Console(EF Core)은 백엔드 무관하게 <code style="font-family:'Fira Code';color:var(--accent)">ExecuteDeleteAsync</code> 하나로 통일 — 저장소별 실제 구현은 다르게, 호출부는 똑같이.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">Metrics 30일 / 알림 이력 180일(사건 기록이라 더 길게). 실제 실행 검증 중 EF Core+SQLite 조합이 시간 비교를 SQL로 못 옮기는 버그를 발견해 수정(아래 "버그 발견" Bug #3 참고).</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 함수/트랜잭션 계측</div>
+        <div class="decision-title">RAII 스코프 기반 — "우리 APM으로 우리 자신을 계측"</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">시스템 리소스만 재면 "모니터링"이지 "APM"이라 부르기엔 부족한데, 정작 계측할 함수/트랜잭션이 프로젝트 안에 없었다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">별도 데모 앱 대신 이 프로젝트 자체 코드를 계측 — C++은 소멸자, .NET은 <code style="font-family:'Fira Code';color:var(--accent)">IAsyncDisposable</code>로 같은 발상의 RAII API. Collector는 이미 있는 메트릭 전송 파이프라인을 그대로 재사용(새 포트 불필요), Console은 이미 자기 DB가 있어 네트워크 왕복 없이 직접 저장.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">Protobuf descriptor index가 C++/C# 양쪽에서 같은 값을 결정론적으로 생성한다는 점을 이용해, 패킷 타입 분기를 매직 넘버 없이 구현.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 백분위/집계 통계</div>
+        <div class="decision-title">SQL 백분위 함수 없이 — 백엔드 무관 통일</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">SQLite에는 PostgreSQL/TimescaleDB의 <code style="font-family:'Fira Code';color:var(--accent)">PERCENTILE_CONT</code> 같은 SQL 백분위 함수가 없다 — 백엔드마다 로직이 갈리게 둘 순 없었다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">시간 창으로 거른 span을 메모리로 가져와 C#에서 직접 계산(선형 보간, <code style="font-family:'Fira Code';color:var(--accent)">numpy.percentile</code> 기본값과 동일한 정의) — 어느 백엔드든 완전히 같은 코드 경로.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">실제 실행 검증 중 "복합 인덱스가 이 쿼리에 맞는다"던 설계 당시 전제가, 실제로는 인덱스를 탈 수조차 없었다는 걸 발견(아래 "버그 발견" Bug #3와 같은 원인) — 설계 문서의 가정과 실제 동작이 다를 수 있음을 보여준 사례.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SCALE TESTING -->
+<section id="scale">
+  <div class="section-inner fade-in">
+    <div class="section-label">// Measured, Fixed, Re-measured</div>
+    <h2 class="section-title">300 동시 접속까지 — 병목을 찾고 고치는 5라운드</h2>
+    <p class="section-sub">자체 제작 <code style="font-family:'Fira Code';color:var(--accent)">LoadTester</code>(실제 Agent와 같은 코드 경로로 in-process 다중 연결 시뮬레이션)로 매 라운드 재측정 — "고쳤다"고 끝내지 않고 다시 재는 것 자체가 이 과정의 핵심.</p>
+
+    <div class="decision-grid">
+      <div class="decision-card">
+        <div class="decision-num">// Round 1 — 병목 찾기</div>
+        <div class="decision-title">72/100에서 하드 리밋</div>
+        <div class="decision-row">
+          <span class="decision-label">실측</span>
+          <span class="decision-text">100개 동시 접속을 요청했는데 72개만 성공, p95 지연시간 34초. <code style="font-family:'Fira Code';color:var(--accent)">strace -c</code>로 원인 추적 — <code style="font-family:'Fira Code';color:var(--accent)">fdatasync</code>/<code style="font-family:'Fira Code';color:var(--accent)">pwrite64</code>가 syscall 시간의 70% 이상. SQLite 기본 저널링이 메트릭 1건마다 동기 flush를 걸고, 이게 네트워크 I/O와 <strong>같은 단일 이벤트 루프 스레드</strong>를 블로킹하고 있었다.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// Round 2 — 저장 비동기화</div>
+        <div class="decision-title">워커 스레드로 위임 — 첫 시도는 크래시</div>
+        <div class="decision-row">
+          <span class="decision-label">시행착오</span>
+          <span class="decision-text">기존 서브시스템(<code style="font-family:'Fira Code';color:var(--accent)">JobQueue</code>)을 재사용했더니 재실측 중 10초 만에 반복 크래시 — 크로스 스레드로 쓰인 적이 한 번도 없어 드러나지 않았던 락 버그였다. 그 코드는 "여러 프로젝트에서 검증된 코드"라 손대지 않고, <code style="font-family:'Fira Code';color:var(--accent)">std::mutex</code>/<code style="font-family:'Fira Code';color:var(--accent)">condition_variable</code>만 쓰는 훨씬 작은 전용 큐로 교체.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">결과</span>
+          <span class="decision-text resolved">100/100 전원 접속 성공, p95/p99 사실상 0ms. 300-agent도 71→229로 3배 이상 개선.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// Round 3 — "사라졌다"는 착시</div>
+        <div class="decision-title">strace -f로 다시 보니, 비용은 그대로였다</div>
+        <div class="decision-row">
+          <span class="decision-label">발견</span>
+          <span class="decision-text"><code style="font-family:'Fira Code';color:var(--accent)">strace -c</code>는 새로 생긴 워커 스레드를 추적하지 않는다 — "fdatasync가 안 보인다"를 "문제가 없어졌다"로 오독할 뻔했다. <code style="font-family:'Fira Code';color:var(--accent)">-f</code>로 다시 재보니 같은 비용이 그대로 남아있었고(전체 syscall 시간의 25%), 그제서야 WAL 도입을 결정.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">결과</span>
+          <span class="decision-text">fdatasync -97%, 그러나 WAL 공유메모리 락(fcntl)이 +437% — 비용이 사라진 게 아니라 <strong>fsync 비용이 락 비용으로 형태를 바꾼</strong> 트레이드오프.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// Round 4 — 다음 층의 병목</div>
+        <div class="decision-title">이번엔 콘솔 로깅이 1위</div>
+        <div class="decision-row">
+          <span class="decision-label">발견</span>
+          <span class="decision-text">300-agent 규모로 처리량이 늘자 <code style="font-family:'Fira Code';color:var(--accent)">std::cout &lt;&lt; ... &lt;&lt; std::endl</code>(메트릭마다 강제 flush)이 write syscall 92%로 새 1위가 됨 — 병목은 한 층을 걷어내면 다음 층이 드러난다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">결과</span>
+          <span class="decision-text resolved">로그 조립/출력을 전용 워커 스레드로 분리 + <code style="font-family:'Fira Code';color:var(--accent)">endl</code> 대신 <code style="font-family:'Fira Code';color:var(--accent)">'\n'</code> — 300개 전원(250→300) 접속 성공.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// Round 5 — 검증하다 새 버그</div>
+        <div class="decision-title">데이터 레이스 — 진단 코드 자체가 깨져서 나옴</div>
+        <div class="decision-row">
+          <span class="decision-label">발견</span>
+          <span class="decision-text">이 개선을 100-agent 규모에서 재확인하려고 스레드 ID를 직접 계측하다가, <strong>그 진단 로그 자체가 스레드 간 문자 단위로 뒤섞여 나오는 걸 목격</strong> — 성능을 위해 같이 넣은 <code style="font-family:'Fira Code';color:var(--accent)">sync_with_stdio(false)</code>가 멀티스레드 안전장치를 없앤 게 원인이었다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">결과</span>
+          <span class="decision-text resolved">남은 콘솔 출력도 전부 같은 워커로 위임해 "런타임 중 한 스레드만 스트림을 건드린다"는 원칙을 일관 적용. 수정 전/후 성능 지표를 다시 비교해 순수 정확성 버그였음을 확인(성능 영향 없음).</span>
+        </div>
+      </div>
+    </div>
+
+    <table class="opt-table" style="margin-top:0.5rem;">
+      <thead>
+        <tr><th>단계</th><th>100-agent 접속 성공</th><th>300-agent 접속 성공</th><th>비고</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Round 1(베이스라인)</td><td class="before">72 / 100</td><td class="before">71 / 300</td><td>SQLite fdatasync가 네트워크 스레드를 블로킹</td></tr>
+        <tr><td>Round 2(워커 스레드)</td><td class="after">100 / 100</td><td>229 / 300</td><td>저장 비동기화</td></tr>
+        <tr><td>Round 3(WAL)</td><td>100 / 100</td><td>250 / 300</td><td>fdatasync↔fcntl 트레이드오프</td></tr>
+        <tr><td>Round 4(로깅 분리)</td><td>100 / 100</td><td class="after">300 / 300</td><td>콘솔 로깅 워커 분리, 전원 접속 성공</td></tr>
+      </tbody>
+    </table>
+
+    <div class="fix-block" style="margin-top:0.5rem;">
+      <div class="fix-header">최종 판단 — 여기서 멈추기로 함</div>
+      <p style="font-size:0.83rem; color:var(--text-2);">
+        300-agent 규모에 여전히 남은 병목(스레드 간 락 경합, futex)은 단일 Collector 프로세스 하나 · 개발 머신 한 대가 감당할 수 있는 현실적인 한계로 판단하고 더 파고들지 않기로 했다.
+        실제 운영이라면 이 지점부터는 코드를 더 쥐어짜기보다 <strong>Collector를 여러 대로 수평 확장</strong>하는 게 정공법 — 매 라운드 "무조건 좋아지는 개선은 없다"는 트레이드오프를 실측으로 확인한 것 자체가
+        이 5라운드의 결론이다.
+      </p>
     </div>
   </div>
 </section>
@@ -694,6 +1054,43 @@
       </div>
     </div>
 
+    <!-- Bug #3 -->
+    <div style="font-family:'Fira Code'; font-size:0.78rem; color:var(--text-2); margin-bottom:0.75rem; margin-top:0.5rem;">
+      // Bug #3 — EF Core + SQLite가 DateTimeOffset 비교를 SQL로 못 옮김
+    </div>
+
+    <div class="bug-block">
+      <div class="bug-header">문제 — 알림 페이지를 처음 실행하자마자 앱 전체가 크래시</div>
+      <p style="font-size:0.83rem; color:var(--text-2); margin-bottom:0.75rem;">
+        알림(2순위)·트레이스(5순위) 페이지는 빌드/단위테스트만 검증되고 실제로 브라우저에서 열어본 적이 없었다 — 이 프로젝트를 마무리하며 처음 실행해보니,
+        시작 직후 실행되는 보존 정책 백그라운드 서비스(<code style="font-family:'Fira Code'">RetentionService</code>)의
+        <code style="font-family:'Fira Code'">db.Metrics.Where(m =&gt; m.Ts &lt; cutoff).ExecuteDeleteAsync()</code>가 <code style="font-family:'Fira Code'">InvalidOperationException</code>으로 즉시 죽었다.
+        <code style="font-family:'Fira Code'">Ts</code>가 <code style="font-family:'Fira Code'">DateTimeOffset</code>인데, 이 EF Core+SQLite 조합이 부등호 비교를 SQL로 아예 번역하지 못하는 게 원인 — <code style="font-family:'Fira Code'">ExecuteDeleteAsync</code>뿐 아니라 일반 <code style="font-family:'Fira Code'">Where(...).ToListAsync()</code>조차 똑같이 실패했다.
+      </p>
+      <div class="code-block">
+        <pre><span class="c-comment">// 수정 전 - DateTimeOffset 부등호 비교를 그대로 LINQ에 씀</span>
+<span class="c-key">var</span> metricsCutoff = DateTimeOffset.UtcNow.AddDays(-_metricsRetentionDays);
+<span class="c-key">var</span> metricsDeleted = <span class="c-key">await</span> db.Metrics
+    .Where(m =&gt; m.Ts &lt; metricsCutoff)
+    .ExecuteDeleteAsync(ct);
+<span class="c-comment">// → InvalidOperationException: 이 LINQ 식을 SQL로 번역할 수 없음</span></pre>
+      </div>
+    </div>
+
+    <div class="fix-block">
+      <div class="fix-header">수정 — LINQ 번역을 아예 거치지 않는 파라미터화 raw SQL</div>
+      <div class="code-block">
+        <pre><span class="c-comment">// LINQ 번역 자체를 우회 - 값은 파라미터 바인딩이라 인젝션 안전</span>
+<span class="c-key">var</span> metricsDeleted = <span class="c-key">await</span> db.Database.ExecuteSqlInterpolatedAsync(
+    $<span class="c-str">"DELETE FROM Metrics WHERE Ts &lt; {metricsCutoff}"</span>, ct);</pre>
+      </div>
+      <div class="spotlight-note">
+        수정 후 <code style="font-family:'Fira Code'">/apm/traces</code>에서 <strong>같은 원인의 500 에러</strong>를 하나 더 발견 — 고친 즉시 "같은 패턴을 쓴 다른 코드가 더 있는가"를 능동적으로 재검색했고,
+        알림 컨트롤러는 동등 비교(<code style="font-family:'Fira Code'">== null</code>)만 써서 이 버그의 영향을 안 받는다는 것도 함께 확인했다.
+        재빌드 후 클린 상태로 다시 띄워 크래시 없음을 확인하고, 임계치를 실제로 낮춰 알림이 열리고 렌더링되는 것까지 실 트래픽으로 재검증(<code style="font-family:'Fira Code'">dotnet test</code> 18/18 통과, 회귀 없음).
+      </div>
+    </div>
+
     <!-- Bug Summary Table -->
     <div style="font-family:'Fira Code'; font-size:0.78rem; color:var(--text-2); margin-bottom:0.75rem; margin-top:0.5rem;">
       // 그 외 적용 검증 중 발견한 버그
@@ -738,6 +1135,12 @@
           <td>매니페스트 생성 MSBuild 타겟이 별도 NuGet 패키지에 있음</td>
           <td class="after">Microsoft.Extensions.FileProviders.Embedded 패키지 참조 추가</td>
         </tr>
+        <tr>
+          <td>콘솔 로그 동시 쓰기</td>
+          <td class="before">진단 로그 자체가 스레드 간 문자 단위로 뒤섞임</td>
+          <td>여러 스레드가 같은 std::cout에 동시 접근 + sync_with_stdio(false)가 안전장치 제거(위 "스케일 테스트" Round 5 참고)</td>
+          <td class="after">콘솔 출력을 전용 워커 스레드 하나로 전부 위임 — 성능 지표 불변 재확인</td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -763,7 +1166,8 @@
         <tr><td class="after">전체 syscall</td><td class="after">1,921회 / 19.4ms</td><td>5분(≈60사이클) 정상 동작, 대기가 압도적</td></tr>
         <tr><td class="after">RSS</td><td class="after">13.8MB 고정</td><td>15초 간격 20샘플 전부 동일 — 누수 없음</td></tr>
         <tr><td class="after">CPU 사용률</td><td class="after">평균 0.017%</td><td>유휴 대기(epoll_wait)가 거의 전부</td></tr>
-        <tr><td class="after">단위 테스트</td><td class="after">17 / 17 통과</td><td>C++ GoogleTest 9개 + .NET xUnit 8개</td></tr>
+        <tr><td class="after">단위 테스트</td><td class="after">27 / 27 통과</td><td>C++ GoogleTest 9개 + .NET xUnit 18개</td></tr>
+        <tr><td class="after">스케일 테스트</td><td class="after">72→300/300 접속</td><td>LoadTester 부하 실측 5라운드 — 상세: "스케일 테스트" 섹션</td></tr>
         <tr><td class="after">Windows 빌드/실행</td><td class="after">Collector.exe / Agent.exe 정적 링크</td><td>외부 DLL 0개(vcpkg x64-windows-static), TLS+AES-GCM 통신 및 실측 리소스 수집 확인(6+ 사이클, 크래시 없음)</td></tr>
       </tbody>
     </table>
@@ -802,10 +1206,19 @@
       <div class="skill-group">
         <div class="skill-group-title">// 데이터 / 저장</div>
         <ul class="skill-list">
-          <li>SQLite3</li>
-          <li>PostgreSQL / TimescaleDB(선택형)</li>
-          <li>IMetricStore 추상화</li>
-          <li>컴파일 타임 백엔드 선택</li>
+          <li>SQLite3(WAL 모드), PostgreSQL / TimescaleDB(선택형)</li>
+          <li>IMetricStore 추상화, 컴파일 타임 백엔드 선택</li>
+          <li>백엔드별 데이터 보존 정책(하이퍼테이블 청크 드롭 vs 직접 DELETE)</li>
+          <li>EF Core 쿼리 번역 한계 진단 + raw SQL 우회</li>
+        </ul>
+      </div>
+      <div class="skill-group">
+        <div class="skill-group-title">// 성능 프로파일링 / 동시성</div>
+        <ul class="skill-list">
+          <li>strace(-c/-f)로 syscall 레벨 병목 진단</li>
+          <li>부하 테스트 도구 자체 제작(LoadTester)</li>
+          <li>std::mutex/condition_variable 기반 워커 큐 설계</li>
+          <li>데이터 레이스 진단 및 수정</li>
         </ul>
       </div>
       <div class="skill-group">
