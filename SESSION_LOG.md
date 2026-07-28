@@ -7351,4 +7351,117 @@ WAL+로깅 개선은 100-agent 규모에선 1-7-b(WorkerQueue)에서 이미 해�
 
 ### 결정 사항
 
-사용자가 "진행하자"로 명시 확인, `Collector/main.cpp` 위 2곳(4개 호출) 실제 반영 완료. 임시 진단 코드(`std::this_thread::get_id()` 출력)는 원인 확인 후 즉시 되돌림(커밋 대상 아님). 커밋은 사용자 요청 시 진행.
+사용자가 "진행하자"로 명시 확인, `Collector/main.cpp` 위 2곳(4개 호출) 실제 반영 완료. 임시 진단 코드(`std::this_thread::get_id()` 출력)는 원인 확인 후 즉시 되돌림(커밋 대상 아님). 커밋 완료(`d664153`).
+
+## 2026-07-29 — 시각 검증(`/apm/alerts`, `/apm/traces`) 중 발견한 버그 2건: EF Core + SQLite가 `DateTimeOffset` 비교를 SQL로 못 옮김
+
+### 배경
+
+사용자가 "프로젝트 완료로 평가하겠다, 문서화와 시각 검증을 동시에 진행하겠다"고 확정 — 그동안 빌드/단위테스트만 검증되고 실제로 브라우저에서 열어본 적 없던 `/apm/alerts`(2순위)/`/apm/traces`(5순위)를 이번에 처음 실행. `run` 스킬을 통해 Collector + APM_Console을 실제로 함께 띄우고 LoadTester로 실 트래픽을 흘려보내 검증하는 과정에서 두 가지가 연달아 크래시/500 에러로 드러남 — "빌드 성공 ≠ 동작"이라는 이 프로젝트의 기존 원칙(`Docs/PROJECT_TECHNICAL_REVIEW.md` §9)이 그대로 재현된 사례.
+
+### 사전 조치 — 이관 후 방치된 설정 경로 수정
+
+`APM_Console/src/ApmConsole.Host/appsettings.json`의 `ConnectionString`/`WebServerAesKeyPath`/`ReceiverCertPath`/`ReceiverKeyPath`가 옛 모노레포 경로(`/home/shkim/dev/gw2-cross/...`)로 남아있던 것(2026-07-26 3순위 작업 때부터 알려져 있던 항목, `WORK_STATUS.md`에 "실행 시 문제되면 별도로 손봐야 함"으로 기록해뒀던 것)을 이번에 `/home/shkim/dev/APM/...`로 전부 수정. `APM_Console/certs/webserver.crt`/`.key`도 이 저장소엔 없던 상태라 `certs/generate_webserver_cert.sh`로 새로 생성.
+
+### 버그 A — `RetentionService.PruneAsync()`가 시작 즉시 전체 호스트를 크래시시킴
+
+**증상**: `dotnet run`으로 APM_Console을 처음 띄우자마자(요청 한 번 안 받고) `Unhandled exception`으로 프로세스 자체가 죽음.
+
+**원인**: `db.Metrics.Where(m => m.Ts < metricsCutoff).ExecuteDeleteAsync()`에서 `InvalidOperationException: The LINQ expression ... could not be translated`. `Ts`가 `DateTimeOffset`인데, 이 EF Core+SQLite 프로바이더 조합이 `DateTimeOffset` 비교(`<`)를 SQL로 번역하지 못함 — `ExecuteDeleteAsync`뿐 아니라 일반 `Where(...).ToListAsync()`조차 똑같이 실패(아래에서 확인). `RetentionService`는 `BackgroundService`로 등록돼 앱 시작 직후 실행되므로, 이 한 줄이 호스트 전체의 기동을 막음.
+
+**수정 전** (`Common/RetentionService.cs` — 전체 `PruneAsync()`):
+```csharp
+    private async Task PruneAsync(CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApmDbContext>();
+
+        var metricsCutoff = DateTimeOffset.UtcNow.AddDays(-_metricsRetentionDays);
+        var metricsDeleted = await db.Metrics
+            .Where(m => m.Ts < metricsCutoff)
+            .ExecuteDeleteAsync(ct);
+
+        // 진행 중인 알림(ClosedAt == null)은 기간과 무관하게 항상 보존 - 오래됐다고 지우면
+        // 활성 알림 목록에서 사라지는 버그가 됨(AlertsController.Index의 active 조회 기준과 동일).
+        var alertsCutoff = DateTimeOffset.UtcNow.AddDays(-_alertRetentionDays);
+        var alertsDeleted = await db.AlertRecords
+            .Where(a => a.ClosedAt != null && a.ClosedAt < alertsCutoff)
+            .ExecuteDeleteAsync(ct);
+
+        // TransactionSpans도 Metrics와 같은 고빈도 원본 데이터라 같은 보존 기간을 적용
+        // (2026-07-26 4순위 설계 - 새 설정값을 따로 만들지 않고 기존 정책을 자연스럽게 확장).
+        var spansDeleted = await db.TransactionSpans
+            .Where(s => s.Ts < metricsCutoff)
+            .ExecuteDeleteAsync(ct);
+
+        if (metricsDeleted > 0 || alertsDeleted > 0 || spansDeleted > 0)
+            Console.WriteLine($"[RetentionService] 정리 완료: metrics {metricsDeleted}건, alerts {alertsDeleted}건, spans {spansDeleted}건 삭제");
+    }
+```
+
+**시행착오**: 1차로 "조건에 맞는 PK만 `Select(Id)`로 뽑고 그 PK 목록으로 `ExecuteDeleteAsync`" 2단계 우회를 시도했으나, PK를 뽑는 첫 `Where(...).ToListAsync()` 자체가 똑같은 `InvalidOperationException`으로 실패 — `DateTimeOffset` 비교는 `ExecuteDelete` 한정 문제가 아니라 이 프로바이더에서 LINQ 비교 자체가 안 되는 것이었음이 이때 확인됨. 최종적으로 LINQ 번역을 아예 거치지 않는 파라미터화 raw SQL(`ExecuteSqlInterpolatedAsync`, 값은 파라미터 바인딩이라 인젝션 안전)로 우회.
+
+**수정 후**:
+```csharp
+    private async Task PruneAsync(CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApmDbContext>();
+
+        // SQLite EF Core 프로바이더가 DateTimeOffset 비교를 LINQ로 SQL 번역하지 못함
+        // (InvalidOperationException, 2026-07-29 첫 실행 시 발견 - ExecuteDeleteAsync는 물론
+        // 일반 Where(...).ToListAsync()조차 번역 실패. 그동안 빌드/단위테스트만 검증했지
+        // 실제 실행은 안 해봐서 못 잡았던 버그). LINQ 번역을 아예 거치지 않는 파라미터화
+        // raw SQL DELETE(ExecuteSqlInterpolatedAsync, 값은 파라미터 바인딩이라 인젝션 안전)로 우회.
+        var metricsCutoff = DateTimeOffset.UtcNow.AddDays(-_metricsRetentionDays);
+        var metricsDeleted = await db.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM Metrics WHERE Ts < {metricsCutoff}", ct);
+
+        // 진행 중인 알림(ClosedAt == null)은 기간과 무관하게 항상 보존 - 오래됐다고 지우면
+        // 활성 알림 목록에서 사라지는 버그가 됨(AlertsController.Index의 active 조회 기준과 동일).
+        var alertsCutoff = DateTimeOffset.UtcNow.AddDays(-_alertRetentionDays);
+        var alertsDeleted = await db.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM AlertRecords WHERE ClosedAt IS NOT NULL AND ClosedAt < {alertsCutoff}", ct);
+
+        // TransactionSpans도 Metrics와 같은 고빈도 원본 데이터라 같은 보존 기간을 적용
+        // (2026-07-26 4순위 설계 - 새 설정값을 따로 만들지 않고 기존 정책을 자연스럽게 확장).
+        var spansDeleted = await db.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM TransactionSpans WHERE Ts < {metricsCutoff}", ct);
+
+        if (metricsDeleted > 0 || alertsDeleted > 0 || spansDeleted > 0)
+            Console.WriteLine($"[RetentionService] 정리 완료: metrics {metricsDeleted}건, alerts {alertsDeleted}건, spans {spansDeleted}건 삭제");
+    }
+```
+
+**검증**: 재빌드 후 `dotnet run` → 정상 기동, 로그에 `DELETE FROM Metrics WHERE Ts < @p0` 등 3개 DELETE문이 파라미터 바인딩된 채 정상 실행되는 것을 EF Core 커맨드 로그로 직접 확인.
+
+### 버그 B — `/apm/traces`가 항상 HTTP 500
+
+**증상**: `/apm/traces` 접속 시 500. 원인이 같은 `DateTimeOffset` 비교 문제였는지 확인.
+
+**원인**: `TracesController.Index()`의 `_db.TransactionSpans.Where(s => s.Ts >= cutoff).Select(...).ToListAsync()` — 버그 A와 정확히 같은 근본 원인(`Ts >= cutoff` 비교가 SQL 번역 안 됨).
+
+**수정 전** (`Controllers/TracesController.cs` — 해당 쿼리 부분):
+```csharp
+        var spans = await _db.TransactionSpans
+            .AsNoTracking()
+            .Where(s => s.Ts >= cutoff)
+            .Select(s => new { s.OperationName, s.DurationUs, s.Success })
+            .ToListAsync();
+```
+
+**수정 후**: `Ts` 비교를 SQL로 안 보내고, `Ts`까지 포함해 전부 메모리로 가져온 뒤 필터링하도록 이동(원래 설계 코멘트에 있던 "OperationName+Ts 복합 인덱스가 이 WHERE에 맞는다"는 전제가 실제로는 안 맞았던 것 — 인덱스 활용은 포기하지만, 이 프로젝트 규모의 30일 치 span 개수로는 감내 가능한 트레이드오프로 판단):
+```csharp
+        var spans = (await _db.TransactionSpans
+            .AsNoTracking()
+            .Select(s => new { s.Ts, s.OperationName, s.DurationUs, s.Success })
+            .ToListAsync())
+            .Where(s => s.Ts >= cutoff)
+            .ToList();
+```
+
+**검증**: 재빌드 후 `curl http://localhost:5299/apm/traces?window=1h|24h|7d` 전부 HTTP 200, 1h 창에서 `Collector.HandleMetricPacket` 실 데이터(LoadTester 5-agent 30초 실행분) 확인. `AlertsController`/`AlertEvaluator`는 `ClosedAt == null`/`!= null` 같은 동등 비교만 써서 이 버그의 영향을 안 받는다는 것도 코드 검색으로 확인(`/apm/alerts`는 수정 없이 정상 200).
+
+### 결정 사항
+
+두 파일(`RetentionService.cs`, `TracesController.cs`) 실제 반영 완료 — 시각 검증을 진행하려면 이 두 크래시를 먼저 고치지 않고는 페이지 자체를 열 수 없었으므로, 발견 즉시 수정(이 프로젝트의 기존 관례 "적용 중 발견해 그 자리에서 고침"과 동일). 문서(`Docs/PROJECT_TECHNICAL_REVIEW.md` 신규 버그 9/10, `README.md`, `WORK_STATUS.md`) 반영은 뒤이어 진행. 커밋은 사용자 요청 시.

@@ -214,7 +214,9 @@
 
 **100-agent 기준 질문에 대한 결론**: WAL+로깅 개선은 100-agent 규모에선 1-7-b(WorkerQueue)에서 이미 해소된 하드 리밋(72→100)에 추가 이득을 주지 않음 — 오히려 p99가 소폭 늘어남(1,010ms→2,053ms), 워커 스레드가 1개→3개로 늘며 생기는 동기화 오버헤드로 보임(300-agent futex 경합 증가와 같은 패턴, 규모만 작을 뿐). 이 개선의 실질 효과는 300-agent 같은 고부하 구간(접속 성공 250→300)에 있음 — **100-agent를 기준으로 삼는다면 "이번 라운드 개선은 이 규모에선 순효과가 거의 없거나 근소하게 손해"가 정확한 결론**.
 
-**아직 커밋 안 됨** — 코드(`Collector/main.cpp`) + 문서(`WORK_STATUS.md`, `SESSION_LOG.md`) + 실측 산출물(`loadtest_results/agents_100_20260729_004316/`) 반영 완료, 커밋은 사용자 요청 시 진행.
+**커밋 완료(2026-07-29, `d664153` "Fix a console-log data race introduced by the previous logging fix")**.
+
+**최종 결정(2026-07-29, 사용자 확정) — 이 스레드 종료**: 300-agent 시나리오에 남아있는 futex 경합(스레드 간 락 대기)은 **Collector 단일 프로세스의 처리 능력 한계 또는 테스트에 쓰는 서버 머신 자체의 스펙 미달**로 판단하고 더 파고들지 않기로 함. 실제 운영이라면 이 지점부터는 코드를 더 최적화하기보다 Collector를 여러 대로 수평 확장하는 게 정공법이라는 결론. `README.md`/`Docs/PROJECT_TECHNICAL_REVIEW.md`(신규 §7-7, 버그 8) 문서 반영 완료 — 이로써 **로드맵 1~7-f 전부 완료 처리, 프로젝트를 완료로 평가**(사용자 확정). 남은 건 미뤄뒀던 실행 관점 시각 검증(`/apm/alerts`, `/apm/traces`)뿐이며 이번 세션에서 문서화와 동시 진행.
 
 ---
 
@@ -241,6 +243,12 @@
 
 **다음 할 일**: `/apm/alerts` 페이지를 실제로 띄워 임계치 편집 저장(`POST /apm/alerts/thresholds`)과 SignalR 실시간 알림(`AlertOpened`/`AlertResolved`)이 브라우저에서 의도대로 동작하는지 수동 확인하면 2순위 완전 종료. **(2026-07-26 확인: 아직 미실행)** — 빌드/단위 테스트만 검증됐고 브라우저 시각 검증은 보류 중.
 
+**실행 검증 완료(2026-07-29)** — Collector+APM_Console을 실제로 함께 띄워 검증(과정에서 `RetentionService` 크래시 버그 발견/수정, 아래 참고). GUI 브라우저 스크린샷은 샌드박스에 Chromium 구동용 시스템 라이브러리(`libnss3` 등)가 없어 `sudo` 설치가 필요해 보류했으나, `curl`로 실제 HTTP 상호작용까지 확인:
+- `GET /apm/alerts` → 200, 임계치 4개(CPU/메모리/디스크/TCP RTT) 정상 렌더링.
+- `POST /apm/alerts/thresholds`(`value[1]=77` 등)로 임계치 편집 → 302 리다이렉트 → 재조회 시 실제로 77로 반영된 것 확인(폼 저장 경로 실동작 확인).
+- CPU 임계치를 1%로 낮추고 `LoadTester`로 실 트래픽 발생 → `AlertEvaluator`가 실제로 알림을 열고, `/apm/alerts` 재조회 시 "CPU 사용률, 발생 07/29 01:18:39, 측정값 40.7, 임계치 1.0"이 `alert-row-active` 스타일로 뜨는 것 확인 — 임계치 초과 감지→저장→렌더링 전체 파이프라인이 실제로 동작함을 확인. 검증 후 임계치는 90으로 원복.
+- SignalR(`AlertOpened`/`AlertResolved`)이 **살아있는 브라우저 클라이언트**로 실시간 push되는지는 미검증(웹소켓 클라이언트 없이는 확인 불가) — 위 알림 상태 전이/저장/렌더링 자체는 검증됐으므로 리스크는 낮다고 판단.
+
 ### 3순위 — 데이터 보존 정책(retention) ✅ 코드 적용 + 빌드 검증 완료
 
 저장소가 두 군데(Collector 로컬 `IMetricStore`/Console `ApmDbContext`)라 양쪽 다 대상. 확인 4건 확정: 적용 범위 Console+Collector 둘 다, 시간 기준 정책, Metrics 기본 30일, `AlertRecord`는 Metrics보다 길게(180일). 백엔드별로 구현 방식이 다름 — TimescaleDB는 하이퍼테이블 네이티브 `add_retention_policy()`(청크째로 드롭), SQLite는 직접 `DELETE` + `PRAGMA incremental_vacuum`, Console(EF Core) 쪽은 백엔드 무관하게 `ExecuteDeleteAsync` 하나로 통일. 설계 상세: `SESSION_LOG.md` 2026-07-26 여섯 번째 항목("3순위(데이터 보존 정책) 설계 제안").
@@ -255,9 +263,9 @@
 - Collector: `cmake --build build` → `APM_Storage`/`Collector`/`Agent`/`LoadTester`/`APM_Common_Tests` 전부 빌드 성공. 컴파일된 오브젝트가 `SqliteMetricStore.cpp.o`뿐인 것으로 보아 현재 `APM_STORAGE_BACKEND=SQLite`로 빌드됨 — `TimescaleMetricStore.cpp`(네이티브 `add_retention_policy()` 경로)는 이번엔 컴파일 대상에 포함 안 됨, TimescaleDB 백엔드 전환 시 별도 컴파일 확인 필요.
 - (참고: `APM_Agent`에서 `dotnet build` 실행 시 `MSB1003` 에러가 났던 건 정상 — `APM_Agent`는 C++/CMake 프로젝트라 `.sln`/`.csproj`가 없음, `dotnet build`가 아니라 `cmake --build`가 맞는 명령.)
 
-**남은 선택 사항(코드/빌드 관점에선 3순위 완료, 실행 관점 확인은 선택)**: Collector를 실제로 띄워 24시간 대기 없이 즉시 확인하려면 `pruneTimer` 간격을 임시로 줄여서 `[SqliteMetricStore] prune 완료` 로그가 찍히는지 보는 정도 — 필수는 아님(설계상 `DELETE ... WHERE ts < now - N일` 로직 자체는 단순해 런타임 리스크가 낮다고 판단).
+**남은 선택 사항(코드/빌드 관점에선 3순위 완료, 실행 관점 확인은 선택)**: Collector 쪽(C++, `SqliteMetricStore::Prune()`)을 실제로 띄워 24시간 대기 없이 즉시 확인하려면 `pruneTimer` 간격을 임시로 줄여서 `[SqliteMetricStore] prune 완료` 로그가 찍히는지 보는 정도 — 아직 미실행. Console 쪽(.NET, `RetentionService`)은 2026-07-29 실행 검증 중 **시작 즉시 전체 호스트를 크래시시키는 버그**(`DateTimeOffset` 비교가 EF Core+SQLite 조합에서 SQL 번역 안 됨)를 발견해 raw SQL로 수정 완료 — 상세: `SESSION_LOG.md` 2026-07-29 항목, `Docs/PROJECT_TECHNICAL_REVIEW.md` 버그 9.
 
-**부수 발견(이번 작업 범위 밖)**: `APM_Console/src/ApmConsole.Host/appsettings.json`의 `ConnectionString`/키·인증서 경로가 옛 모노레포 경로(`/home/shkim/dev/gw2-cross/...`)로 남아있음 — 저장소 이관(2026-07-26) 이후 갱신 안 된 것으로 보임. 실행 시 문제되면 별도로 손봐야 함.
+**부수 발견(2026-07-26 기록, 2026-07-29 수정 완료)**: `APM_Console/src/ApmConsole.Host/appsettings.json`의 `ConnectionString`/키·인증서 경로가 옛 모노레포 경로(`/home/shkim/dev/gw2-cross/...`)로 남아있던 것 — 저장소 이관(2026-07-26) 이후 갱신 안 된 채 방치돼 있었음. `/home/shkim/dev/APM/...`로 수정하고 `APM_Console/certs/webserver.crt`/`.key`(이 저장소엔 없었음)를 `generate_webserver_cert.sh`로 새로 생성해 실제로 Collector+Console 연동까지 확인 완료.
 
 ### 4순위 — 함수/트랜잭션 레벨 계측 ✅ 코드 적용 + protoc 재생성 + 빌드/테스트 검증 완료
 
@@ -299,6 +307,8 @@ Agent/Collector 변경 없음(Console 쪽만 닫히는 작업 — C++ 재빌드 
 **검증 완료(사용자, WSL, 2026-07-26)**: `dotnet build` → `Build succeeded, 0 Warning(s), 0 Error(s)`. `dotnet test` → `Passed: 18, Failed: 0`(기존 13건 + 신규 `PercentileCalculatorTests` 5건) — 예상대로 회귀 없이 통과.
 
 **남은 선택 사항(코드/빌드 관점에선 5순위 완료, 실행 관점 확인은 선택)**: `/apm/traces` 페이지를 브라우저에서 직접 띄워 실제 트랜잭션 span 데이터(4순위 `Collector.HandleMetricPacket`/`AlertsController.Index` 계측분)로 시간 창 전환(1시간/24시간/7일)과 p50/p95/p99 표시가 의도대로 나오는지 확인 — 필수는 아님(2순위 `/apm/alerts` 시각 검증과 마찬가지로 아직 미실행 상태, 사용자 판단으로 뒤로 미뤄둔 항목들과 함께 나중에 일괄 확인 가능).
+
+**실행 검증 완료(2026-07-29)** — 실제로 띄워보니 `/apm/traces`가 **항상 HTTP 500**이었음(2순위 `RetentionService`와 같은 근본 원인 — `DateTimeOffset` 비교가 EF Core+SQLite에서 SQL 번역 안 됨, `TracesController.Index()`의 `Where(s => s.Ts >= cutoff)`). `Ts` 비교를 SQL로 안 보내고 메모리에서 필터링하도록 수정 후 재검증: `window=1h/24h/7d` 전부 200, 1h 창에서 `LoadTester`가 만든 실제 `Collector.HandleMetricPacket` span 데이터가 표에 나타나는 것 확인. 상세: `SESSION_LOG.md` 2026-07-29 항목, `Docs/PROJECT_TECHNICAL_REVIEW.md` 버그 10.
 
 이로써 로드맵 1~5순위 전부 코드/빌드 관점에서 완료. 남은 항목: 6순위(OpenTelemetry, 구현 안 함 - 면접 답변만 정리), 7순위(원격 명령 실행, 보류) — 그리고 미뤄둔 실행 관점 시각 검증들(2순위 알림, 5순위 트레이스, 1순위 부하 매트릭스 5단계).
 
