@@ -9,7 +9,7 @@
 | [`GW2_CrossPlatformCore/`](GW2_CrossPlatformCore/) | OS별 비동기 I/O 메커니즘(Windows IOCP / Linux epoll)을 [Standalone Asio](https://think-async.com/Asio/)로 추상화한 크로스플랫폼 네트워크 코어 |
 | [`APM_Agent/`](APM_Agent/) | 리소스 수집 에이전트(`Agent`) + 수집 서버(`Collector`). TLS + AES-256-GCM, Protobuf 직렬화, 메시지 프레이밍, SQLite/TimescaleDB 선택형 저장소. [자세히 →](APM_Agent/README.md) |
 | [`APM_Console/`](APM_Console/) | `Collector`로부터 수신한 데이터를 저장하고 SignalR로 실시간 시각화하는 .NET 8 웹 대시보드. 도메인별 플러그인 아키텍처(Razor Class Library + `AssemblyLoadContext`). [자세히 →](APM_Console/README.md) |
-| [`Docs/`](Docs/) | 포트폴리오 문서(`portfolio_apm.html`), 기술 리뷰(`PROJECT_TECHNICAL_REVIEW.md`), 보안/TLS 딥다이브 문서 |
+| [`Docs/`](Docs/) | 포트폴리오 문서(`portfolio_apm.html`/라이트 테마 `portfolio_apm_light.html`, 발표용 PPT `portfolio_apm_light.pptx`), 기술 리뷰(`PROJECT_TECHNICAL_REVIEW.md`), 보안/TLS 딥다이브 문서, 실행 화면 스크린샷(`screenshots/`) |
 
 ## 검증된 것
 

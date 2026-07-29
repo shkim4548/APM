@@ -61,7 +61,7 @@ Agent(수집 대상 시스템에서 실행) → Collector(수집 서버, 로컬 
 | 저장(Agent 쪽) | SQLite / PostgreSQL·TimescaleDB(컴파일 타임 선택) |
 | 웹 대시보드 | .NET 8, ASP.NET Core MVC + Razor, EF Core, SignalR |
 | 플러그인 구조 | Razor Class Library + `AssemblyLoadContext` |
-| 테스트 | GoogleTest(C++) 9개, xUnit(.NET) 8개 |
+| 테스트 | GoogleTest(C++) 9개, xUnit(.NET) 18개 |
 
 ---
 
@@ -830,15 +830,17 @@ private async Task StoreAndBroadcastAsync(Metric metric)
 - **C++(`APM_Agent/tests/AesGcmTests.cpp`, GoogleTest) 9개**:
   - `AesGcmCipher`(저수준) 5개: 왕복 정상 복원 / 매 호출마다 다른 nonce 생성 / 태그 변조 시 거부 / 암호문 변조 시 거부 / 다른 키로 복호화 불가.
   - `AesGcmPayload`(와이어 포맷·`IPayloadSealer`) 4개: 왕복 / `[Nonce 12B][ciphertext][Tag 16B]` 크기 검증 / 변조된 와이어 거부 / 인터페이스 경유 동작(구체 타입이 아니라 `IPayloadSealer*`로 호출해도 문제없는지).
-- **.NET(`APM_Console/tests/`, xUnit) 8개**:
+- **.NET(`APM_Console/tests/`, xUnit) 18개**:
   - `ReadExactAsyncTests` 4개: 한 번에 전부 수신 / 여러 조각으로 분할 수신(커스텀 `ChunkedStream`으로 TCP 부분 수신 재현) / 조기 종료 시 `null` / 길이 0이면 빈 배열.
   - `DecryptAndParseTests` 4개: 정상 왕복(필드값 복원) / 태그 변조·암호문 변조·잘못된 키 전부 `AuthenticationTagMismatchException`으로 거부.
+  - `AlertEvaluatorTests`(2순위 알림) 5개: 임계치를 처음 넘으면 `Opened` 반환 / 이미 열린 상태에서 계속 넘으면 `None` / 열린 상태에서 임계치 아래로 내려가면 `Resolved` / 원래도 정상이고 계속 정상이면 `None` / 임계치와 정확히 같으면 초과로 간주.
+  - `PercentileCalculatorTests`(5순위 백분위 통계) 5개: 빈 배열이면 0 / 값이 하나뿐이면 그 값 그대로 / P50은 중앙값과 같음 / 순위가 두 값 사이면 선형 보간 / P100은 최댓값과 같음.
 
 ### 테스트 가능하게 만들기 위한 리팩터링
 `MetricsReceiverService`의 `ReadExactAsync`/`DecryptAndParse`는 원래 `private`이었는데, `internal`로 가시성을 넓히고(`InternalsVisibleTo`로 테스트 프로젝트에만 노출) `DecryptAndParse`는 인스턴스 필드(`_aesKey`, 생성자가 파일 I/O로 채움) 대신 **키를 파라미터로 받는 `static` 메서드**로 전환했다 — DI로 서비스 전체를 구성하지 않아도 순수 로직만 테스트할 수 있게. 이건 "테스트 가능한 설계"가 저절로 되는 게 아니라 **의도적으로 리팩터링해야 얻어지는 것**이라는 걸 보여주는 사례.
 
-### 왜 이 두 개만 골랐나 (전체 커버리지가 목표가 아니었던 이유)
-암호화 관련 코드(가장 실수하기 쉽고, 실수하면 조용히 실패하는 영역)와, TCP 프레이밍(부분 수신이라는 비결정적 상황을 재현해야 하는 영역)을 우선했다. 전체 코드베이스에 대한 100% 커버리지를 목표로 하지 않은 이유:
+### 왜 이 영역들만 골랐나 (전체 커버리지가 목표가 아니었던 이유)
+암호화 관련 코드(가장 실수하기 쉽고, 실수하면 조용히 실패하는 영역)와 TCP 프레이밍(부분 수신이라는 비결정적 상황을 재현해야 하는 영역)을 먼저 우선했고, 이후 2·5순위(알림/백분위 통계)에서 추가한 `AlertEvaluator`/`PercentileCalculator`도 같은 기준(부작용 없는 순수 함수, 상태 전이·수치 계산처럼 실수하면 조용히 틀리는 영역)으로 테스트를 붙였다. 전체 코드베이스에 대한 100% 커버리지를 목표로 하지 않은 이유:
 1. 포트폴리오 프로젝트 특성상 시간 예산이 제한적이었고, "핵심 위험 지점 우선"이 합리적인 우선순위였다.
 2. Agent↔Collector 구간이 AES-GCM으로 통일되면서, `AesGcmCipher`/`AesGcmPayload` 테스트 9개가 **실제 운영 경로 전체(두 구간 모두)**를 커버하게 됐다 — 남아있는 `AriaCipher`/`HmacUtil`/`SecurePayload`는 실행 경로에서 빠진 참고용 코드라 테스트를 추가하지 않았다.
 3. `ApmSession::ProcessAccumulated`(프레이밍 재조립 로직)처럼 실제 소켓에 강결합된 부분은 아직 자동 테스트가 없다 — 이건 인지하고 있는 갭이고, 우선순위상 뒤로 미룬 것.
