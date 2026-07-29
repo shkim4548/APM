@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APM Agent &amp; Console — 모니터링 에이전트 포트폴리오</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:        #FFFFFF;
+      --card:      #F6F8FA;
+      --card2:     #EAEEF2;
+      --border:    #D0D7DE;
+      --border-2:  #E4E8EC;
+      --accent:    #0969DA;
+      --success:   #1A7F37;
+      --warning:   #9A6700;
+      --danger:    #CF222E;
+      --text-1:    #1F2328;
+      --text-2:    #59636E;
+      --text-3:    #6E7781;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text-1);
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-2);
+      padding: 0.75rem 2rem;
+      display: flex; align-items: center; gap: 2rem;
+    }
+    .nav-logo { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.9rem; color: var(--accent); }
+    .nav-links { display: flex; gap: 1.5rem; }
+    .nav-links a { color: var(--text-2); text-decoration: none; font-size: 0.85rem; transition: color .2s; }
+    .nav-links a:hover { color: var(--text-1); }
+
+    /* ── HERO ── */
+    #hero {
+      padding: 5rem 2rem 4rem;
+      max-width: 900px; margin: 0 auto;
+    }
+    .hero-award {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: rgba(26,127,55,0.08);
+      border: 1px solid rgba(26,127,55,0.35);
+      border-radius: 6px;
+      padding: 0.35rem 0.9rem;
+      font-family: 'Fira Code'; font-size: 0.8rem;
+      color: var(--success);
+      margin-bottom: 1.5rem;
+    }
+    .hero-award::before { content: "●"; }
+    .hero-title {
+      font-family: 'JetBrains Mono'; font-weight: 700;
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      line-height: 1.2;
+      margin-bottom: 0.5rem;
+    }
+    .hero-title .accent { color: var(--accent); }
+    .hero-subtitle {
+      font-size: 1.05rem; color: var(--text-2);
+      margin-bottom: 2rem; max-width: 640px;
+    }
+    .hero-tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 2.5rem; }
+    .tag {
+      font-family: 'Fira Code'; font-size: 0.75rem;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 4px; padding: 0.25rem 0.65rem;
+      color: var(--text-2);
+    }
+    .tag.accent { border-color: rgba(9,105,218,0.35); color: var(--accent); }
+    .tag.success { border-color: rgba(26,127,55,0.35); color: var(--success); }
+    .hero-stats {
+      display: flex; gap: 2.5rem; flex-wrap: wrap;
+    }
+    .hero-stat { text-align: center; }
+    .hero-stat-val {
+      font-family: 'JetBrains Mono'; font-weight: 700;
+      font-size: 1.5rem; color: var(--accent); display: block;
+    }
+    .hero-stat-label { font-size: 0.75rem; color: var(--text-3); }
+
+    /* ── SECTION COMMON ── */
+    section { padding: 4rem 2rem; border-top: 1px solid var(--border-2); }
+    .section-inner { max-width: 900px; margin: 0 auto; }
+    .section-label { font-family: 'Fira Code'; font-size: 0.75rem; color: var(--text-3); margin-bottom: 0.5rem; }
+    .section-title { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .section-sub { color: var(--text-2); margin-bottom: 2rem; font-size: 0.92rem; }
+
+    /* ── ARCH DIAGRAM ── */
+    .arch-diagram {
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      font-family: 'Fira Code'; font-size: 0.78rem;
+      color: var(--text-2);
+      line-height: 1.8;
+      overflow-x: auto;
+      margin-bottom: 2rem;
+      white-space: pre;
+    }
+    .arch-diagram .hl { color: var(--accent); }
+    .arch-diagram .hl2 { color: var(--success); }
+    .arch-diagram .hl3 { color: var(--warning); }
+    .arch-diagram .dim { color: var(--text-3); }
+
+    /* ── DECISION CARDS ── */
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .decision-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+    .decision-num {
+      font-family: 'Fira Code'; font-size: 0.7rem;
+      color: var(--text-3); margin-bottom: 0.4rem;
+    }
+    .decision-title {
+      font-family: 'JetBrains Mono'; font-weight: 600;
+      font-size: 0.92rem; color: var(--text-1); margin-bottom: 0.75rem;
+    }
+    .decision-row { margin-bottom: 0.5rem; }
+    .decision-label {
+      display: inline-block; width: 2.2rem;
+      font-family: 'Fira Code'; font-size: 0.7rem;
+      color: var(--text-3);
+    }
+    .decision-text { font-size: 0.83rem; color: var(--text-2); }
+    .decision-text.resolved { color: var(--success); }
+
+    /* ── CODE BLOCKS ── */
+    .code-block {
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem 1.25rem;
+      font-family: 'Fira Code'; font-size: 0.78rem;
+      line-height: 1.75;
+      overflow-x: auto;
+      margin: 0.75rem 0;
+    }
+    .code-block pre { margin: 0; }
+    .c-comment { color: #6E7781; }
+    .c-key { color: #CF222E; }
+    .c-type { color: #0550AE; }
+    .c-fn { color: #8250DF; }
+    .c-num { color: #0550AE; }
+    .c-str { color: #116329; }
+
+    /* ── SPOTLIGHT ── */
+    .bug-block {
+      border: 1px solid rgba(207,34,46,0.3);
+      background: rgba(207,34,46,0.05);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .bug-block .bug-header {
+      font-family: 'Fira Code'; font-size: 0.75rem;
+      color: var(--danger); margin-bottom: 1rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .bug-block .bug-header::before { content: "✕"; }
+    .fix-block {
+      border: 1px solid rgba(26,127,55,0.3);
+      background: rgba(26,127,55,0.05);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .fix-block .fix-header {
+      font-family: 'Fira Code'; font-size: 0.75rem;
+      color: var(--success); margin-bottom: 1rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .fix-block .fix-header::before { content: "✓"; }
+    .spotlight-note {
+      font-size: 0.82rem; color: var(--text-2);
+      margin-top: 0.75rem; padding-top: 0.75rem;
+      border-top: 1px solid rgba(26,127,55,0.2);
+    }
+
+    /* ── TABLES ── */
+    .opt-table {
+      width: 100%; border-collapse: collapse;
+      font-size: 0.83rem; margin-bottom: 1.5rem;
+    }
+    .opt-table th {
+      text-align: left; padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      font-family: 'Fira Code'; font-size: 0.72rem;
+      color: var(--text-3); font-weight: 400;
+    }
+    .opt-table td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--border-2);
+      color: var(--text-2);
+      vertical-align: top;
+    }
+    .opt-table td:first-child { color: var(--text-1); font-family: 'Fira Code'; font-size: 0.8rem; white-space: nowrap; }
+    .opt-table .before { color: var(--danger); font-family: 'Fira Code'; font-size: 0.78rem; }
+    .opt-table .after  { color: var(--success); font-family: 'Fira Code'; font-size: 0.78rem; }
+
+    /* ── SCREENSHOTS (placeholder — swap for real <img> once captured) ── */
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+    .screenshot-frame {
+      aspect-ratio: 16 / 10;
+      background:
+        repeating-linear-gradient(135deg, rgba(0,0,0,0.025) 0 2px, transparent 2px 12px),
+        var(--card2);
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 0.5rem; padding: 1rem; text-align: center;
+    }
+    .screenshot-frame .ph-icon { font-size: 1.6rem; color: var(--text-3); opacity: 0.6; }
+    .screenshot-frame .ph-label {
+      font-family: 'Fira Code'; font-size: 0.75rem; color: var(--text-3);
+    }
+    .screenshot-caption { margin-top: 0.75rem; }
+    .screenshot-caption .path {
+      font-family: 'JetBrains Mono'; font-weight: 600; font-size: 0.85rem; color: var(--accent);
+      display: block; margin-bottom: 0.3rem;
+    }
+    .screenshot-caption .desc { font-size: 0.82rem; color: var(--text-2); }
+
+    /* ── SKILLS ── */
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .skill-group {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+    .skill-group-title {
+      font-family: 'Fira Code'; font-size: 0.72rem;
+      color: var(--text-3); margin-bottom: 0.75rem;
+    }
+    .skill-list { list-style: none; }
+    .skill-list li {
+      font-size: 0.83rem; color: var(--text-2);
+      padding: 0.15rem 0;
+    }
+    .skill-list li::before { content: "· "; color: var(--text-3); }
+
+    /* ── CONTACT ── */
+    #contact { border-top: 1px solid var(--border-2); }
+    .contact-inner {
+      max-width: 900px; margin: 0 auto;
+      display: flex; align-items: flex-start;
+      gap: 3rem; flex-wrap: wrap;
+    }
+    .contact-left { flex: 1; min-width: 200px; }
+    .contact-label { font-family: 'Fira Code'; font-size: 0.72rem; color: var(--text-3); margin-bottom: 0.5rem; }
+    .contact-left h2 { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 1.3rem; margin-bottom: 0.75rem; }
+    .contact-left p { color: var(--text-2); font-size: 0.88rem; }
+    .contact-links { display: flex; flex-direction: column; gap: 0.75rem; padding-top: 0.25rem; }
+    .contact-item {
+      display: flex; align-items: center; gap: 1rem;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.9rem 1.2rem;
+      text-decoration: none; color: inherit;
+      transition: border-color .2s;
+    }
+    .contact-item:hover { border-color: var(--accent); }
+    .contact-item-icon { font-size: 1rem; width: 1.5rem; text-align: center; color: var(--text-3); }
+    .contact-item-label { font-size: 0.72rem; color: var(--text-3); display: block; }
+    .contact-item-value { font-family: 'Fira Code'; font-size: 0.85rem; color: var(--text-1); }
+    .contact-note {
+      margin-top: 1rem; padding: 0.85rem 1rem;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 6px; font-size: 0.8rem; color: var(--text-2);
+    }
+
+    footer {
+      text-align: center; padding: 2rem;
+      font-family: 'Fira Code'; font-size: 0.72rem;
+      color: var(--text-3); border-top: 1px solid var(--border-2);
+    }
+
+    /* ── FADE-IN ── */
+    .fade-in { opacity: 0; transform: translateY(16px); transition: opacity .5s ease, transform .5s ease; }
+    .fade-in.visible { opacity: 1; transform: none; }
+
+    @media (max-width: 600px) {
+      nav { gap: 1rem; }
+      .nav-links { gap: 1rem; }
+      #hero { padding: 3rem 1.25rem 2.5rem; }
+      .hero-stats { gap: 1.5rem; }
+      .contact-inner { flex-direction: column; gap: 1.5rem; }
+      section { padding: 3rem 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-logo">APM_Agent · APM_Console</span>
+  <div class="nav-links">
+    <a href="#arch">아키텍처</a>
+    <a href="#metric-impl">지표 수집</a>
+    <a href="#screenshots">실행 화면</a>
+    <a href="#decisions">설계 결정</a>
+    <a href="#features">기능</a>
+    <a href="#scale">스케일 테스트</a>
+    <a href="#spotlight">버그 발견</a>
+    <a href="#metrics">실측 지표</a>
+    <a href="#skills">기술 스택</a>
+    <a href="#contact">연락처</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero" style="border-top:none; padding-top:5rem;">
+  <div class="section-inner fade-in">
+    <div class="hero-award">전체 파이프라인 end-to-end 동작 · 실측 검증 완료</div>
+    <h1 class="hero-title">
+      <span class="accent">APM Agent &amp; Console</span><br>
+      경량 모니터링 에이전트 +<br>실시간 웹 대시보드
+    </h1>
+    <p class="hero-subtitle">
+      기존 IOCP 기반 TCP 서버 경험을 Standalone Asio로 재구성한 크로스플랫폼 네트워크 코어 위에,
+      TLS·페이로드 이중 암호화(AES-256-GCM)·메시지 프레이밍·타입 안전 직렬화를 갖춘 수집 에이전트와,
+      .NET 8 플러그인 아키텍처 기반 실시간 대시보드까지 1인 설계·구현.
+    </p>
+    <div class="hero-tags">
+      <span class="tag accent">C++20 / Standalone Asio</span>
+      <span class="tag accent">TLS + AES-256-GCM (AEAD)</span>
+      <span class="tag">Protobuf</span>
+      <span class="tag">SQLite / TimescaleDB (선택형)</span>
+      <span class="tag success">.NET 8 / ASP.NET Core</span>
+      <span class="tag success">SignalR + Chart.js</span>
+      <span class="tag success">Razor Class Library 플러그인</span>
+      <span class="tag accent">크로스플랫폼: Linux + Windows 빌드/실행 검증</span>
+      <span class="tag">알림 / 보존정책 / 트랜잭션 추적 / 백분위 통계</span>
+      <span class="tag accent">부하 테스트(LoadTester) + strace 프로파일링</span>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <span class="hero-stat-val">5</span>
+        <span class="hero-stat-label">수집 지표 종류(CPU/메모리/디스크/네트워크/TCP)</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-val">27</span>
+        <span class="hero-stat-label">단위 테스트 전부 통과(C++ 9 + .NET 18)</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-val">300</span>
+        <span class="hero-stat-label">동시 접속 부하 테스트(자체 제작 LoadTester)</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-val">13.8MB</span>
+        <span class="hero-stat-label">RSS 5분간 완전 고정(누수 없음)</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-val">2/2</span>
+        <span class="hero-stat-label">OS 빌드+실행 검증(Linux, Windows)</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-val">10</span>
+        <span class="hero-stat-label">실행 검증 중 발견·수정한 버그</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section id="arch">
+  <div class="section-inner fade-in">
+    <div class="section-label">// Architecture</div>
+    <h2 class="section-title">전체 시스템 구조</h2>
+    <p class="section-sub">Agent → Collector(로컬 저장) → APM_Console(웹 대시보드)까지 3개 프로세스, 구간별 별도 키를 쓰는 2개의 AES-256-GCM 암호화 구간.</p>
+
+    <div class="arch-diagram">
+<span class="hl">[ Agent ]</span>                                                <span class="hl2">[ Collector ]</span>
+  ResourceCollector      <span class="dim">─ CPU/메모리/디스크/네트워크/TCP</span>
+                         <span class="dim">  Linux: /proc, /proc/net/dev, TCP_INFO</span>
+                         <span class="dim">  Windows: GetSystemTimes, GlobalMemoryStatusEx, GetIfTable2, SIO_TCP_INFO</span>
+        │  <span class="dim">Protobuf 직렬화 (apm::Metric)</span>
+        ▼
+  [PacketHeader{size,id}]  <span class="dim">← 프레이밍 (ApmSession::ProcessAccumulated)</span>
+        │  <span class="dim">AesGcmPayload::Seal() — AES-256-GCM (AEAD)</span>
+        ▼
+  <span class="dim">─────────────────────── TLS (asio::ssl) ───────────────────────</span>
+  <span class="dim">──────────────── 비동기 I/O 코어 (asio::io_context) ────────────────</span>
+                                                                       │
+                                                        <span class="hl2">PacketHandler</span>  <span class="dim">─ 타입 안전 디스패치</span>
+                                                                       │
+                                                        <span class="hl2">IMetricStore</span>  <span class="dim">─ SQLite / TimescaleDB (컴파일 타임 선택)</span>
+                                                                       │
+                                                        <span class="hl2">ResilientSender</span>  <span class="dim">─ 단절 시 큐잉 → 재연결 시 순서대로 재전송</span>
+                                                                       │  <span class="dim">AesGcmPayload::Seal() — AES-256-GCM (AEAD)</span>
+                                                                       ▼
+                                                  <span class="dim">──── TLS (Collector↔Console 전용 인증서) ────</span>
+
+<span class="hl3">[ APM_Console — ApmConsole.Host (.NET 8) ]</span>
+  MetricsReceiverService <span class="dim">(TcpListener + SslStream)</span>
+        │  <span class="dim">PacketHeader 파싱 → AesGcm 복호화 → Metric.Parser.ParseFrom</span>
+        ▼
+  ApmDbContext <span class="dim">(SQLite, webserver_apm.db) 저장</span>
+        │
+  MetricsHub <span class="dim">(SignalR, /apm/hub/metrics) 실시간 브로드캐스트</span>
+        ▼
+  브라우저 <span class="hl">/apm/dashboard</span>  <span class="dim">─ Chart.js 그래프 5개 + 최근 메트릭 표(11컬럼)</span>
+    </div>
+
+    <div class="decision-grid" style="grid-template-columns: 1fr 1fr; margin-bottom:0;">
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:8px; padding:1.25rem;">
+        <div style="font-family:'Fira Code'; font-size:0.72rem; color:var(--text-3); margin-bottom:0.4rem;">// Agent ↔ Collector</div>
+        <div style="font-family:'JetBrains Mono'; font-weight:600; font-size:0.88rem; margin-bottom:0.5rem;">AES-256-GCM (agent_collector_aes.key)</div>
+        <div style="font-size:0.82rem; color:var(--text-2);">
+          원래는 KISA 표준 국산 블록 암호(ARIA-256-CBC+HMAC, Encrypt-then-MAC)를 실무처럼 다뤄보는 목적으로 구현·검증까지 마쳤으나,
+          이후 AES-GCM으로 통일(아래 "설계 의사결정" 참고) — 구현 경험 자체는 코드·문서로 남아있다.
+        </div>
+      </div>
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:8px; padding:1.25rem;">
+        <div style="font-family:'Fira Code'; font-size:0.72rem; color:var(--text-3); margin-bottom:0.4rem;">// Collector ↔ Console</div>
+        <div style="font-family:'JetBrains Mono'; font-weight:600; font-size:0.88rem; margin-bottom:0.5rem;">AES-256-GCM (webserver_aes.key)</div>
+        <div style="font-size:0.82rem; color:var(--text-2);">
+          .NET 진영과의 상호운용성과 AEAD의 구조적 이점(패딩 오라클 공격면 자체가 없음)을 위해 채택.
+          두 구간 모두 <code style="font-family:'Fira Code'; color:var(--accent);">IPayloadSealer</code> 인터페이스로 추상화되어 있어 세션은 암호 방식을 모르고, 키는 구간별로 분리되어 있다.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- METRIC IMPLEMENTATION DETAIL -->
+<section id="metric-impl">
+  <div class="section-inner fade-in">
+    <div class="section-label">// How The Numbers Are Actually Computed</div>
+    <h2 class="section-title">지표 수집 — OS 커널에서 직접</h2>
+    <p class="section-sub"><code style="font-family:'Fira Code'; color:var(--accent);">ResourceCollector</code>(C++, Linux)가 <code style="font-family:'Fira Code'; color:var(--accent);">/proc</code> 파일시스템·소켓 옵션을 직접 파싱해서 지표를 만든다 — 라이브러리 뒤에 숨지 않고 계산 방식 하나하나를 직접 결정했다.</p>
+
+    <table class="opt-table">
+      <thead>
+        <tr><th>지표</th><th>소스</th><th>핵심 포인트</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>CPU 사용률</td>
+          <td><code style="font-family:'Fira Code'">/proc/stat</code></td>
+          <td>부팅 이후 누적 jiffies라 한 시점 값만으론 의미 없음 — 두 샘플 사이의 <strong>델타</strong>로 계산. <code style="font-family:'Fira Code'">iowait</code>도 idle에 합산(표준 관례).</td>
+        </tr>
+        <tr>
+          <td>메모리 사용량</td>
+          <td><code style="font-family:'Fira Code'">/proc/meminfo</code></td>
+          <td><code style="font-family:'Fira Code'">MemFree</code>가 아니라 <code style="font-family:'Fira Code'">MemAvailable</code> 사용 — 아래 상세 참고.</td>
+        </tr>
+        <tr>
+          <td>네트워크 대역폭</td>
+          <td><code style="font-family:'Fira Code'">/proc/net/dev</code></td>
+          <td>인터페이스별 누적 바이트를 델타 계산, <code style="font-family:'Fira Code'">steady_clock</code>으로 실제 경과시간 측정(고정 주기 가정 안 함). <code style="font-family:'Fira Code'">lo</code>(루프백)는 제외.</td>
+        </tr>
+        <tr>
+          <td>TCP 연결 품질</td>
+          <td><code style="font-family:'Fira Code'">getsockopt(TCP_INFO)</code></td>
+          <td>RTT/재전송/혼잡윈도우를 애플리케이션이 재측정하지 않고 커널이 이미 추적 중인 값을 그대로 조회 — 아래 상세 참고.</td>
+        </tr>
+        <tr>
+          <td>디스크 사용량</td>
+          <td><code style="font-family:'Fira Code'">statvfs()</code></td>
+          <td>POSIX 표준 함수로 블록 수×블록 크기를 바이트로 환산.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="decision-grid" style="grid-template-columns: 1fr 1fr; margin-top:1.5rem;">
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:8px; padding:1.25rem;">
+        <div style="font-family:'Fira Code'; font-size:0.72rem; color:var(--text-3); margin-bottom:0.4rem;">// MemFree가 아니라 MemAvailable</div>
+        <div style="font-size:0.82rem; color:var(--text-2);">
+          Linux는 남는 메모리를 페이지 캐시로 적극 활용한다 — <code style="font-family:'Fira Code';color:var(--accent);">MemFree</code>(완전 여유분)만 보면 "메모리가 거의 다 찼다"는 착시가 생긴다.
+          <code style="font-family:'Fira Code';color:var(--accent);">MemAvailable</code>은 캐시처럼 필요시 즉시 회수 가능한 부분까지 커널이 직접 계산해 제공하는 값 — 실제 체감 여유 메모리에 훨씬 가깝다.
+        </div>
+      </div>
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:8px; padding:1.25rem;">
+        <div style="font-family:'Fira Code'; font-size:0.72rem; color:var(--text-3); margin-bottom:0.4rem;">// TCP 품질을 왜 커널 값으로 조회하나</div>
+        <div style="font-size:0.82rem; color:var(--text-2);">
+          커널의 TCP 스택은 흐름/혼잡 제어를 위해 RTT·재전송 횟수를 이미 실시간으로 추적하고 있다. <code style="font-family:'Fira Code';color:var(--accent);">getsockopt(fd, IPPROTO_TCP, TCP_INFO, ...)</code>로 그 값을 그대로 읽어오면 되는데,
+          애플리케이션이 별도로 재측정하면 정확도는 떨어지고 오버헤드만 늘어난다. TLS 아래 순수 TCP 계층 정보라 암호화 여부와 무관하게 조회 가능.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!--
+  SCREENSHOTS — real captures (Docs/screenshots/*.png), taken 2026-07-29 with Collector+Console
+  both running and LoadTester driving real traffic. terminal.png is a themed HTML re-render of
+  actual console log lines (not a raw terminal grab) so it matches the page's dark theme.
+-->
+<section id="screenshots">
+  <div class="section-inner fade-in">
+    <div class="section-label">// Running, Not Just Built</div>
+    <h2 class="section-title">실제 실행 화면</h2>
+    <p class="section-sub">Collector+Console을 함께 띄우고 실 트래픽을 흘려 직접 촬영(2026-07-29) — 4개 화면 전부 실제 데이터.</p>
+
+    <div class="screenshot-grid">
+      <div>
+        <img src="screenshots/dashboard.png" alt="/apm/dashboard 실행 화면" style="width:100%; aspect-ratio:16/10; object-fit:cover; object-position:top; border-radius:8px; border:1px solid var(--border);">
+        <div class="screenshot-caption">
+          <span class="path">/apm/dashboard</span>
+          <span class="desc">Chart.js 그래프 5개(CPU/메모리/디스크/네트워크/TCP RTT) + SignalR 실시간 갱신, 최근 메트릭 표 11컬럼.</span>
+        </div>
+      </div>
+      <div>
+        <img src="screenshots/alerts.png" alt="/apm/alerts 실행 화면" style="width:100%; aspect-ratio:16/10; object-fit:cover; object-position:top; border-radius:8px; border:1px solid var(--border);">
+        <div class="screenshot-caption">
+          <span class="path">/apm/alerts</span>
+          <span class="desc">임계치 편집 + 활성 알림 목록. 실제로 임계치를 낮춰 알림이 열리고 렌더링되는 것까지 실 트래픽으로 확인 완료.</span>
+        </div>
+      </div>
+      <div>
+        <img src="screenshots/traces.png" alt="/apm/traces 실행 화면" style="width:100%; aspect-ratio:16/10; object-fit:cover; object-position:top; border-radius:8px; border:1px solid var(--border);">
+        <div class="screenshot-caption">
+          <span class="path">/apm/traces</span>
+          <span class="desc">시간 창(1h/24h/7d) 전환 가능한 p50/p95/p99 백분위 통계 — 실제 span 데이터로 렌더링 확인.</span>
+        </div>
+      </div>
+      <div>
+        <img src="screenshots/terminal.png" alt="터미널 실행 화면" style="width:100%; aspect-ratio:16/10; object-fit:cover; object-position:top; border-radius:8px; border:1px solid var(--border);">
+        <div class="screenshot-caption">
+          <span class="path">터미널 — Agent / Collector / LoadTester</span>
+          <span class="desc">jiffies 델타 CPU%, MemAvailable 기반 메모리, TCP_INFO RTT 등 실측값이 실제로 콘솔에 찍히는 모습 + 300-agent 부하 테스트 실행 로그.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DESIGN DECISIONS -->
+<section id="decisions">
+  <div class="section-inner fade-in">
+    <div class="section-label">// Design Decisions</div>
+    <h2 class="section-title">설계 의사결정</h2>
+    <p class="section-sub">각 선택의 이유 — "왜 이렇게 만들었는가".</p>
+
+    <div class="decision-grid">
+      <div class="decision-card">
+        <div class="decision-num">// 01</div>
+        <div class="decision-title">Standalone Asio 채택</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">기존 서버는 Windows IOCP에 강하게 결합되어 있어 Linux 등 다른 OS에서 전혀 동작하지 않았다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">OS별 비동기 I/O 메커니즘(IOCP/epoll)을 직접 분기하는 대신, 이를 추상화해 제공하는 Standalone Asio(Boost 전체 의존 없이)를 채택 — 비동기 I/O·멀티스레드 구조 자체는 기존 설계 유지.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">Linux에서 빌드+실행까지 검증(포트 리스닝, 무크래시) — 실무 서버 환경(Linux 다수)에 즉시 적용 가능한 크로스플랫폼 네트워크 계층 확보.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 02</div>
+        <div class="decision-title">ApmSession 독립 작성 (공용 Session 무수정)</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">공유 Session 클래스에 TLS를 가상 함수로 수술하면, TLS를 쓰지 않는 다른 소비자까지 영향을 받는다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">TLS 소비자가 하나뿐인 시점에 공용 클래스 책임을 넓히는 건 과설계(YAGNI) — 독립된 ApmSession을 신규 작성.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">Session은 완전 무수정, ApmSession이 메시지 프레이밍·페이로드 암호화·재연결까지 전담.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 03</div>
+        <div class="decision-title">ARIA-CBC+HMAC → AES-GCM 마이그레이션</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">Agent↔Collector는 ARIA-256-CBC+HMAC(Encrypt-then-MAC, 구현·검증 완료)을 썼는데, 수동 조합이라 순서를 잘못 짜면 패딩 오라클이 재발할 여지가 있고, 자동 테스트도 AES-GCM에만 있고 ARIA엔 없는 비대칭이 있었다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">GCM은 AEAD라 암호화·인증을 한 번에 처리 — 조합 실수 자체가 구조적으로 불가능. 두 구간 모두 AES-256-GCM으로 통일하기로 결정.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">ARIA-CBC+HMAC 구현·검증 경험은 코드를 지우지 않고 보존 + 별도 문서(ARIA_TO_AES_MIGRATION.md)로 남김. 마이그레이션 후 실제 실행으로 재검증(TLS 핸드셰이크 + AES-GCM 복호화 + 메트릭 정상 수신).</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 04</div>
+        <div class="decision-title">IPayloadSealer — 암호 방식을 세션과 분리</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">세션(ApmSession/ResilientSender)이 특정 암호 구현에 고정되면, 위처럼 암호 방식을 바꿀 때마다 프레이밍·재연결 로직까지 손대야 한다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">Seal()/Open() 인터페이스로 세션과 구체 암호 구현을 분리, 세션 생성 시점에 구현체만 주입.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">ARIA→AES 마이그레이션이 main.cpp 몇 줄(주입하는 구현체 교체)로 끝난 것 자체가 이 추상화의 값을 증명 — 세션/프레이밍/재연결 코드는 무변경.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 05</div>
+        <div class="decision-title">메시지 프레이밍 + Protobuf 리플렉션</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">전송 프로토콜에 메시지 경계가 없어, 한 번의 read를 메시지 하나로 가정하는 설계 공백이 있었다 — 우연히(작은 메시지) 동작했을 뿐.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">PacketHeader{size,id}로 프레이밍, 패킷 ID는 수동 배정 대신 Protobuf 리플렉션으로 자동 결정.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">PacketHandler::Register&lt;T&gt;()가 역직렬화까지 자동 처리 — ID 충돌·오타가 구조적으로 불가능.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 06</div>
+        <div class="decision-title">IMetricStore — 컴파일 타임 저장소 선택</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">SQLite(경량)와 TimescaleDB(시계열 특화) 둘 다 지원하고 싶지만, 안 쓰는 백엔드의 의존성이 남으면 "가벼운 에이전트"라는 목표에 어긋난다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">런타임 분기 대신 인터페이스 + CMake 옵션(APM_STORAGE_BACKEND)으로 컴파일 타임에 하나만 선택.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">SQLite 선택 시 <code style="font-family:'Fira Code';color:var(--accent)">ldd</code>로 libpq 미링크 실측 확인 — Postgres 미설치 환경에서도 빌드+실행 가능. 같은 문제를 .NET(APM_Console)은 두 프로바이더를 다 참조해도 빌드에 지장이 없어 <em style="color:var(--text-3)">런타임</em> 선택으로 단순화 — 언어별 컴파일 모델 차이를 반영한 의도적 비대칭.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 07</div>
+        <div class="decision-title">PrivilegeDrop — 최소 권한 원칙</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">모니터링 에이전트가 침해당했을 때, 과도한 권한으로 실행 중이면 피해 범위가 커진다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">포트 바인딩처럼 특권이 필요한 초기화만 root로 수행하고, 직후 setuid/setgid로 nobody까지 하향.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">gid→보조그룹 제거→uid 순서, 하향 후 setuid(0) 재시도 실패까지 방어적으로 검증.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 08</div>
+        <div class="decision-title">도메인별 프로젝트 + Razor Class Library 플러그인</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">Apm/Game 도메인을 한 프로젝트에 두면, 간헐적으로 진행되는 프로젝트 특성상 미래에 컨벤션을 잊고 다른 도메인 타입을 실수로 참조할 위험이 있다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">공수가 더 들어도 컴파일 타임에 강제되는 진짜 도메인 격리를 우선 — 속도보다 구조 학습 가치를 선택.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">도메인별 Razor Class Library(.cshtml이 DLL에 내장) + 커스텀 AssemblyLoadContext로 런타임 로딩. 호스트가 이미 로드한 공유 계약 타입(<code style="font-family:'Fira Code';color:var(--accent)">IDomainModule</code> 등)은 재로딩하지 않고 그대로 재사용하도록 처리 — 같은 이름의 타입도 ALC가 다르면 별개 타입으로 취급되는, .NET 플러그인 아키텍처의 잘 알려진 함정을 피함.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 09</div>
+        <div class="decision-title">Windows 크로스플랫폼 포팅 + Smart App Control 대응</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">Linux 전용으로 개발된 <code style="font-family:'Fira Code';color:var(--accent)">ResourceCollector</code>(/proc 기반)·TCP 지표 조회(TCP_INFO)를 Windows에서 빌드하니 컴파일조차 안 됐고, 다 고쳐서 빌드에 성공한 뒤에도 실행 시 원인 불명으로 멈췄다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">Windows 이벤트 로그(CodeIntegrity)로 추적한 결과 Smart App Control이 로컬에서 새로 빌드한(서명 안 된) vcpkg DLL 로딩 자체를 차단하고 있음을 확정 — 시스템 보안 설정을 낮추는 대신, 정적 링크로 전환해 서명 안 된 외부 DLL 의존성 자체를 없애기로 결정.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">WinAPI(GetSystemTimes/GlobalMemoryStatusEx/GetIfTable2/SIO_TCP_INFO)로 수집 로직 이식 + vcpkg <code style="font-family:'Fira Code';color:var(--accent)">x64-windows-static</code> 트리플릿으로 재구성 — <code style="font-family:'Fira Code';color:var(--accent)">Collector.exe</code>/<code style="font-family:'Fira Code';color:var(--accent)">Agent.exe</code>가 외부 DLL 0개로 완전 정적 빌드되어 SAC 차단을 코드 변경 없이 우회. TLS+AES-GCM 통신·실측 리소스 수집·SQLite 저장까지 전체 파이프라인을 Windows에서 실제 실행으로 재검증.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 10</div>
+        <div class="decision-title">테스트 전략 — 전체 커버리지 대신 핵심 위험 지점 우선</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">포트폴리오 프로젝트는 시간 예산이 정해져 있다 — 모든 코드를 같은 강도로 테스트하는 건 "안 하는 것"과 실질적으로 같은 결과를 낳는다(어디에도 깊이가 없음).</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">"실수하면 조용히 실패하고 파급력이 큰" 두 영역만 우선 — 암호화(AES-GCM 왕복/nonce/변조 거부)와 TCP 프레이밍(부분 수신 같은 비결정적 상황 재현). <code style="font-family:'Fira Code';color:var(--accent)">MetricsReceiverService</code>의 <code style="font-family:'Fira Code';color:var(--accent)">private</code> 로직은 인스턴스 필드 의존을 없애 파라미터 받는 <code style="font-family:'Fira Code';color:var(--accent)">static</code> 메서드로 리팩터링(테스트 가능한 설계는 저절로 안 되고 의도적으로 만들어야 함).</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">C++ GoogleTest 9개 + .NET xUnit 18개, 전부 통과. 테스트 없는 영역(예: 실제 소켓에 강결합된 프레이밍 재조립 로직)도 명확히 인지하고 우선순위상 미룬 것이라 설명 가능 — "빈틈이 없다"가 아니라 "빈틈을 알고 있다"는 게 요점.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 11</div>
+        <div class="decision-title">Collector↔Console 관계 — 암묵적 전제를 명시적 네트워크 관계로</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">초기엔 두 프로세스가 "같은 장비의 SQLite 파일을 각자 다른 시점에 연다"는 방식이었다 — 두 프로세스가 항상 같은 장비에 있어야만 동작하는, 암묵적이고 깨지기 쉬운 전제.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">Collector가 능동적으로 전송하고 Console이 자기 소유 DB에 저장하는 실제 네트워크 관계로 전환. 설정 파일을 평문 대신 <strong>JSON</strong>으로 택한 이유도 같은 맥락 — 지금은 로컬 파일이지만, 나중에 웹에서 이 설정(전송 주기 등)을 편집하게 될 가능성을 열어두려면 웹 쪽과 자연스럽게 주고받을 수 있는 포맷이 유리하다고 판단.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">stdin은 별도 스레드에서 읽고, 실제 전송은 <code style="font-family:'Fira Code';color:var(--accent)">asio::post()</code>로 <code style="font-family:'Fira Code';color:var(--accent)">io_context</code> 스레드에 위임 — 공유 상태(전송 큐 등)를 항상 단일 스레드에서만 건드리게 되어 <strong>락 자체가 불필요</strong>해지는 설계.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="section-inner fade-in">
+    <div class="section-label">// Operational Features</div>
+    <h2 class="section-title">"메트릭 수집기"에서 "APM"으로</h2>
+    <p class="section-sub">시스템 리소스만 재는 걸 넘어, 운영 중 실제로 쓰는 4가지 기능을 순서대로 추가.</p>
+
+    <div class="decision-grid">
+      <div class="decision-card">
+        <div class="decision-num">// 임계치 기반 알림</div>
+        <div class="decision-title">상태 전이 시에만 알림 (Zabbix/Nagios 방식)</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">메트릭은 계속 쌓이는데, 이상 상황을 알아채려면 누군가 대시보드를 계속 보고 있어야 했다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">임계치를 넘을 때마다가 아니라 <strong>상태가 바뀔 때(OK→Alert, Alert→Resolved)</strong>만 기록·알림 — 업계 표준 패턴. 임계치는 DB 저장+UI 편집(재배포 없이 조정), 현재 상태는 메모리 캐시가 아니라 <strong>매번 DB 재조회</strong>로 판단해 프로세스 재시작에도 상태가 안 깨지게 함.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">상태 전이 로직만 순수 함수(<code style="font-family:'Fira Code';color:var(--accent)">AlertEvaluator</code>)로 분리해 단위테스트 대상으로 삼음. 이번 세션에 실제로 CPU 임계치를 실 트래픽보다 낮게 걸어, 알림이 열리고 화면에 렌더링되는 것까지 end-to-end로 재현·확인.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 데이터 보존 정책</div>
+        <div class="decision-title">백엔드별로 다르게 구현, API는 하나로 통일</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">저장소가 SQLite/TimescaleDB 두 종류인 데다, Collector 로컬 저장소와 Console 중앙 저장소까지 두 군데 — 어느 쪽이든 무한정 쌓이면 안 된다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">TimescaleDB는 네이티브 <code style="font-family:'Fira Code';color:var(--accent)">add_retention_policy()</code>로 청크째 드롭(거의 공짜), SQLite는 직접 <code style="font-family:'Fira Code';color:var(--accent)">DELETE</code>+점진적 vacuum, Console(EF Core)은 백엔드 무관하게 <code style="font-family:'Fira Code';color:var(--accent)">ExecuteDeleteAsync</code> 하나로 통일 — 저장소별 실제 구현은 다르게, 호출부는 똑같이.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">Metrics 30일 / 알림 이력 180일(사건 기록이라 더 길게). 실제 실행 검증 중 EF Core+SQLite 조합이 시간 비교를 SQL로 못 옮기는 버그를 발견해 수정(아래 "버그 발견" Bug #3 참고).</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 함수/트랜잭션 계측</div>
+        <div class="decision-title">RAII 스코프 기반 — "우리 APM으로 우리 자신을 계측"</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">시스템 리소스만 재면 "모니터링"이지 "APM"이라 부르기엔 부족한데, 정작 계측할 함수/트랜잭션이 프로젝트 안에 없었다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">별도 데모 앱 대신 이 프로젝트 자체 코드를 계측 — C++은 소멸자, .NET은 <code style="font-family:'Fira Code';color:var(--accent)">IAsyncDisposable</code>로 같은 발상의 RAII API. Collector는 이미 있는 메트릭 전송 파이프라인을 그대로 재사용(새 포트 불필요), Console은 이미 자기 DB가 있어 네트워크 왕복 없이 직접 저장.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">Protobuf descriptor index가 C++/C# 양쪽에서 같은 값을 결정론적으로 생성한다는 점을 이용해, 패킷 타입 분기를 매직 넘버 없이 구현.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 백분위/집계 통계</div>
+        <div class="decision-title">SQL 백분위 함수 없이 — 백엔드 무관 통일</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">SQLite에는 PostgreSQL/TimescaleDB의 <code style="font-family:'Fira Code';color:var(--accent)">PERCENTILE_CONT</code> 같은 SQL 백분위 함수가 없다 — 백엔드마다 로직이 갈리게 둘 순 없었다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">시간 창으로 거른 span을 메모리로 가져와 C#에서 직접 계산(선형 보간, <code style="font-family:'Fira Code';color:var(--accent)">numpy.percentile</code> 기본값과 동일한 정의) — 어느 백엔드든 완전히 같은 코드 경로.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">실제 실행 검증 중 "복합 인덱스가 이 쿼리에 맞는다"던 설계 당시 전제가, 실제로는 인덱스를 탈 수조차 없었다는 걸 발견(아래 "버그 발견" Bug #3와 같은 원인) — 설계 문서의 가정과 실제 동작이 다를 수 있음을 보여준 사례.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SCALE TESTING -->
+<section id="scale">
+  <div class="section-inner fade-in">
+    <div class="section-label">// Measured, Fixed, Re-measured</div>
+    <h2 class="section-title">300 동시 접속까지 — 병목을 찾고 고치는 5라운드</h2>
+    <p class="section-sub">자체 제작 <code style="font-family:'Fira Code';color:var(--accent)">LoadTester</code>(실제 Agent와 같은 코드 경로로 in-process 다중 연결 시뮬레이션)로 매 라운드 재측정 — "고쳤다"고 끝내지 않고 다시 재는 것 자체가 이 과정의 핵심.</p>
+
+    <div class="decision-grid">
+      <div class="decision-card">
+        <div class="decision-num">// Round 1 — 병목 찾기</div>
+        <div class="decision-title">72/100에서 하드 리밋</div>
+        <div class="decision-row">
+          <span class="decision-label">실측</span>
+          <span class="decision-text">100개 동시 접속을 요청했는데 72개만 성공, p95 지연시간 34초. <code style="font-family:'Fira Code';color:var(--accent)">strace -c</code>로 원인 추적 — <code style="font-family:'Fira Code';color:var(--accent)">fdatasync</code>/<code style="font-family:'Fira Code';color:var(--accent)">pwrite64</code>가 syscall 시간의 70% 이상. SQLite 기본 저널링이 메트릭 1건마다 동기 flush를 걸고, 이게 네트워크 I/O와 <strong>같은 단일 이벤트 루프 스레드</strong>를 블로킹하고 있었다.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// Round 2 — 저장 비동기화</div>
+        <div class="decision-title">워커 스레드로 위임 — 첫 시도는 크래시</div>
+        <div class="decision-row">
+          <span class="decision-label">시행착오</span>
+          <span class="decision-text">기존 서브시스템(<code style="font-family:'Fira Code';color:var(--accent)">JobQueue</code>)을 재사용했더니 재실측 중 10초 만에 반복 크래시 — 크로스 스레드로 쓰인 적이 한 번도 없어 드러나지 않았던 락 버그였다. 그 코드는 "여러 프로젝트에서 검증된 코드"라 손대지 않고, <code style="font-family:'Fira Code';color:var(--accent)">std::mutex</code>/<code style="font-family:'Fira Code';color:var(--accent)">condition_variable</code>만 쓰는 훨씬 작은 전용 큐로 교체.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">결과</span>
+          <span class="decision-text resolved">100/100 전원 접속 성공, p95/p99 사실상 0ms. 300-agent도 71→229로 3배 이상 개선.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// Round 3 — "사라졌다"는 착시</div>
+        <div class="decision-title">strace -f로 다시 보니, 비용은 그대로였다</div>
+        <div class="decision-row">
+          <span class="decision-label">발견</span>
+          <span class="decision-text"><code style="font-family:'Fira Code';color:var(--accent)">strace -c</code>는 새로 생긴 워커 스레드를 추적하지 않는다 — "fdatasync가 안 보인다"를 "문제가 없어졌다"로 오독할 뻔했다. <code style="font-family:'Fira Code';color:var(--accent)">-f</code>로 다시 재보니 같은 비용이 그대로 남아있었고(전체 syscall 시간의 25%), 그제서야 WAL 도입을 결정.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">결과</span>
+          <span class="decision-text">fdatasync -97%, 그러나 WAL 공유메모리 락(fcntl)이 +437% — 비용이 사라진 게 아니라 <strong>fsync 비용이 락 비용으로 형태를 바꾼</strong> 트레이드오프.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// Round 4 — 다음 층의 병목</div>
+        <div class="decision-title">이번엔 콘솔 로깅이 1위</div>
+        <div class="decision-row">
+          <span class="decision-label">발견</span>
+          <span class="decision-text">300-agent 규모로 처리량이 늘자 <code style="font-family:'Fira Code';color:var(--accent)">std::cout &lt;&lt; ... &lt;&lt; std::endl</code>(메트릭마다 강제 flush)이 write syscall 92%로 새 1위가 됨 — 병목은 한 층을 걷어내면 다음 층이 드러난다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">결과</span>
+          <span class="decision-text resolved">로그 조립/출력을 전용 워커 스레드로 분리 + <code style="font-family:'Fira Code';color:var(--accent)">endl</code> 대신 <code style="font-family:'Fira Code';color:var(--accent)">'\n'</code> — 300개 전원(250→300) 접속 성공.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// Round 5 — 검증하다 새 버그</div>
+        <div class="decision-title">데이터 레이스 — 진단 코드 자체가 깨져서 나옴</div>
+        <div class="decision-row">
+          <span class="decision-label">발견</span>
+          <span class="decision-text">이 개선을 100-agent 규모에서 재확인하려고 스레드 ID를 직접 계측하다가, <strong>그 진단 로그 자체가 스레드 간 문자 단위로 뒤섞여 나오는 걸 목격</strong> — 성능을 위해 같이 넣은 <code style="font-family:'Fira Code';color:var(--accent)">sync_with_stdio(false)</code>가 멀티스레드 안전장치를 없앤 게 원인이었다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">결과</span>
+          <span class="decision-text resolved">남은 콘솔 출력도 전부 같은 워커로 위임해 "런타임 중 한 스레드만 스트림을 건드린다"는 원칙을 일관 적용. 수정 전/후 성능 지표를 다시 비교해 순수 정확성 버그였음을 확인(성능 영향 없음).</span>
+        </div>
+      </div>
+    </div>
+
+    <table class="opt-table" style="margin-top:0.5rem;">
+      <thead>
+        <tr><th>단계</th><th>100-agent 접속 성공</th><th>300-agent 접속 성공</th><th>비고</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Round 1(베이스라인)</td><td class="before">72 / 100</td><td class="before">71 / 300</td><td>SQLite fdatasync가 네트워크 스레드를 블로킹</td></tr>
+        <tr><td>Round 2(워커 스레드)</td><td class="after">100 / 100</td><td>229 / 300</td><td>저장 비동기화</td></tr>
+        <tr><td>Round 3(WAL)</td><td>100 / 100</td><td>250 / 300</td><td>fdatasync↔fcntl 트레이드오프</td></tr>
+        <tr><td>Round 4(로깅 분리)</td><td>100 / 100</td><td class="after">300 / 300</td><td>콘솔 로깅 워커 분리, 전원 접속 성공</td></tr>
+      </tbody>
+    </table>
+
+    <div class="fix-block" style="margin-top:0.5rem;">
+      <div class="fix-header">최종 판단 — 여기서 멈추기로 함</div>
+      <p style="font-size:0.83rem; color:var(--text-2);">
+        300-agent 규모에 여전히 남은 병목(스레드 간 락 경합, futex)은 단일 Collector 프로세스 하나 · 개발 머신 한 대가 감당할 수 있는 현실적인 한계로 판단하고 더 파고들지 않기로 했다.
+        실제 운영이라면 이 지점부터는 코드를 더 쥐어짜기보다 <strong>Collector를 여러 대로 수평 확장</strong>하는 게 정공법 — 매 라운드 "무조건 좋아지는 개선은 없다"는 트레이드오프를 실측으로 확인한 것 자체가
+        이 5라운드의 결론이다.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- SPOTLIGHT -->
+<section id="spotlight">
+  <div class="section-inner fade-in">
+    <div class="section-label">// Code Analysis</div>
+    <h2 class="section-title">버그 발견 및 검증</h2>
+    <p class="section-sub">제안 단계에서 완벽해 보였던 코드도, 실제 빌드·실행·렌더링 검증에서 발견된 문제들 — 그중 기술적으로 가장 깊었던 두 건(둘 다 동시성 버그, 300-agent 스케일 테스트 중 발견)은 원인 진단부터 해결 과정·재검증 결과까지 아래에 전 과정을 풀었다.</p>
+
+    <!-- Bug #1 -->
+    <div style="font-family:'Fira Code'; font-size:0.78rem; color:var(--text-2); margin-bottom:0.75rem;">
+      // Bug #1 — 공유 락 라이브러리의 소유권 버그, 크로스 스레드 첫 사용 10초 만에 전원 크래시
+    </div>
+
+    <div class="bug-block">
+      <div class="bug-header">문제 — 저장 비동기화 재실측 6단계(1/10/50/100/100+ramp/300 에이전트) 전부, 기동 10초 만에 크래시</div>
+      <p style="font-size:0.83rem; color:var(--text-2); margin-bottom:0.75rem;">
+        <strong>배경(Round 1 병목)</strong>: <code style="font-family:'Fira Code'">strace -c</code>로 확인한 원인은 <code style="font-family:'Fira Code'">SqliteMetricStore::Store()</code>의 <code style="font-family:'Fira Code'">fdatasync</code>가
+        네트워크 스레드(<code style="font-family:'Fira Code'">io_context.run()</code>을 도는 유일한 스레드)를 매 메트릭마다 블로킹한다는 것 — 저장을 별도 워커 스레드로 위임하기로 하고,
+        이미 다른 프로젝트들에서 검증된 <code style="font-family:'Fira Code'">GW2_CrossPlatformCore/Thread/JobQueue</code>를 재사용해 연결했다(빌드 성공, 단위테스트 9/9 통과).<br><br>
+        <strong>재실측 중 크래시</strong>: 이 상태로 1-5와 동일한 6단계 부하 매트릭스를 재실행하자, <strong>모든 단계에서</strong> Collector가 기동 후 약 10초 만에 죽었다
+        (<code style="font-family:'Fira Code'">connect_fail</code>이 agents=10부터 이미 발생, agents=1도 뒤늦게 크래시). "빌드+단위테스트 통과"와 "실제 부하 아래에서 동작"이 다르다는 걸 다시 확인한 지점.
+      </p>
+      <div class="code-block">
+        <pre><span class="c-comment">// collector_stdout.log에서 확인한 크래시 원인 태그</span>
+[CRASH] cause=LOCK_TIMEOUT file=GW2_CrossPlatformCore/Thread/Lock.cpp line=52 func=WriteLock
+
+<span class="c-comment">// Lock.cpp를 직접 열어 원인 추적 — WriteUnlock()이 소유자 비트를 절대 안 지움</span>
+<span class="c-key">void</span> <span class="c-type">Lock</span>::<span class="c-fn">WriteUnlock</span>(<span class="c-key">const</span> <span class="c-key">char</span>* name)
+{
+    <span class="c-key">const</span> uint32 threadId = GetThisThreadId();
+    <span class="c-key">const</span> uint32 lockThreadId = (_lockFlag.load() &amp; WRITE_THREAD_MASK) &gt;&gt; <span class="c-num">16</span>;
+
+    <span class="c-key">if</span> ((threadId &amp; <span class="c-num">0xFFFF</span>) == lockThreadId)
+    {
+        _lockFlag.fetch_add(<span class="c-num">1</span>);   <span class="c-comment">// 버그: 무관한 하위 비트만 증가시킬 뿐</span>
+        <span class="c-key">return</span>;                   <span class="c-comment">// WRITE_THREAD_MASK(소유자 스레드 id)는 영원히 안 지워짐</span>
+    }
+    <span class="c-comment">// ...</span>
+}</pre>
+      </div>
+      <p style="font-size:0.83rem; color:var(--text-2); margin-top:0.75rem;">
+        결과적으로: 소유 스레드가 언락해도 락의 "소유자 ID" 비트가 그대로 남아 <strong>그 락을 처음 잡은 스레드가 영구 소유한 것처럼</strong> 보인다.
+        네트워크 스레드가 <code style="font-family:'Fira Code'">JobQueue::Push()</code>에서 락을 한 번 잡았다 놓은 순간 락이 네트워크 스레드 소유로 영구 고정되고,
+        곧이어 워커 스레드가 <code style="font-family:'Fira Code'">Execute()→PopAll()</code>에서 같은 락을 잡으려 하면 CAS가 계속 실패 →
+        10초(<code style="font-family:'Fira Code'">ACQUIRE_TIMEOUT_TICK</code>) 스핀 후 <code style="font-family:'Fira Code'">CRASH("LOCK_TIMEOUT")</code>.
+        <code style="font-family:'Fira Code'">Lock</code>/<code style="font-family:'Fira Code'">JobQueue</code>는 <code style="font-family:'Fira Code'">APM_Agent</code>에서 이번이 첫 크로스 스레드(네트워크→워커) 사용이라, 그동안 어느 프로젝트에서도 이 버그가 드러난 적이 없었다.
+      </p>
+    </div>
+
+    <div class="fix-block">
+      <div class="fix-header">해결 — 공유 라이브러리는 안 건드리고, 자체 워커 큐로 의존 자체를 제거</div>
+      <p style="font-size:0.83rem; color:var(--text-2); margin-bottom:0.75rem;">
+        <strong>판단</strong>: <code style="font-family:'Fira Code'">Lock.cpp</code>는 "여러 프로젝트를 통해 이미 검증된 코드"라는 이유로 수정하지 않기로 결정 — 공유 라이브러리를 고치면 이 프로젝트가 확인하지 못한 다른 소비자까지 영향권에 들어간다.
+        대신 <code style="font-family:'Fira Code'">APM_Agent</code> 쪽에서 <code style="font-family:'Fira Code'">std::mutex</code>/<code style="font-family:'Fira Code'">condition_variable</code>만 쓰는 전용 큐를 새로 만들어, <code style="font-family:'Fira Code'">JobQueue</code>/<code style="font-family:'Fira Code'">Lock</code>/<code style="font-family:'Fira Code'">ThreadManager</code> 의존 자체를 걷어냈다.
+      </p>
+      <div class="code-block">
+        <pre><span class="c-comment">// Common/WorkerQueue.cpp — 표준 라이브러리 프리미티브만으로 같은 역할(단일 워커 스레드 순차 소비)</span>
+<span class="c-type">WorkerQueue</span>::<span class="c-fn">WorkerQueue</span>()
+    : _worker([<span class="c-key">this</span>]() { WorkerLoop(); })
+{
+}
+
+<span class="c-key">void</span> <span class="c-type">WorkerQueue</span>::<span class="c-fn">Push</span>(std::function&lt;<span class="c-key">void</span>()&gt; job)
+{
+    {
+        std::lock_guard&lt;std::mutex&gt; guard(_mutex);
+        _jobs.push(std::move(job));
+    }
+    _cv.notify_one();
+}
+
+<span class="c-key">void</span> <span class="c-type">WorkerQueue</span>::<span class="c-fn">WorkerLoop</span>()
+{
+    <span class="c-key">while</span> (<span class="c-key">true</span>)
+    {
+        std::function&lt;<span class="c-key">void</span>()&gt; job;
+        {
+            std::unique_lock&lt;std::mutex&gt; lock(_mutex);
+            _cv.wait(lock, [<span class="c-key">this</span>]() { <span class="c-key">return</span> _stop || !_jobs.empty(); });
+            <span class="c-key">if</span> (_jobs.empty())  <span class="c-comment">// _stop이어도 남은 job은 마저 비우고 종료</span>
+                <span class="c-key">return</span>;
+            job = std::move(_jobs.front());
+            _jobs.pop();
+        }
+        job();
+    }
+}
+
+<span class="c-comment">// Collector/main.cpp — 호출부는 한 줄로 단순해짐</span>
+<span class="c-comment">// 수정 전: JobQueueRef metricStoreQueue = MakeShared&lt;JobQueue&gt;(); + GThreadManager-&gt;Launch(...) 폴링 루프
+//         + metricStoreQueue-&gt;Push(MakeShared&lt;Job&gt;(...), /*pushOnly=*/true) + 9개 헤더 include</span>
+<span class="c-type">WorkerQueue</span> metricStoreQueue;
+<span class="c-comment">// ...</span>
+metricStoreQueue.Push([storePtr, pkt]() { storePtr-&gt;Store(pkt); });</pre>
+      </div>
+      <div class="spotlight-note">
+        재빌드(<code style="font-family:'Fira Code'">cmake --build build</code> 성공) → <code style="font-family:'Fira Code'">ctest</code> 9/9 통과 → 6단계 부하 매트릭스 재실행 — <strong>크래시 없이 끝까지 완주</strong>.
+        100/100 전원 접속 성공(기존 72/100), p95/p99 지연시간 사실상 0ms 수준으로 개선, 300-agent도 71→229로 3배 이상 개선.
+        부수 효과로 <code style="font-family:'Fira Code'">GW2_CrossPlatformCore/Thread/*</code> 의존 제거 — 우회를 위해 1-7에서 추가했던 9개 헤더 include와 <code style="font-family:'Fira Code'">&lt;fstream&gt;</code>/<code style="font-family:'Fira Code'">&lt;execinfo.h&gt;</code> 우회 코드까지 함께 걷어내며 코드가 오히려 단순해졌다.
+      </div>
+    </div>
+
+    <!-- Bug #2 -->
+    <div style="font-family:'Fira Code'; font-size:0.78rem; color:var(--text-2); margin-bottom:0.75rem; margin-top:0.5rem;">
+      // Bug #2 — 성능 최적화가 꺼버린 안전장치 때문에 생긴 콘솔 로그 데이터 레이스
+    </div>
+
+    <div class="bug-block">
+      <div class="bug-header">문제 — 로그를 워커로 옮겨 병목을 해결했더니, 그 워커와 네트워크 스레드가 같은 스트림을 동시에 씀</div>
+      <p style="font-size:0.83rem; color:var(--text-2); margin-bottom:0.75rem;">
+        <strong>배경(Round 4)</strong>: 위 버그를 고쳐 300-agent 규모로 처리량이 늘자, 이번엔 <code style="font-family:'Fira Code'">PacketHandler::Register&lt;apm::Metric&gt;</code> 안의
+        <code style="font-family:'Fira Code'">std::cout &lt;&lt; ... &lt;&lt; std::endl</code>(메트릭 수신마다 강제 flush)이 write syscall 92%로 새 1위 병목이 됐다.
+        이 로그 조립·출력을 전용 <code style="font-family:'Fira Code'">consoleLogQueue</code> 워커로 옮기고, <code style="font-family:'Fira Code'">std::endl</code>→<code style="font-family:'Fira Code'">'\n'</code>로 교체하면서 곁들여 <code style="font-family:'Fira Code'">std::ios::sync_with_stdio(false)</code>(C stdio와의 동기화 해제, 순수 성능 이득)도 함께 켰다.
+        재측정 결과 connect_success가 250→300/300으로 개선.<br><br>
+        <strong>그런데</strong>: 이 변경은 메트릭 수신 로그 한 줄만 워커로 옮겼을 뿐, <code style="font-family:'Fira Code'">accept</code> 성공/실패, "WebServer로 N건 전송 시도"(메트릭/span 두 곳) 등
+        <strong>4곳의 <code style="font-family:'Fira Code'">std::cout</code>/<code style="font-family:'Fira Code'">std::cerr</code> 호출은 여전히 네트워크 스레드에 남아있었다</strong> —
+        이제 네트워크 스레드와 콘솔 워커 스레드, 두 스레드가 같은 스트림을 동시에 건드리는 상황이 된 것. 원래 iostream은 기본적으로 C stdio와 동기화되어 있어 이게 우연히 스레드 안전성 비슷한 효과를 내고 있었는데,
+        방금 성능을 위해 켠 <code style="font-family:'Fira Code'">sync_with_stdio(false)</code>가 바로 그 안전장치를 없앤 것이었다.
+      </p>
+      <p style="font-size:0.83rem; color:var(--text-2);">
+        <strong>발견 계기</strong>: 100-agent 벤치마크 질문에 답하려고 스레드 ID를 로그에 직접 계측해서 넣었는데, <strong>그 진단 로그 자체가 스레드 간 문자 단위로 뒤섞여서 나오는 것</strong>을 목격했다 —
+        레이스를 잡으려던 도구(로그)가 레이스 자체의 증거가 되어 스스로를 드러낸 셈.
+      </p>
+      <div class="code-block">
+        <pre><span class="c-comment">// 수정 전 — accept 성공/실패 로그가 네트워크 스레드에서 cout/cerr를 직접 씀</span>
+<span class="c-key">if</span> (!ec)
+{
+    std::cout &lt;&lt; <span class="c-str">"[Collector] connection accepted"</span> &lt;&lt; std::endl;
+    <span class="c-comment">// ...</span>
+}
+<span class="c-key">else</span>
+{
+    std::cerr &lt;&lt; <span class="c-str">"[Collector] accept error : "</span> &lt;&lt; ec.message() &lt;&lt; std::endl;
+}
+<span class="c-comment">// → consoleLogQueue 워커 스레드가 "metric received" 줄을 찍는 동안,
+//   네트워크 스레드가 이 줄을 동시에 찍으면 같은 std::cout 버퍼가 레이스로 깨짐</span></pre>
+      </div>
+    </div>
+
+    <div class="fix-block">
+      <div class="fix-header">수정 — 남은 4곳도 전부 같은 워커로 위임, "런타임 중 정확히 한 스레드만 스트림을 만진다" 원칙을 일관 적용</div>
+      <div class="code-block">
+        <pre><span class="c-key">if</span> (!ec)
+{
+    <span class="c-comment">// consoleLogQueue 워커 스레드 하나만 런타임 중 cout/cerr를 건드리도록 통일</span>
+    consoleLogQueue.Push([]() { std::cout &lt;&lt; <span class="c-str">"[Collector] connection accepted\n"</span>; });
+    <span class="c-comment">// ...</span>
+}
+<span class="c-key">else</span>
+{
+    std::string errMsg = ec.message();  <span class="c-comment">// ec는 콜백 스코프 밖에서 죽을 수 있어 값으로 캡처</span>
+    consoleLogQueue.Push([errMsg]() { std::cerr &lt;&lt; <span class="c-str">"[Collector] accept error : "</span> &lt;&lt; errMsg &lt;&lt; <span class="c-str">'\n'</span>; });
+}
+<span class="c-comment">// "WebServer로 N건 전송 시도" 두 곳도 동일 패턴 — count/spanCount를 값으로 미리 캡처 후 위임</span></pre>
+      </div>
+      <div class="spotlight-note">
+        <code style="font-family:'Fira Code'">sync_with_stdio(false)</code>는 유지(순수 성능 이득이라 없앨 이유가 없음), 레이스만 제거.
+        재검증 결과: 100-agent 스트레스 버스트(이전엔 재현 가능했던 조건)에서 <strong>깨진 로그 줄이 더는 발생하지 않음</strong>.
+        수정 전/후 성능 지표를 다시 비교해 순수 정확성 버그였음을 확인 — 100-agent p99 변화 없음(~2,050ms), 300-agent <code style="font-family:'Fira Code'">strace -f -c</code> 총합도 오차범위 내(futex 57.78% vs 57.22%, 총 88.45s vs 86.09s).
+        이 재확인 과정에서 부수적으로 "100-agent 규모에서는 WAL+로깅 개선이 순효과가 거의 없고, 오히려 워커 스레드 동기화 오버헤드로 p99가 소폭(1,010ms→2,053ms) 늘어난다"는 것도 함께 확인 — 이 개선의 실질 효과는 300-agent 같은 고부하 구간에서만 뚜렷하다는 걸 실측으로 확정.
+      </div>
+    </div>
+
+    <!-- Bug #3 -->
+    <div style="font-family:'Fira Code'; font-size:0.78rem; color:var(--text-2); margin-bottom:0.75rem;">
+      // Bug #3 — Razor HTML 인코딩이 JS 타임스탬프를 깨뜨림
+    </div>
+
+    <div class="bug-block">
+      <div class="bug-header">문제 — 대시보드 차트가 초기 렌더링에서 빈 그래프로 뜸</div>
+      <p style="font-size:0.83rem; color:var(--text-2); margin-bottom:0.75rem;">
+        서버에서 ISO 8601 문자열(<code style="font-family:'Fira Code'">"o"</code> 포맷, <code style="font-family:'Fira Code'">+09:00</code> 시간대 오프셋 포함)을
+        그대로 JS 문자열 리터럴에 심었는데, Razor의 <code style="font-family:'Fira Code'">@</code> 표현식은 <code style="font-family:'Fira Code'">&lt;script&gt;</code> 태그
+        안이라도 항상 HTML 인코딩을 거친다. <code style="font-family:'Fira Code'">+</code>가 <code style="font-family:'Fira Code'">&amp;#x2B;</code>로 깨져
+        <code style="font-family:'Fira Code'">new Date(...)</code>가 파싱 불가능한 문자열을 받게 된다. 실제 렌더링 결과를 curl로 확인하는 과정에서 발견.
+      </p>
+      <div class="code-block">
+        <pre><span class="c-comment">// 수정 전 - ISO 문자열을 그대로 JS 리터럴에 삽입</span>
+<span class="c-key">const</span> initialPoints = [
+@<span class="c-key">foreach</span> (<span class="c-key">var</span> m <span class="c-key">in</span> Model.AsEnumerable().Reverse())
+{
+    &lt;text&gt;{ t: <span class="c-str">"@m.Ts.ToLocalTime().ToString("o")"</span>, cpu: @m.CpuUsagePercent.ToString(<span class="c-str">"F1"</span>) },&lt;/text&gt;
+}
+];
+<span class="c-comment">// → "+09:00"의 "+"가 "&amp;#x2B;09:00"으로 인코딩되어 Date 파싱 실패</span></pre>
+      </div>
+    </div>
+
+    <div class="fix-block">
+      <div class="fix-header">수정 — 유닉스 밀리초(숫자)로 전달</div>
+      <div class="code-block">
+        <pre><span class="c-comment">// 숫자는 인코딩할 특수문자가 없어서 이 문제 자체가 없음</span>
+<span class="c-key">const</span> initialPoints = [
+@<span class="c-key">foreach</span> (<span class="c-key">var</span> m <span class="c-key">in</span> Model.AsEnumerable().Reverse())
+{
+    &lt;text&gt;{ t: @m.Ts.ToUnixTimeMilliseconds(), cpu: @m.CpuUsagePercent.ToString(<span class="c-str">"F1"</span>) },&lt;/text&gt;
+}
+];
+<span class="c-comment">// new Date(p.t)는 밀리초 숫자를 그대로 받으므로 이후 코드는 수정 불필요</span></pre>
+      </div>
+      <div class="spotlight-note">
+        설계 검토만으로는 잡히지 않고 실제 렌더링된 HTML을 눈으로 확인해야 발견되는 유형의 버그 — 이후 "실제 실행/렌더링으로 검증"을
+        모든 단계의 기본 절차로 삼는 계기가 됨.
+      </div>
+    </div>
+
+    <!-- Bug #4 -->
+    <div style="font-family:'Fira Code'; font-size:0.78rem; color:var(--text-2); margin-bottom:0.75rem; margin-top:0.5rem;">
+      // Bug #4 — TLS 핸드셰이크 모드 파라미터 누락 (미정의 동작)
+    </div>
+
+    <div class="bug-block">
+      <div class="bug-header">문제 — Agent(client) 모드가 실질적으로 동작하지 않음</div>
+      <p style="font-size:0.83rem; color:var(--text-2); margin-bottom:0.75rem;">
+        <code style="font-family:'Fira Code'">Collector</code>(accept)만 있던 시절엔 핸드셰이크가 항상 <code style="font-family:'Fira Code'">server</code>로 하드코딩돼 있었다.
+        <code style="font-family:'Fira Code'">Agent</code>(connect)가 추가되며 <code style="font-family:'Fira Code'">SessionMode</code>를 도입했지만,
+        적용된 코드에서 생성자가 <code style="font-family:'Fira Code'">mode</code> 파라미터를 받지 않아 <code style="font-family:'Fira Code'">_mode</code> 멤버가
+        초기화 리스트에서 채워지지 않은 채 남아있었다(미정의 동작) — 게다가 <code style="font-family:'Fira Code'">handshakeType</code>은 계산만 해두고
+        실제 <code style="font-family:'Fira Code'">async_handshake()</code> 호출은 여전히 <code style="font-family:'Fira Code'">server</code>를 그대로 썼다.
+      </p>
+      <div class="code-block">
+        <pre><span class="c-comment">// 발견 당시 - 생성자에 mode 파라미터가 없음</span>
+<span class="c-type">ApmSession</span>::<span class="c-fn">ApmSession</span>(asio::ip::tcp::socket socket, asio::ssl::context&amp; sslContext)
+    : _sslStream(std::move(socket), sslContext)
+    <span class="c-comment">// _mode가 초기화 리스트에 없음 → 멤버는 선언돼 있지만 미정의 값</span>
+{
+}
+
+<span class="c-key">void</span> <span class="c-type">ApmSession</span>::<span class="c-fn">DoHandshake</span>()
+{
+    <span class="c-key">auto</span> handshakeType = (_mode == SessionMode::Server)  <span class="c-comment">// 미정의 _mode와 비교</span>
+        ? asio::ssl::stream_base::server
+        : asio::ssl::stream_base::client;
+
+    <span class="c-comment">// handshakeType은 계산만 해두고 실제로는 안 씀 - server가 그대로 하드코딩</span>
+    _sslStream.<span class="c-fn">async_handshake</span>(asio::ssl::stream_base::server, <span class="c-comment">/* ... */</span>);
+}</pre>
+      </div>
+    </div>
+
+    <div class="fix-block">
+      <div class="fix-header">수정 — mode를 생성자로 전달받아 실제로 사용</div>
+      <div class="code-block">
+        <pre><span class="c-key">enum class</span> <span class="c-type">SessionMode</span>
+{
+    Server,   <span class="c-comment">// Collector 쪽 - accept로 받은 연결</span>
+    Client,   <span class="c-comment">// Agent 쪽 - 밖으로 connect한 연결</span>
+};
+
+<span class="c-type">ApmSession</span>::<span class="c-fn">ApmSession</span>(asio::ip::tcp::socket socket, asio::ssl::context&amp; sslContext, SessionMode mode)
+    : _sslStream(std::move(socket), sslContext), _mode(mode)
+{
+}
+
+<span class="c-key">void</span> <span class="c-type">ApmSession</span>::<span class="c-fn">DoHandshake</span>()
+{
+    <span class="c-key">auto</span> self = shared_from_this();
+    <span class="c-key">auto</span> handshakeType = (_mode == SessionMode::Server)
+        ? asio::ssl::stream_base::server
+        : asio::ssl::stream_base::client;
+
+    _sslStream.<span class="c-fn">async_handshake</span>(handshakeType,  <span class="c-comment">// 계산한 값을 실제로 사용</span>
+        [<span class="c-key">this</span>, self](<span class="c-key">const</span> asio::error_code&amp; ec) { <span class="c-comment">/* ... */</span> });
+}</pre>
+      </div>
+      <div class="spotlight-note">
+        <code style="font-family:'Fira Code'">nm</code>으로 생성자 심볼에 <code style="font-family:'Fira Code'">SessionMode</code> 파라미터가 실제로 반영됐는지 확인 후,
+        <code style="font-family:'Fira Code'">Collector</code>+<code style="font-family:'Fira Code'">Agent</code> 동시 실행으로 송수신 값이 정확히 일치함을 검증.
+        <br><em style="color:var(--text-3); font-style:normal;">※ 위 코드는 이 버그가 수정된 시점(2026-07-14)의 스냅샷 — 이후 <code style="font-family:'Fira Code'">IPayloadSealer</code> 추상화가 추가되며 생성자에 <code style="font-family:'Fira Code'">sealer</code> 파라미터가 하나 더 붙었음(현재는 4개 파라미터).</em>
+      </div>
+    </div>
+
+    <!-- Bug #3 -->
+    <div style="font-family:'Fira Code'; font-size:0.78rem; color:var(--text-2); margin-bottom:0.75rem; margin-top:0.5rem;">
+      // Bug #3 — EF Core + SQLite가 DateTimeOffset 비교를 SQL로 못 옮김
+    </div>
+
+    <div class="bug-block">
+      <div class="bug-header">문제 — 알림 페이지를 처음 실행하자마자 앱 전체가 크래시</div>
+      <p style="font-size:0.83rem; color:var(--text-2); margin-bottom:0.75rem;">
+        알림(2순위)·트레이스(5순위) 페이지는 빌드/단위테스트만 검증되고 실제로 브라우저에서 열어본 적이 없었다 — 이 프로젝트를 마무리하며 처음 실행해보니,
+        시작 직후 실행되는 보존 정책 백그라운드 서비스(<code style="font-family:'Fira Code'">RetentionService</code>)의
+        <code style="font-family:'Fira Code'">db.Metrics.Where(m =&gt; m.Ts &lt; cutoff).ExecuteDeleteAsync()</code>가 <code style="font-family:'Fira Code'">InvalidOperationException</code>으로 즉시 죽었다.
+        <code style="font-family:'Fira Code'">Ts</code>가 <code style="font-family:'Fira Code'">DateTimeOffset</code>인데, 이 EF Core+SQLite 조합이 부등호 비교를 SQL로 아예 번역하지 못하는 게 원인 — <code style="font-family:'Fira Code'">ExecuteDeleteAsync</code>뿐 아니라 일반 <code style="font-family:'Fira Code'">Where(...).ToListAsync()</code>조차 똑같이 실패했다.
+      </p>
+      <div class="code-block">
+        <pre><span class="c-comment">// 수정 전 - DateTimeOffset 부등호 비교를 그대로 LINQ에 씀</span>
+<span class="c-key">var</span> metricsCutoff = DateTimeOffset.UtcNow.AddDays(-_metricsRetentionDays);
+<span class="c-key">var</span> metricsDeleted = <span class="c-key">await</span> db.Metrics
+    .Where(m =&gt; m.Ts &lt; metricsCutoff)
+    .ExecuteDeleteAsync(ct);
+<span class="c-comment">// → InvalidOperationException: 이 LINQ 식을 SQL로 번역할 수 없음</span></pre>
+      </div>
+    </div>
+
+    <div class="fix-block">
+      <div class="fix-header">수정 — LINQ 번역을 아예 거치지 않는 파라미터화 raw SQL</div>
+      <div class="code-block">
+        <pre><span class="c-comment">// LINQ 번역 자체를 우회 - 값은 파라미터 바인딩이라 인젝션 안전</span>
+<span class="c-key">var</span> metricsDeleted = <span class="c-key">await</span> db.Database.ExecuteSqlInterpolatedAsync(
+    $<span class="c-str">"DELETE FROM Metrics WHERE Ts &lt; {metricsCutoff}"</span>, ct);</pre>
+      </div>
+      <div class="spotlight-note">
+        수정 후 <code style="font-family:'Fira Code'">/apm/traces</code>에서 <strong>같은 원인의 500 에러</strong>를 하나 더 발견 — 고친 즉시 "같은 패턴을 쓴 다른 코드가 더 있는가"를 능동적으로 재검색했고,
+        알림 컨트롤러는 동등 비교(<code style="font-family:'Fira Code'">== null</code>)만 써서 이 버그의 영향을 안 받는다는 것도 함께 확인했다.
+        재빌드 후 클린 상태로 다시 띄워 크래시 없음을 확인하고, 임계치를 실제로 낮춰 알림이 열리고 렌더링되는 것까지 실 트래픽으로 재검증(<code style="font-family:'Fira Code'">dotnet test</code> 18/18 통과, 회귀 없음).
+      </div>
+    </div>
+
+    <!-- Bug Summary Table -->
+    <div style="font-family:'Fira Code'; font-size:0.78rem; color:var(--text-2); margin-bottom:0.75rem; margin-top:0.5rem;">
+      // 그 외 적용 검증 중 발견한 버그
+    </div>
+    <table class="opt-table">
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th>증상</th>
+          <th>원인</th>
+          <th>조치</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>ApmSession.h/.cpp</td>
+          <td class="before">"빌드 성공"이 곧 "동작"이라 오판</td>
+          <td>파일이 0바이트 빈 채로 남아있었음(빈 .cpp도 정상 컴파일됨)</td>
+          <td class="after">내용 재작성 후 nm으로 심볼 존재 직접 확인</td>
+        </tr>
+        <tr>
+          <td>Storage 계층 3종</td>
+          <td class="before">컴파일 불가</td>
+          <td>include 오타, CMakeLists.txt 빈 파일, 헤더에 .cpp 내용 혼입</td>
+          <td class="after">3건 모두 직접 수정 후 클린 빌드로 재검증</td>
+        </tr>
+        <tr>
+          <td>ComputeNetworkUsage</td>
+          <td class="before">redefinition 컴파일 에러</td>
+          <td>빈 껍데기 중복 정의가 파일 끝에 남음</td>
+          <td class="after">중복 삭제 + 누락된 ComputeCpuUsage() 복원</td>
+        </tr>
+        <tr>
+          <td>TCP_INFO 연동(6-5)</td>
+          <td class="before">링크/컴파일 에러</td>
+          <td>ApmSession/ResilientSender 4개 파일 누락 + 타입명 오타</td>
+          <td class="after">파일 복원, 오타 수정, .pb.h 재생성</td>
+        </tr>
+        <tr>
+          <td>ManifestEmbeddedFileProvider</td>
+          <td class="before">정적 리소스 404 (예외가 조용히 삼켜짐)</td>
+          <td>매니페스트 생성 MSBuild 타겟이 별도 NuGet 패키지에 있음</td>
+          <td class="after">Microsoft.Extensions.FileProviders.Embedded 패키지 참조 추가</td>
+        </tr>
+        <tr>
+          <td>콘솔 로그 동시 쓰기</td>
+          <td class="before">진단 로그 자체가 스레드 간 문자 단위로 뒤섞임</td>
+          <td>여러 스레드가 같은 std::cout에 동시 접근 + sync_with_stdio(false)가 안전장치 제거(위 "스케일 테스트" Round 5 참고)</td>
+          <td class="after">콘솔 출력을 전용 워커 스레드 하나로 전부 위임 — 성능 지표 불변 재확인</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- METRICS -->
+<section id="metrics">
+  <div class="section-inner fade-in">
+    <div class="section-label">// Measured, Not Assumed</div>
+    <h2 class="section-title">실측 지표</h2>
+    <p class="section-sub">"가볍다"는 주장을 수치로 뒷받침 — strace/proc 실측과 테스트 결과.</p>
+
+    <table class="opt-table" style="margin-bottom:1rem;">
+      <thead>
+        <tr><th>항목</th><th>횟수/값</th><th>비고</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>epoll_wait</td><td>155</td><td>스핀 없이 블로킹, 사이클당 약 2.6회</td></tr>
+        <tr><td>read</td><td>460</td><td>TLS 소켓 수신 + /proc 파일 읽기</td></tr>
+        <tr><td>openat / close</td><td>311 / 309</td><td>/proc 파일 매 사이클 재오픈(32% 비중, 최적화 여지로 기록)</td></tr>
+        <tr><td>sendto / write</td><td>76 / 77</td><td>TLS 전송</td></tr>
+        <tr><td>getsockopt</td><td>75</td><td>TCP_INFO 조회</td></tr>
+        <tr><td class="after">전체 syscall</td><td class="after">1,921회 / 19.4ms</td><td>5분(≈60사이클) 정상 동작, 대기가 압도적</td></tr>
+        <tr><td class="after">RSS</td><td class="after">13.8MB 고정</td><td>15초 간격 20샘플 전부 동일 — 누수 없음</td></tr>
+        <tr><td class="after">CPU 사용률</td><td class="after">평균 0.017%</td><td>유휴 대기(epoll_wait)가 거의 전부</td></tr>
+        <tr><td class="after">단위 테스트</td><td class="after">27 / 27 통과</td><td>C++ GoogleTest 9개 + .NET xUnit 18개</td></tr>
+        <tr><td class="after">스케일 테스트</td><td class="after">72→300/300 접속</td><td>LoadTester 부하 실측 5라운드 — 상세: "스케일 테스트" 섹션</td></tr>
+        <tr><td class="after">Windows 빌드/실행</td><td class="after">Collector.exe / Agent.exe 정적 링크</td><td>외부 DLL 0개(vcpkg x64-windows-static), TLS+AES-GCM 통신 및 실측 리소스 수집 확인(6+ 사이클, 크래시 없음)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- SKILLS -->
+<section id="skills">
+  <div class="section-inner fade-in">
+    <div class="section-label">// Tech Stack</div>
+    <h2 class="section-title">기술 스택</h2>
+    <p class="section-sub">프로젝트에서 실제 사용한 기술 목록.</p>
+
+    <div class="skills-grid">
+      <div class="skill-group">
+        <div class="skill-group-title">// 네트워크 코어 (C++)</div>
+        <ul class="skill-list">
+          <li>C++20, Standalone Asio</li>
+          <li>OS별 비동기 I/O 추상화(IOCP/epoll)</li>
+          <li>CMake, GoogleTest, vcpkg(동적/정적 트리플릿)</li>
+          <li>Protobuf 직렬화 + 리플렉션</li>
+          <li>메시지 프레이밍(PacketHeader)</li>
+          <li>Windows API(GetSystemTimes/GlobalMemoryStatusEx/GetIfTable2/SIO_TCP_INFO)</li>
+        </ul>
+      </div>
+      <div class="skill-group">
+        <div class="skill-group-title">// 보안 설계</div>
+        <ul class="skill-list">
+          <li>TLS(asio::ssl, OpenSSL)</li>
+          <li>AES-256-GCM (AEAD, 현재 사용 중)</li>
+          <li>ARIA-256-CBC + HMAC-SHA256(Encrypt-then-MAC, 구현 경험)</li>
+          <li>패딩 오라클 공격 이해 및 대응</li>
+          <li>최소 권한(setuid/setgid)</li>
+        </ul>
+      </div>
+      <div class="skill-group">
+        <div class="skill-group-title">// 데이터 / 저장</div>
+        <ul class="skill-list">
+          <li>SQLite3(WAL 모드), PostgreSQL / TimescaleDB(선택형)</li>
+          <li>IMetricStore 추상화, 컴파일 타임 백엔드 선택</li>
+          <li>백엔드별 데이터 보존 정책(하이퍼테이블 청크 드롭 vs 직접 DELETE)</li>
+          <li>EF Core 쿼리 번역 한계 진단 + raw SQL 우회</li>
+        </ul>
+      </div>
+      <div class="skill-group">
+        <div class="skill-group-title">// 성능 프로파일링 / 동시성</div>
+        <ul class="skill-list">
+          <li>strace(-c/-f)로 syscall 레벨 병목 진단</li>
+          <li>부하 테스트 도구 자체 제작(LoadTester)</li>
+          <li>std::mutex/condition_variable 기반 워커 큐 설계</li>
+          <li>데이터 레이스 진단 및 수정</li>
+        </ul>
+      </div>
+      <div class="skill-group">
+        <div class="skill-group-title">// 웹 대시보드 (.NET)</div>
+        <ul class="skill-list">
+          <li>.NET 8, ASP.NET Core MVC + Razor</li>
+          <li>Entity Framework Core</li>
+          <li>SignalR 실시간 푸시</li>
+          <li>AssemblyLoadContext 플러그인</li>
+          <li>xUnit, Chart.js</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT -->
+<section id="contact">
+  <div class="contact-inner fade-in">
+    <div class="contact-left">
+      <div class="contact-label">// Contact</div>
+      <h2>함께 일하고 싶으시다면</h2>
+      <p>소스 코드 열람이 필요하신 경우<br>이메일로 요청해 주시면 공유해 드립니다.</p>
+    </div>
+    <div class="contact-links">
+      <a class="contact-item" href="mailto:shkim4548@gmail.com">
+        <span class="contact-item-icon">@</span>
+        <div class="contact-item-body">
+          <span class="contact-item-label">이메일</span>
+          <span class="contact-item-value">shkim4548@gmail.com</span>
+        </div>
+      </a>
+      <div class="contact-note">
+        <strong>소스 코드 공개 레포지토리는 별도 운영하지 않습니다.</strong><br>
+        면접·채용 목적의 코드 열람 요청은 이메일로 연락 주시면 프로젝트별로 공유 가능합니다.
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>// 비동기 I/O 기반 모니터링 에이전트 + 실시간 대시보드 포트폴리오 · APM Agent &amp; Console</span>
+</footer>
+
+<script>
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
