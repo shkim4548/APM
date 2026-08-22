@@ -1,0 +1,20 @@
+# Visual Studio IDE 캐시
+.vs/
+
+# 빌드 산출물
+x64/
+x86/
+Debug/
+Release/
+*.obj
+*.pdb
+*.ilk
+*.pch
+*.idb
+*.tlog
+*.log
+*.recipe
+*.suo
+*.vsidx
+*.exe
+*.FileListAbsolute.txt

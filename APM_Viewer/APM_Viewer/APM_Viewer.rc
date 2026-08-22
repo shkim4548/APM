@@ -1,0 +1,22 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+#include "afxres.h"
+#undef APSTUDIO_READONLY_SYMBOLS
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_KOR)
+LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
+#pragma code_page(949)
+
+IDD_APM_VIEWER_DIALOG DIALOGEX 0, 0, 300, 200
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "APM Viewer"
+FONT 9, "맑은 고딕", 0, 0, 0x1
+BEGIN
+    LTEXT           "상태: 대기중",IDC_STATIC_STATUS,7,7,286,10
+    CONTROL         "",IDC_LIST_METRICS,"SysListView32",LVS_REPORT | LVS_SINGLESEL | WS_BORDER | WS_TABSTOP,7,20,286,170
+END
+
+#endif    // 한국어 리소스

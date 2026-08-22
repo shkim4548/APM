@@ -1,0 +1,10 @@
+여기에 SQLite 앰알거메이션(sqlite3.c, sqlite3.h)을 넣으세요.
+
+출처: https://sqlite.org/download.html ("sqlite-amalgamation-XXXXXX.zip")
+
+넣은 뒤 해야 할 일:
+1. APM_Viewer.vcxproj의 <ItemGroup>에 sqlite3.c를 ClCompile로 추가
+2. sqlite3.c 파일 속성에서 "프리컴파일된 헤더 사용 안 함"으로 설정
+   (이 프로젝트의 다른 .cpp는 전부 pch.h를 강제 include하는데 sqlite3.c는 그걸 모르므로 예외 처리 필요)
+3. SqliteReader.cpp 맨 위에 #include "sqlite3/sqlite3.h" 추가
+4. SqliteReader.cpp/ApmViewerDlg.cpp의 TODO 채우기

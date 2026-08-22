@@ -1,0 +1,25 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "APM_Viewer", "APM_Viewer\APM_Viewer.vcxproj", "{CEF4044E-6632-4D73-940A-829AB6B598DF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CEF4044E-6632-4D73-940A-829AB6B598DF}.Debug|x64.ActiveCfg = Debug|x64
+		{CEF4044E-6632-4D73-940A-829AB6B598DF}.Debug|x64.Build.0 = Debug|x64
+		{CEF4044E-6632-4D73-940A-829AB6B598DF}.Release|x64.ActiveCfg = Release|x64
+		{CEF4044E-6632-4D73-940A-829AB6B598DF}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {41AE67A0-DB8F-48B6-989F-34DB37374D5A}
+	EndGlobalSection
+EndGlobal
