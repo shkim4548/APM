@@ -1,6 +1,6 @@
 # APM_Console 실행 가이드
 
-`Host`/`Contracts`/`Domain.Apm`/`Domain.Game` 플러그인 구조를 빌드하고 실행하는 방법. 설계 이유는 `WORK_STATUS.md`의 "APM_Console 계획" 섹션, 코드 전문은 `SESSION_LOG.md`의 "APM_Console 초기 스캐폴드"/"APM_Console 스캐폴드 — 직접 적용" 항목 참고.
+`Host`/`Contracts`/`Domain.Apm`/`Domain.Game` 플러그인 구조를 빌드하고 실행하는 방법. 설계 이유는 `WORK_STATUS.md`의 "APM_Console 계획" 섹션, 코드 전문은 `Docs/SESSION_LOG.md`의 "APM_Console 초기 스캐폴드"/"APM_Console 스캐폴드 — 직접 적용" 항목 참고.
 
 ---
 

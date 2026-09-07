@@ -2,13 +2,14 @@
 
 > 여러 환경(Windows PC / WSL)에서 작업 이어받기용 인수인계 문서.
 > 작업 시작 전 반드시 이 파일을 확인하고, 완료/중단 시 업데이트할 것.
-> 상세 설계안·코드 전문은 `SESSION_LOG.md` 참고 — 이 파일은 요약만 남긴다.
+> 상세 설계안·코드 전문은 `Docs/SESSION_LOG.md` 참고 — 이 파일은 요약만 남긴다.
+> **포트폴리오 PPT/문서화 작업을 다시 시작할 경우**: `DOCUMENTATION_PLAYBOOK.md`(재사용 가능한 헬퍼 카탈로그, 반복 검증 루프, 자주 겪은 함정과 해법 정리)를 먼저 읽을 것 — 아래 "부가 산출물" 절의 chronological 로그보다 실전에 바로 쓰기 좋다.
 
 ---
 
 ## 저장소 성격 (2026-07-26)
 
-이 저장소(`https://github.com/shkim4548/APM`, private)는 원래 모노레포 `/home/shkim/dev/gw2-cross`에서 포트폴리오 공개 목적으로 `GW2_CrossPlatformCore`/`APM_Agent`/`APM_Console`/`Docs`만 추출해 새로 만든 것이다. 완성 전까지 private 유지, 이후 기능 추가는 이 저장소를 기준으로 진행한다. 원 모노레포의 `WORK_STATUS.md`/`SESSION_LOG.md` 관행(상태 요약 + 코드 전문 로그 분리)을 그대로 이어받는다.
+이 저장소(`https://github.com/shkim4548/APM`, private)는 원래 모노레포 `/home/shkim/dev/gw2-cross`에서 포트폴리오 공개 목적으로 `GW2_CrossPlatformCore`/`APM_Agent`/`APM_Console`/`Docs`만 추출해 새로 만든 것이다. 완성 전까지 private 유지, 이후 기능 추가는 이 저장소를 기준으로 진행한다. 원 모노레포의 `WORK_STATUS.md`/`Docs/SESSION_LOG.md` 관행(상태 요약 + 코드 전문 로그 분리)을 그대로 이어받는다.
 
 **아키텍처 제약 (착수 전 필독)**:
 - 패킷 프레이밍: `PacketHeader{size,id}`, ID는 `PacketType::descriptor()->index()` — `.proto` 파일 내 선언 순서 기준. 새 메시지는 반드시 기존 메시지와 같은 `.proto` 파일에 이어 붙일 것(순서 바뀌면 ID 충돌).
@@ -32,7 +33,10 @@
 5순위 : 백분위/집계 통계                                ✅ 코드 적용 + 빌드/테스트 검증 완료
 6순위 : OpenTelemetry — 구현 보류, 면접용 답변 정리만  ⬜ 미착수
 7순위 : 원격 명령 실행 기능                            ⏸️ 보류(사유 아래 참고), 착수 여부 미정
+8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-07) — 0~1단계(빈 창+Signal/Slot) 빌드/실행 검증 완료, 2단계(SQLite) 착수 전
 ```
+
+**8순위는 위 1~7과 독립된 별개 트랙이다** — APM 백엔드(1~7)는 완료 상태로 더 손댈 것이 없고, 여기에 Qt(신규)·MFC(기존 Viewer 보강)를 얹는 프론트엔드 작업을 새로 시작하는 것. 계획 전문은 `Docs/QT_MFC_PORTFOLIO_PLAN.md`.
 
 ---
 
@@ -40,7 +44,7 @@
 
 ### 1-7(신규) — Collector `SqliteMetricStore::Store()` 블로킹 개선 🔴 커밋된 버전이 크래시함 — WorkerQueue로 재설계 중, **세션 중단(2026-07-27)**
 
-**⚠️ 다음 세션 시작 시 가장 먼저 확인할 것**: 현재 git에 커밋된 `Collector/main.cpp`(`39a3772` "Move Collector metric storage off the network thread via JobQueue")는 **실제 동시 접속 상황에서 시작 후 약 10초 만에 크래시하는 버그가 있는 버전**이다. 아래 "1-7-b" 절의 `WorkerQueue` 설계(이미 `SESSION_LOG.md`에 코드 전문 작성 완료, 아직 미적용)를 이어서 적용하는 게 최우선 작업.
+**⚠️ 다음 세션 시작 시 가장 먼저 확인할 것**: 현재 git에 커밋된 `Collector/main.cpp`(`39a3772` "Move Collector metric storage off the network thread via JobQueue")는 **실제 동시 접속 상황에서 시작 후 약 10초 만에 크래시하는 버그가 있는 버전**이다. 아래 "1-7-b" 절의 `WorkerQueue` 설계(이미 `Docs/SESSION_LOG.md`에 코드 전문 작성 완료, 아직 미적용)를 이어서 적용하는 게 최우선 작업.
 
 **배경**: 1-5 실측에서 발견한 핵심 병목 — `Store()`가 SQLite 기본 롤백 저널 모드로 매 INSERT마다 동기 `fdatasync`를 호출하는데, 이게 네트워크 I/O와 **같은 단일 `io_context` 스레드**에서 블로킹으로 실행돼 동시 접속 ~72개에서 하드 리밋을 만듦(상세: `Docs/PROJECT_TECHNICAL_REVIEW.md` §7-4). 사용자가 "이건 관찰만 하고 넘길 문제가 아니라 서버 개발자로서 반드시 고쳐야 하는 문제"라고 판단, 실제 개선 착수 결정.
 
@@ -57,7 +61,7 @@
 - **핵심 함정 2(2026-07-27 정정)**: 지난 세션에 "헤더 5개만 추가하면 된다"고 적어뒀던 게 부정확했음 — `GW2_CrossPlatformCore/Thread/*.h`는 자기완결적이지 않고 자신의 pch(`GW2_CrossPlatformCore/Main/CorePch.h`)가 특정 순서로 먼저 include해줬다는 걸 전제로 짜여 있음(예: `LockQueue.h`는 `USE_LOCK` 매크로를 쓰지만 그 매크로가 정의된 `CoreMacro.h`를 자기 스스로 include 안 함). `APM_Agent/pch.h`는 `CorePch.h`를 안 쓰므로(`Types.h`/`Container.h`만 가져옴), `Collector/main.cpp`가 `CorePch.h`와 동일한 순서로 직접 include해야 함: `CoreMacro.h` → `CoreGlobal.h` → `CoreTLS.h` → `Lock.h` → `ObjectPool.h` → `LockQueue.h` → `JobTimer.h` → `JobQueue.h` → `ThreadManager.h`(9개, `CorePch.h`에도 없어서 마찬가지로 별도 추가 필요 — 이 서브시스템을 실제로 기동하는 코드가 이 프레임워크 어디에도 없었다는 뜻).
 - `JobQueueRef`(=`shared_ptr<JobQueue>`) 타입은 이미 `Main/Types.h`에 정의돼 있음(`USING_SHARED_PTR(JobQueue)`).
 
-**설계 확정, 코드 전문 작성 완료 — `SESSION_LOG.md` 2026-07-27 항목 참고**:
+**설계 확정, 코드 전문 작성 완료 — `Docs/SESSION_LOG.md` 2026-07-27 항목 참고**:
 - `main()`에서 `auto store = CreateMetricStore(...)` 직후: `IMetricStore* storePtr = store.get();` + `JobQueueRef metricStoreQueue = MakeShared<JobQueue>();` 선언 + `GThreadManager->Launch(...)`로 전용 워커 스레드 1개 기동.
 - `PacketHandler::Register<apm::Metric>` 핸들러 안의 `store->Store(pkt)` 직접 호출을 `metricStoreQueue->Push(MakeShared<Job>([storePtr, pkt]{ storePtr->Store(pkt); }), /*pushOnly=*/true);`로 교체, 캡처 리스트도 `[&store, &pendingMetrics]` → `[storePtr, metricStoreQueue, &pendingMetrics]`로 변경.
 - 콘솔 로그 문구 "metric stored" → "metric received"로 변경(저장이 이제 비동기라 로그 시점엔 아직 안 끝났을 수 있음) — **채택 확정**(SESSION_LOG 코드 전문에 반영됨, 지난 세션엔 "확정 아님"이었으나 이번에 그대로 채택).
@@ -87,7 +91,7 @@
 
 **사용자 결정(2026-07-27)**: `GW2_CrossPlatformCore/Thread/Lock.cpp`는 수정하지 않음 — "여러 프로젝트를 통해 이미 검증한 내용"이라는 판단. 대신 **`APM_Agent` 안에서 `JobQueue`를 대체할 자체 큐를 새로 만드는 방향**으로 확정.
 
-**설계 완료, 코드 전문 작성 완료 — `SESSION_LOG.md` 2026-07-27 두 번째 항목("1-7 재실측 중 크래시 발견 + `JobQueue` → 자체 `WorkerQueue` 전환 설계") 참고, 아직 파일로는 미반영**:
+**설계 완료, 코드 전문 작성 완료 — `Docs/SESSION_LOG.md` 2026-07-27 두 번째 항목("1-7 재실측 중 크래시 발견 + `JobQueue` → 자체 `WorkerQueue` 전환 설계") 참고, 아직 파일로는 미반영**:
 - 신규 `Common/WorkerQueue.h`/`.cpp` — `std::mutex`/`std::condition_variable`/`std::queue<std::function<void()>>`만 쓰는 단일 워커 스레드 큐(`SpanRecorder`와 같은 패턴). `GW2_CrossPlatformCore/Thread/*` 의존 완전 제거.
 - `Common/CMakeLists.txt`에 `WorkerQueue.cpp` 한 줄 추가.
 - `Collector/main.cpp`: 1-7에서 추가했던 9개 헤더(`CoreMacro.h` 등) + `<fstream>`/`<execinfo.h>` 우회 코드를 전부 제거하고 `#include "WorkerQueue.h"` 한 줄로 교체. `JobQueueRef metricStoreQueue = MakeShared<JobQueue>(); GThreadManager->Launch(...)` 블록을 `WorkerQueue metricStoreQueue;`(로컬 객체, 생성자에서 워커 스레드 자동 기동)로 교체. `PacketHandler::Register` 람다의 캡처를 `metricStoreQueue`(값 복사) → `&metricStoreQueue`(참조)로, `metricStoreQueue->Push(MakeShared<Job>(...), true)` → `metricStoreQueue.Push([...]{ ... })`로 교체.
@@ -97,7 +101,7 @@
 - 신규 2개: `Common/WorkerQueue.h`/`.cpp`(단일 워커 스레드, `std::mutex`/`condition_variable`/`std::queue`만 사용, `GW2_CrossPlatformCore/Thread/*` 의존 제거)
 - 수정 2개: `Common/CMakeLists.txt`(`WorkerQueue.cpp` 한 줄 추가), `Collector/main.cpp`(include 블록에서 9개 헤더 + `<fstream>`/`<execinfo.h>`/`<dbghelp.h>` 우회 코드 제거하고 `#include "WorkerQueue.h"`로 교체, `JobQueueRef metricStoreQueue = MakeShared<JobQueue>()` + `GThreadManager->Launch(...)` 블록을 `WorkerQueue metricStoreQueue;` 로컬 객체로 교체, `PacketHandler::Register` 람다 캡처 `metricStoreQueue`(값) → `&metricStoreQueue`(참조), `Push(MakeShared<Job>(...), true)` → `Push([...]{...})`로 교체)
 
-적용 후 disk 상태가 `SESSION_LOG.md` 설계안과 일치함을 재확인 완료.
+적용 후 disk 상태가 `Docs/SESSION_LOG.md` 설계안과 일치함을 재확인 완료.
 
 **검증 완료(사용자, WSL, 2026-07-28)**: `cmake --build build` → `GW2_CrossPlatformCore`/`APM_Storage`/`APM_Common`(신규 `WorkerQueue.cpp.o` 포함)/`Collector`/`Agent`/`LoadTester`/`APM_Common_Tests` 전부 빌드 성공.
 
@@ -163,7 +167,7 @@
 
 **배경**: 1-7-b 300-agent 재실측에서 새로 발견해 후속 과제로 남겨뒀던 항목(`PacketHandler::Register` 핸들러의 `std::cout << ... << std::endl`이 메트릭마다 강제 flush를 부르며 네트워크 스레드를 블로킹). 사용자가 이번 세션에 개선 착수를 요청.
 
-**사용자 결정**: 애초 제안한 "1순위(`std::endl`→`'\n'` + `sync_with_stdio(false)`만)" 대신, 사용자가 "2순위(로깅을 워커 스레드로 위임)를 먼저 적용하는 게 맞아 보인다"고 판단(사유: flush를 생략하면 메모리 버퍼에 문제가 생길 것 같다는 우려) → 이 우려는 정정(`std::cout` 버퍼는 고정 크기라 문제 없음)했으나, 정정 과정에서 "2순위를 `std::endl` 유지한 채 그대로 적용하면 `WorkerQueue` 내부 무제한 큐 적체로 실제 메모리 증가 리스크가 있다"는 진짜 리스크를 발견 → 2순위(워커 스레드 위임) + 1순위 일부(`'\n'`, `sync_with_stdio(false)`)를 결합하는 방향으로 확정. 상세: `SESSION_LOG.md` 2026-07-29 항목.
+**사용자 결정**: 애초 제안한 "1순위(`std::endl`→`'\n'` + `sync_with_stdio(false)`만)" 대신, 사용자가 "2순위(로깅을 워커 스레드로 위임)를 먼저 적용하는 게 맞아 보인다"고 판단(사유: flush를 생략하면 메모리 버퍼에 문제가 생길 것 같다는 우려) → 이 우려는 정정(`std::cout` 버퍼는 고정 크기라 문제 없음)했으나, 정정 과정에서 "2순위를 `std::endl` 유지한 채 그대로 적용하면 `WorkerQueue` 내부 무제한 큐 적체로 실제 메모리 증가 리스크가 있다"는 진짜 리스크를 발견 → 2순위(워커 스레드 위임) + 1순위 일부(`'\n'`, `sync_with_stdio(false)`)를 결합하는 방향으로 확정. 상세: `Docs/SESSION_LOG.md` 2026-07-29 항목.
 
 **적용 완료(2026-07-29)** — `Collector/main.cpp` 1개 파일, 4곳 수정:
 1. `main()` 맨 앞에 `std::ios::sync_with_stdio(false);` 추가.
@@ -202,7 +206,7 @@
 
 **배경**: 사용자가 "Collector 1대 : Agent 100개"를 성능 기준으로 삼고 싶다며 WAL+로깅 개선(1-7-d, 1-7-e) 적용 후 100-agent 규모에서 실제로 개선됐는지 확인 요청. 100-agent 재실측 결과를 스레드별로 직접 계측(임시 진단 코드)하다가 `std::cout`/`std::cerr`에 여러 스레드가 동시에 쓰면서 출력이 문자 단위로 깨지는 걸 발견(`consoleLogQueue`는 실제로 별도 스레드였지만, 네트워크 스레드가 `connection accepted`/`accept error`/`WebServer로 N건 전송 시도`×2를 여전히 직접 `cout`/`cerr`로 찍고 있었음 — 1-7-e의 `sync_with_stdio(false)`가 C stdio 내부 락을 없애 이 동시 접근이 실제 레이스로 이어짐).
 
-**영향 범위**: 콘솔 로그 텍스트 가독성 문제일 뿐 — 저장된 메트릭 데이터, `queue_drop`, 이미 측정한 syscall 레벨 지표(1-7-e 표)에는 영향 없음. 상세 원인 분석·수정 전/후 코드 전문(`Collector/main.cpp` 2곳)은 `SESSION_LOG.md` 2026-07-29 두 번째 항목 참고.
+**영향 범위**: 콘솔 로그 텍스트 가독성 문제일 뿐 — 저장된 메트릭 데이터, `queue_drop`, 이미 측정한 syscall 레벨 지표(1-7-e 표)에는 영향 없음. 상세 원인 분석·수정 전/후 코드 전문(`Collector/main.cpp` 2곳)은 `Docs/SESSION_LOG.md` 2026-07-29 두 번째 항목 참고.
 
 **수정 완료(2026-07-29)** — 네트워크 스레드에 남아있던 나머지 cout/cerr 호출 4곳(연결 수립, accept 에러, WebServer 전송 시도 메트릭/span)을 전부 `consoleLogQueue.Push(...)`로 위임 — 런타임 중엔 오직 `consoleLogQueue` 워커 스레드 하나만 스트림을 건드리도록 통일해 레이스 원천 차단(`sync_with_stdio(false)`는 유지, 단일 쓰기 스레드 하에선 안전).
 
@@ -218,7 +222,7 @@
 
 **최종 결정(2026-07-29, 사용자 확정) — 이 스레드 종료**: 300-agent 시나리오에 남아있는 futex 경합(스레드 간 락 대기)은 **Collector 단일 프로세스의 처리 능력 한계 또는 테스트에 쓰는 서버 머신 자체의 스펙 미달**로 판단하고 더 파고들지 않기로 함. 실제 운영이라면 이 지점부터는 코드를 더 최적화하기보다 Collector를 여러 대로 수평 확장하는 게 정공법이라는 결론. `README.md`/`Docs/PROJECT_TECHNICAL_REVIEW.md`(신규 §7-7, 버그 8) 문서 반영 완료 — 이로써 **로드맵 1~7-f 전부 완료 처리, 프로젝트를 완료로 평가**(사용자 확정). 남은 건 미뤄뒀던 실행 관점 시각 검증(`/apm/alerts`, `/apm/traces`)뿐이며 이번 세션에서 문서화와 동시 진행.
 
-**포트폴리오 문서(`Docs/portfolio_apm.html`) 갱신 완료(2026-07-29)** — `SESSION_LOG.md` 전체(2026-07-26~29, 1순위~1-7-f)를 다시 읽어 이관 이후 추가된 기능/서사가 전혀 반영 안 돼 있던 걸 확인하고 보강:
+**포트폴리오 문서(`Docs/portfolio_apm.html`) 갱신 완료(2026-07-29)** — `Docs/SESSION_LOG.md` 전체(2026-07-26~29, 1순위~1-7-f)를 다시 읽어 이관 이후 추가된 기능/서사가 전혀 반영 안 돼 있던 걸 확인하고 보강:
 - 신규 섹션 `#features`("메트릭 수집기"에서 "APM"으로) — 2~5순위(알림/보존정책/트랜잭션 계측/백분위 통계) 설계 판단 카드 4개.
 - 신규 섹션 `#scale`(300 동시 접속까지 — 병목을 찾고 고치는 5라운드) — 1-5 베이스라인부터 1-7-f까지 "측정→수정→재측정" 서사를 라운드별 카드 + 요약 표 + "여기서 멈추기로 함" 콜아웃으로 정리.
 - `#spotlight`에 Bug #3(EF Core+SQLite `DateTimeOffset` 크래시) 신규 스포트라이트 추가, 요약 표에 콘솔 로그 동시쓰기 레이스 행 추가.
@@ -249,15 +253,15 @@
 | # | 작업 | 상태 | 메모 |
 |---|---|---|---|
 | 1-1 | 기존 코드 구조 파악 | ✅ 완료 (2026-07-26) | `Agent`/`Collector` `main.cpp`, `ApmSession`, `ResilientSender`, `PacketHandler` 확인. **발견**: `Collector`가 `ioContext.run()`을 메인 스레드에서 단일 호출(단일 스레드 io_context) — 접속 수가 늘어도 복호화/파싱/SQLite 저장은 한 스레드에서 순차 처리. 스케일 병목의 1차 가설. |
-| 1-2 | LoadTester 아키텍처 설계 제안 | ✅ 완료 (2026-07-26) | in-process asio 다중 연결 시뮬레이터(별도 프로세스 N개 fork 대신), 기존 `ResilientSender`/`AesGcmPayload`/`apm::Metric` 재사용. 상세: `SESSION_LOG.md` 2026-07-26 항목 |
-| 1-3 | 코드 스켈레톤(멤버 변수/함수 시그니처 전체) 제시 | ✅ 완료 (2026-07-26) | `LoadTester/` 신설안 + `ResilientSender` 콜백 추가안 제시. 상세: `SESSION_LOG.md` 2026-07-26 두 번째 항목. **사용자 확인 필요 4건 → 전부 추천안대로 확정 (2026-07-26)** |
-| 1-4 | 구현 + 빌드 검증 | ✅ 완료 (2026-07-26) | `ResilientSender.h/.cpp` 수정 적용(선택적 `SendCallback`/`ConnectionStateCallback` 추가, `Agent/main.cpp`는 기본값 `nullptr`라 무변경). `APM_Agent/LoadTester/` 6개 파일 신규 작성 + `CMakeLists.txt`에 `LoadTester` 타겟 추가. **사용자가 WSL(Ubuntu, GNU 13.3.0)에서 `cmake --build build --target LoadTester` 빌드 성공 확인**(경고 없음 — `GW2_CrossPlatformCore`의 기존 `ASIO_STANDALONE` 재정의 경고만 있고 이번 변경과 무관). 코드 전문은 `SESSION_LOG.md` 2026-07-26 세 번째 항목 참고. |
-| 1-5 | 실측 (N-agent 스케일 syscall/RSS/CPU/처리량/지연) | ✅ 완료 (2026-07-26) | 매트릭스 6단계(1/10/50/100/100+ramp-up/300 에이전트) 전부 실행 완료. **핵심 발견**: 동시 접속 성공 수가 71~72개에서 하드 리밋(100/300 요청 모두 동일) — ramp-up으로도 안 바뀜. 지연시간은 50 에이전트부터 절벽(p95 0ms→12초→34초). `queue_drop=0`(유실 없음, 그냥 밀림). CPU/메모리는 병목 아님(RSS 13~19MB 안정, CPU 평균 ~28%로 요청 규모 무관). `strace` 분석 결과 `pwrite64`/`fcntl`/**`fdatasync`**/`write`/저널 파일 관리(`openat`/`unlink`)가 시간의 70%+ 차지 — SQLite 기본 롤백 저널의 매 INSERT마다 동기 `fdatasync`가 네트워크 I/O와 같은 단일 `io_context` 스레드를 블로킹하는 게 근본 원인으로 확인됨(§1-1 가설을 구체적으로 검증). 상세: `SESSION_LOG.md` 2026-07-26 네 번째 항목 |
+| 1-2 | LoadTester 아키텍처 설계 제안 | ✅ 완료 (2026-07-26) | in-process asio 다중 연결 시뮬레이터(별도 프로세스 N개 fork 대신), 기존 `ResilientSender`/`AesGcmPayload`/`apm::Metric` 재사용. 상세: `Docs/SESSION_LOG.md` 2026-07-26 항목 |
+| 1-3 | 코드 스켈레톤(멤버 변수/함수 시그니처 전체) 제시 | ✅ 완료 (2026-07-26) | `LoadTester/` 신설안 + `ResilientSender` 콜백 추가안 제시. 상세: `Docs/SESSION_LOG.md` 2026-07-26 두 번째 항목. **사용자 확인 필요 4건 → 전부 추천안대로 확정 (2026-07-26)** |
+| 1-4 | 구현 + 빌드 검증 | ✅ 완료 (2026-07-26) | `ResilientSender.h/.cpp` 수정 적용(선택적 `SendCallback`/`ConnectionStateCallback` 추가, `Agent/main.cpp`는 기본값 `nullptr`라 무변경). `APM_Agent/LoadTester/` 6개 파일 신규 작성 + `CMakeLists.txt`에 `LoadTester` 타겟 추가. **사용자가 WSL(Ubuntu, GNU 13.3.0)에서 `cmake --build build --target LoadTester` 빌드 성공 확인**(경고 없음 — `GW2_CrossPlatformCore`의 기존 `ASIO_STANDALONE` 재정의 경고만 있고 이번 변경과 무관). 코드 전문은 `Docs/SESSION_LOG.md` 2026-07-26 세 번째 항목 참고. |
+| 1-5 | 실측 (N-agent 스케일 syscall/RSS/CPU/처리량/지연) | ✅ 완료 (2026-07-26) | 매트릭스 6단계(1/10/50/100/100+ramp-up/300 에이전트) 전부 실행 완료. **핵심 발견**: 동시 접속 성공 수가 71~72개에서 하드 리밋(100/300 요청 모두 동일) — ramp-up으로도 안 바뀜. 지연시간은 50 에이전트부터 절벽(p95 0ms→12초→34초). `queue_drop=0`(유실 없음, 그냥 밀림). CPU/메모리는 병목 아님(RSS 13~19MB 안정, CPU 평균 ~28%로 요청 규모 무관). `strace` 분석 결과 `pwrite64`/`fcntl`/**`fdatasync`**/`write`/저널 파일 관리(`openat`/`unlink`)가 시간의 70%+ 차지 — SQLite 기본 롤백 저널의 매 INSERT마다 동기 `fdatasync`가 네트워크 I/O와 같은 단일 `io_context` 스레드를 블로킹하는 게 근본 원인으로 확인됨(§1-1 가설을 구체적으로 검증). 상세: `Docs/SESSION_LOG.md` 2026-07-26 네 번째 항목 |
 | 1-6 | README/`Docs/PROJECT_TECHNICAL_REVIEW.md`에 결과 반영 | ✅ 완료 (2026-07-26) | `README.md`에 스케일 테스트 요약 bullet 추가(+ `.NET xUnit 8개→18개`로 테스트 카운트 오탈자 수정, 5순위까지 반영 안 돼 있던 것 발견해 같이 고침). `Docs/PROJECT_TECHNICAL_REVIEW.md`에 신규 `7-4. Collector 스케일 테스트 — LoadTester로 병목 찾기` 섹션(실측 표 + 발견 4건 + 결론 + 알려진 개선 방향) + 예상 질문 2건 추가 — 기존 문서 스타일(배경/실측/발견/예상 질문) 그대로 따름. |
 
 ### 2순위 — 알림(임계치 기반) ✅ 코드 적용 + 빌드/테스트 검증 완료
 
-`APM_Console` 쪽에서만 닫히는 작업(Agent/Collector 변경 불필요). 확인 4건 확정: 대상 지표 CPU/메모리/디스크/TCP RTT, 임계치는 DB 저장+UI 편집, 상태 전이 시만 알림(OK→Alert→Resolved, Zabbix/Nagios/Alertmanager 방식), DB에 이력 영속화(`AlertRecord`). 설계 상세: `SESSION_LOG.md` 2026-07-26 다섯 번째 항목("2순위(알림) 설계 제안").
+`APM_Console` 쪽에서만 닫히는 작업(Agent/Collector 변경 불필요). 확인 4건 확정: 대상 지표 CPU/메모리/디스크/TCP RTT, 임계치는 DB 저장+UI 편집, 상태 전이 시만 알림(OK→Alert→Resolved, Zabbix/Nagios/Alertmanager 방식), DB에 이력 영속화(`AlertRecord`). 설계 상세: `Docs/SESSION_LOG.md` 2026-07-26 다섯 번째 항목("2순위(알림) 설계 제안").
 
 **2026-07-26 적용 완료** — 사용자가 "2순위 알림 기능 코드 적용"으로 명시 확인, 아래 12개 파일 실제 반영:
 - 신규 7개: `Infrastructure/Persistence/AlertThreshold.cs`, `Infrastructure/Persistence/AlertRecord.cs`, `Infrastructure/AlertEvaluator.cs`, `tests/.../Infrastructure/AlertEvaluatorTests.cs`, `Models/AlertsViewModel.cs`, `Controllers/AlertsController.cs`, `Areas/Apm/Views/Alerts/Index.cshtml`
@@ -275,7 +279,7 @@
 
 ### 3순위 — 데이터 보존 정책(retention) ✅ 코드 적용 + 빌드 검증 완료
 
-저장소가 두 군데(Collector 로컬 `IMetricStore`/Console `ApmDbContext`)라 양쪽 다 대상. 확인 4건 확정: 적용 범위 Console+Collector 둘 다, 시간 기준 정책, Metrics 기본 30일, `AlertRecord`는 Metrics보다 길게(180일). 백엔드별로 구현 방식이 다름 — TimescaleDB는 하이퍼테이블 네이티브 `add_retention_policy()`(청크째로 드롭), SQLite는 직접 `DELETE` + `PRAGMA incremental_vacuum`, Console(EF Core) 쪽은 백엔드 무관하게 `ExecuteDeleteAsync` 하나로 통일. 설계 상세: `SESSION_LOG.md` 2026-07-26 여섯 번째 항목("3순위(데이터 보존 정책) 설계 제안").
+저장소가 두 군데(Collector 로컬 `IMetricStore`/Console `ApmDbContext`)라 양쪽 다 대상. 확인 4건 확정: 적용 범위 Console+Collector 둘 다, 시간 기준 정책, Metrics 기본 30일, `AlertRecord`는 Metrics보다 길게(180일). 백엔드별로 구현 방식이 다름 — TimescaleDB는 하이퍼테이블 네이티브 `add_retention_policy()`(청크째로 드롭), SQLite는 직접 `DELETE` + `PRAGMA incremental_vacuum`, Console(EF Core) 쪽은 백엔드 무관하게 `ExecuteDeleteAsync` 하나로 통일. 설계 상세: `Docs/SESSION_LOG.md` 2026-07-26 여섯 번째 항목("3순위(데이터 보존 정책) 설계 제안").
 
 **2026-07-26 적용 완료** — 사용자가 "바로 적용해줘"로 명시 확인, 아래 14개 파일 실제 반영:
 - Console 신규 1개: `Infrastructure/RetentionService.cs`(매시간 `Metrics`/`AlertRecords` 정리)
@@ -287,7 +291,7 @@
 - Collector: `cmake --build build` → `APM_Storage`/`Collector`/`Agent`/`LoadTester`/`APM_Common_Tests` 전부 빌드 성공. 컴파일된 오브젝트가 `SqliteMetricStore.cpp.o`뿐인 것으로 보아 현재 `APM_STORAGE_BACKEND=SQLite`로 빌드됨 — `TimescaleMetricStore.cpp`(네이티브 `add_retention_policy()` 경로)는 이번엔 컴파일 대상에 포함 안 됨, TimescaleDB 백엔드 전환 시 별도 컴파일 확인 필요.
 - (참고: `APM_Agent`에서 `dotnet build` 실행 시 `MSB1003` 에러가 났던 건 정상 — `APM_Agent`는 C++/CMake 프로젝트라 `.sln`/`.csproj`가 없음, `dotnet build`가 아니라 `cmake --build`가 맞는 명령.)
 
-**남은 선택 사항(코드/빌드 관점에선 3순위 완료, 실행 관점 확인은 선택)**: Collector 쪽(C++, `SqliteMetricStore::Prune()`)을 실제로 띄워 24시간 대기 없이 즉시 확인하려면 `pruneTimer` 간격을 임시로 줄여서 `[SqliteMetricStore] prune 완료` 로그가 찍히는지 보는 정도 — 아직 미실행. Console 쪽(.NET, `RetentionService`)은 2026-07-29 실행 검증 중 **시작 즉시 전체 호스트를 크래시시키는 버그**(`DateTimeOffset` 비교가 EF Core+SQLite 조합에서 SQL 번역 안 됨)를 발견해 raw SQL로 수정 완료 — 상세: `SESSION_LOG.md` 2026-07-29 항목, `Docs/PROJECT_TECHNICAL_REVIEW.md` 버그 9.
+**남은 선택 사항(코드/빌드 관점에선 3순위 완료, 실행 관점 확인은 선택)**: Collector 쪽(C++, `SqliteMetricStore::Prune()`)을 실제로 띄워 24시간 대기 없이 즉시 확인하려면 `pruneTimer` 간격을 임시로 줄여서 `[SqliteMetricStore] prune 완료` 로그가 찍히는지 보는 정도 — 아직 미실행. Console 쪽(.NET, `RetentionService`)은 2026-07-29 실행 검증 중 **시작 즉시 전체 호스트를 크래시시키는 버그**(`DateTimeOffset` 비교가 EF Core+SQLite 조합에서 SQL 번역 안 됨)를 발견해 raw SQL로 수정 완료 — 상세: `Docs/SESSION_LOG.md` 2026-07-29 항목, `Docs/PROJECT_TECHNICAL_REVIEW.md` 버그 9.
 
 **부수 발견(2026-07-26 기록, 2026-07-29 수정 완료)**: `APM_Console/src/ApmConsole.Host/appsettings.json`의 `ConnectionString`/키·인증서 경로가 옛 모노레포 경로(`/home/shkim/dev/gw2-cross/...`)로 남아있던 것 — 저장소 이관(2026-07-26) 이후 갱신 안 된 채 방치돼 있었음. `/home/shkim/dev/APM/...`로 수정하고 `APM_Console/certs/webserver.crt`/`.key`(이 저장소엔 없었음)를 `generate_webserver_cert.sh`로 새로 생성해 실제로 Collector+Console 연동까지 확인 완료.
 
@@ -297,7 +301,7 @@
 
 **설계 핵심**: `Metric.proto`에 `TransactionSpan` 메시지 추가(기존 메시지 뒤에 이어 붙임). Collector(C++) span은 기존 `Metric` 전송 파이프라인(`ResilientSender`/`ApmSession`)을 그대로 재사용해 네트워크로 전송(새 포트 불필요) — `ScopedSpan`(RAII) + `SpanRecorder`(전역 큐) 신설, `Collector.HandleMetricPacket`(메트릭 패킷 처리 핸들러)에 데모 계측. Console(.NET) span은 이미 자기 DB를 갖고 있어 네트워크 없이 `TraceScope`(`IAsyncDisposable`)가 직접 `ApmDbContext`에 저장 — `AlertsController.Index()`에 데모 계측. 패킷 ID 분기(`Metric.Descriptor.Index`/`TransactionSpan.Descriptor.Index`)가 새로 필요해져 `MetricsReceiverService`가 "id 무시하고 무조건 Metric으로 파싱"하던 걸 실제 분기하도록 바뀜. 새 테이블 `TransactionSpans`는 `RetentionService`가 `Metrics`와 같은 보존 기간으로 같이 정리하도록 확장.
 
-상세 설계: `SESSION_LOG.md` 2026-07-26 일곱 번째 항목("4순위(함수/트랜잭션 레벨 계측) 설계 제안").
+상세 설계: `Docs/SESSION_LOG.md` 2026-07-26 일곱 번째 항목("4순위(함수/트랜잭션 레벨 계측) 설계 제안").
 
 **2026-07-26 적용 완료** — 사용자가 "적용해줘"로 명시 확인, 아래 13개 파일 실제 반영:
 - C++ 신규 4개: `Common/SpanRecorder.h`/`.cpp`(전역 span 큐), `Common/ScopedSpan.h`/`.cpp`(RAII 계측 + `APM_TRACE_SCOPE` 매크로)
@@ -320,7 +324,7 @@
 
 확인 4건 확정: 대상 데이터 `TransactionSpans`만(Metrics는 이미 시계열 그래프 있어 제외), 계산 시점은 조회 시점(사전 집계 테이블 없음), 집계 시간 창은 사용자 선택(1시간/24시간/7일), 노출은 새 페이지 `/apm/traces`.
 
-**설계 핵심**: SQLite에 `PERCENTILE_CONT` 같은 SQL 백분위 함수가 없어(PostgreSQL/TimescaleDB엔 있음) 시간 창으로 거른 span을 메모리로 가져와 C#에서 `GroupBy(OperationName)` + 정렬 + `PercentileCalculator`(선형 보간, `AlertEvaluator`와 같은 순수 로직 패턴)로 계산 — 백엔드 무관 통일. 4순위에서 이미 만든 `TransactionSpanRecord`의 `(OperationName, Ts)` 복합 인덱스가 이 쿼리에 그대로 맞아 **스키마 변경 없음**. 저장은 마이크로초(`DurationUs`)지만 화면엔 밀리초로 환산해서 표시. 설계 상세: `SESSION_LOG.md` 2026-07-26 여덟 번째 항목("5순위(백분위/집계 통계) 설계 제안").
+**설계 핵심**: SQLite에 `PERCENTILE_CONT` 같은 SQL 백분위 함수가 없어(PostgreSQL/TimescaleDB엔 있음) 시간 창으로 거른 span을 메모리로 가져와 C#에서 `GroupBy(OperationName)` + 정렬 + `PercentileCalculator`(선형 보간, `AlertEvaluator`와 같은 순수 로직 패턴)로 계산 — 백엔드 무관 통일. 4순위에서 이미 만든 `TransactionSpanRecord`의 `(OperationName, Ts)` 복합 인덱스가 이 쿼리에 그대로 맞아 **스키마 변경 없음**. 저장은 마이크로초(`DurationUs`)지만 화면엔 밀리초로 환산해서 표시. 설계 상세: `Docs/SESSION_LOG.md` 2026-07-26 여덟 번째 항목("5순위(백분위/집계 통계) 설계 제안").
 
 **2026-07-26 적용 완료** — 사용자가 "바로 적용하자"로 명시 확인, 아래 6개 파일 실제 반영:
 - 신규 5개: `Infrastructure/PercentileCalculator.cs`, `tests/.../Infrastructure/PercentileCalculatorTests.cs`, `Models/TracesViewModel.cs`, `Controllers/TracesController.cs`, `Areas/Apm/Views/Traces/Index.cshtml`
@@ -332,7 +336,7 @@ Agent/Collector 변경 없음(Console 쪽만 닫히는 작업 — C++ 재빌드 
 
 **남은 선택 사항(코드/빌드 관점에선 5순위 완료, 실행 관점 확인은 선택)**: `/apm/traces` 페이지를 브라우저에서 직접 띄워 실제 트랜잭션 span 데이터(4순위 `Collector.HandleMetricPacket`/`AlertsController.Index` 계측분)로 시간 창 전환(1시간/24시간/7일)과 p50/p95/p99 표시가 의도대로 나오는지 확인 — 필수는 아님(2순위 `/apm/alerts` 시각 검증과 마찬가지로 아직 미실행 상태, 사용자 판단으로 뒤로 미뤄둔 항목들과 함께 나중에 일괄 확인 가능).
 
-**실행 검증 완료(2026-07-29)** — 실제로 띄워보니 `/apm/traces`가 **항상 HTTP 500**이었음(2순위 `RetentionService`와 같은 근본 원인 — `DateTimeOffset` 비교가 EF Core+SQLite에서 SQL 번역 안 됨, `TracesController.Index()`의 `Where(s => s.Ts >= cutoff)`). `Ts` 비교를 SQL로 안 보내고 메모리에서 필터링하도록 수정 후 재검증: `window=1h/24h/7d` 전부 200, 1h 창에서 `LoadTester`가 만든 실제 `Collector.HandleMetricPacket` span 데이터가 표에 나타나는 것 확인. 상세: `SESSION_LOG.md` 2026-07-29 항목, `Docs/PROJECT_TECHNICAL_REVIEW.md` 버그 10.
+**실행 검증 완료(2026-07-29)** — 실제로 띄워보니 `/apm/traces`가 **항상 HTTP 500**이었음(2순위 `RetentionService`와 같은 근본 원인 — `DateTimeOffset` 비교가 EF Core+SQLite에서 SQL 번역 안 됨, `TracesController.Index()`의 `Where(s => s.Ts >= cutoff)`). `Ts` 비교를 SQL로 안 보내고 메모리에서 필터링하도록 수정 후 재검증: `window=1h/24h/7d` 전부 200, 1h 창에서 `LoadTester`가 만든 실제 `Collector.HandleMetricPacket` span 데이터가 표에 나타나는 것 확인. 상세: `Docs/SESSION_LOG.md` 2026-07-29 항목, `Docs/PROJECT_TECHNICAL_REVIEW.md` 버그 10.
 
 이로써 로드맵 1~5순위 전부 코드/빌드 관점에서 완료. 남은 항목: 6순위(OpenTelemetry, 구현 안 함 - 면접 답변만 정리), 7순위(원격 명령 실행, 보류) — 그리고 미뤄둔 실행 관점 시각 검증들(2순위 알림, 5순위 트레이스, 1순위 부하 매트릭스 5단계).
 
@@ -346,7 +350,9 @@ Agent/Collector 변경 없음(Console 쪽만 닫히는 작업 — C++ 재빌드 
 
 ---
 
-## 부가 산출물 — 라이트 테마 포트폴리오 기반 발표용 PPT (2026-07-29) ✅ 시각 완성도 개선 완료
+## 부가 산출물 — 라이트 테마 포트폴리오 기반 발표용 PPT (2026-07-29) ✅ 문서화 작업 우선 완료 처리(사용자 확정)
+
+> 이 절은 무엇을 언제 했는지의 chronological 로그다. **재사용 가능한 노하우(헬퍼 함수, 검증 루프, 자주 겪은 함정)는 `DOCUMENTATION_PLAYBOOK.md`에 따로 정리해뒀으니 그쪽을 먼저 참고할 것.**
 
 **배경**: `Docs/portfolio_apm_light.html`(라이트 테마 웹 포트폴리오)을 기반으로 발표용 PPT가 필요하다는 요청. 기존에 `Docs/build_portfolio_pptx.py`(2026-07-25, python-pptx, 13슬라이드)가 있었으나 그 이후(07-26~29) 작업 전부(부하/스케일 테스트 5라운드, 알림/보존정책/트랜잭션추적/백분위통계, 버그 스포트라이트 2건, 스크린샷 등)가 반영 안 된 구버전이라 이번 건에서는 참고하지 않고 **새로 작성**(사용자 명시 지시) — 단 라이트 테마 HTML 문서는 내용 근거로 계속 참조.
 
@@ -478,3 +484,115 @@ Agent/Collector 변경 없음(Console 쪽만 닫히는 작업 — C++ 재빌드 
 **README.md 최신화**: `Docs/` 행에 라이트 테마 포트폴리오(`portfolio_apm_light.html`)와 발표용 PPT(`portfolio_apm_light.pptx`), 스크린샷 디렉터리가 빠져있던 것을 추가. 그 외 본문(검증된 것 섹션 수치·버그 참조)은 이미 최신 상태였음을 확인(추가 수정 불필요).
 
 **남은 것**: 이번 수정분(`build_portfolio_apm_light_pptx.py`, `portfolio_apm_light.pptx`, `README.md`)도 git 미커밋 상태. `PROJECT_TECHNICAL_REVIEW.md`의 §0/§10 테스트 카운트 표(".NET 8개"로 낡음)는 이번엔 범위 밖으로 남겨둠 — 원하면 후속으로 정정 가능.
+
+**`PROJECT_TECHNICAL_REVIEW.md` 테스트 카운트 정정 + 전체 커밋(2026-07-29, 이어지는 세션)** — 사용자가 "이어서 정정 후 커밋하자"로 확정, 위에서 범위 밖으로 남겨뒀던 §0/§10 표를 마저 정정:
+- §0 "기술 스택 요약" 표: "xUnit(.NET) 8개" → "18개".
+- §10 "테스트 전략": `.NET(APM_Console/tests/, xUnit) 8개` → `18개`, 실제 테스트 파일(`AlertEvaluatorTests.cs` 5개, `PercentileCalculatorTests.cs` 5개)에서 빠져있던 항목을 실제 테스트 메서드명 기준으로 추가.
+- 같은 절의 "왜 이 두 개만 골랐나" 제목/본문 — 이제 테스트 영역이 2개(암호화, TCP 프레이밍)가 아니라 4개(+알림 상태전이, +백분위 계산)가 됐으므로 "왜 이 영역들만 골랐나"로 제목 변경, 본문에 새 두 영역(순수 함수·상태 전이 로직) 추가해 설명 일관성 유지.
+
+**커밋 완료(2026-07-29, `eb03286` "Add a native-PPTX presentation deck and fix stale test counts")** — 이번 대화에서 다룬 전체 변경분 한 번에 커밋: `Docs/build_portfolio_apm_light_pptx.py`(신규), `Docs/portfolio_apm_light.pptx`(신규), `Docs/PROJECT_TECHNICAL_REVIEW.md`(테스트 카운트 정정), `Docs/screenshots/terminal.png`(이전 세션에 이미 대비 수정된 버전, 이번에 같이 커밋), `README.md`, `WORK_STATUS.md`. 커밋 메시지는 이 저장소 관례대로 AI 도구 언급/서명 없이 작성. 커밋 후 `git status` 클린 확인.
+
+**README.md 재검증(2026-07-29, 이어지는 세션)** — 사용자가 "혹시 모르니 한번더" 요청, PPT 검증과 같은 강도로 재검증:
+- 모든 파일/디렉터리 링크(`GW2_CrossPlatformCore/`, `APM_Agent/README.md`, `APM_Console/README.md`, `Docs/` 하위 문서 6종, `HOW_TO_RUN.md` 2개)와 `PROJECT_TECHNICAL_REVIEW.md` 섹션 참조(§7-4~7-7, 버그 8·9·10)가 실제로 존재하는지 파일시스템에서 직접 확인 — 전부 유효.
+- 파이프라인 순서 서술("암호화 → 프레이밍 → TLS")이 `PROJECT_TECHNICAL_REVIEW.md` §1 다이어그램의 시각적 배치(프레이밍이 위에 먼저 그려짐)와 달라 보여 오류로 의심했으나, 실제 `ApmSession::Send()` 코드(`_payloadSealer->Seal()`을 먼저 호출해 크기를 얻은 뒤 `PacketHeader`를 구성)를 직접 확인해 README 쪽이 맞고 기술 리뷰 문서의 다이어그램 레이아웃이 오해 소지가 있을 뿐임을 확인(문서 수정은 하지 않음, 범위 밖).
+- C++20/.NET 8 표기도 각각 `CMakeLists.txt`(`CMAKE_CXX_STANDARD 20`)/`.csproj`(`net8.0`)와 직접 대조해 확인.
+- **수정 사항 없음** — 재검증 결과 README는 그대로 정확함.
+
+**최종 결정(2026-07-29, 사용자 확정) — 문서화 작업 우선순위로 완료 처리**: 포트폴리오 PPT(라이트 테마 기반, 18슬라이드) + README/기술 리뷰 문서 정합성 검증까지 마무리되어, 사용자가 이 "부가 산출물" 트랙을 우선 완료로 판단. 로드맵 본편(1~7-f)은 이미 이전 세션에 완료 처리됐고, 이번 트랙(문서화·포트폴리오)까지 닫히면서 프로젝트의 코드/문서 양쪽 모두 마무리 상태. 남은 미착수 항목은 로드맵의 6순위(OpenTelemetry, 구현 안 함 확정)·7순위(원격 명령 실행, 보류 확정)뿐이며 둘 다 착수 여부 자체가 보류 상태로 다음 세션 확인 불필요.
+
+---
+
+### 1-7-b 크래시 근본 원인 재진단 + `Lock.cpp` 수정 (2026-08-05)
+
+사용자가 직접 코드 분석 세션 중 1-7-b `LOCK_TIMEOUT` 크래시의 원인(`Lock::WriteUnlock()`)을 재검토 — "이미 여러 Windows 실시간 게임 서버에서 검증된 `JobQueue`+`Lock`이 처음부터 이 버그를 갖고 있었을 리 없다"는 사용자 가설을 원 모노레포(`../gw2/GW2_Server/GW2_ServerCore/Lock.cpp`)와 `diff`로 직접 검증.
+
+**확정 원인**: OS API 차이가 아니라 **이관(포팅) 중 `WriteUnlock()`과 `ReadLock()`의 함수 본문이 뒤바뀐 복사·붙여넣기 실수** — 원래 `WriteUnlock()`의 해제 로직(`--_writeCount` + 0이면 `_lockFlag.store(EMPTY_FLAG)`)이 유실되고 그 자리에 `ReadLock()`의 본문이 들어갔으며, `ReadLock()` 자체는 통째로 사라짐(헤더 선언만 남아 지금까지 아무도 안 불러서 링크 에러 없이 숨어있었음). 상세 diff/코드 전문: `Docs/SESSION_LOG.md` 2026-08-05 항목.
+
+**수정 완료** — `GW2_CrossPlatformCore/Thread/Lock.cpp`(APM 저장소 사본만, 사용자가 "우선 APM 아래에 있는 내용만 수정" 확정 — `../gw2` 원본 미수정): `WriteUnlock()`을 원본 로직으로 복원, `ReadLock()` 신규 복원.
+
+**검증 완료**: `cmake --build build --target GW2_CrossPlatformCore Collector Agent` 빌드 성공, `ctest` 9/9 통과. 단, 현재 `Collector/main.cpp`는 `JobQueue`/`Lock`을 안 쓰고 `WorkerQueue`로 이미 대체된 상태라 **이 수정은 현재 런타임 동작엔 영향 없음** — 향후 `Thread/JobQueue`를 다시 쓸 경우를 위한 정합성 수정.
+
+**남은 것**: `CODE_ARCHITECTURE.md` 반영 여부, 커밋 여부 사용자 확인 대기.
+
+---
+
+### 현재 작업 현황 (2026-08-26, 디스크 상태 직접 재확인)
+
+**로드맵(위 표) 상태 변화 없음** — 1~7-f 전부 완료, 6/7순위는 여전히 미착수/보류 확정 상태 그대로. 2026-08-05 이후 이어지는 세션들도 로드맵 항목이 아니라 **완료 처리된 코드에 대한 사용자 직접 코드 분석 세션**(Console 수신 파이프라인, Console↔브라우저 통신까지 확장).
+
+**`git status` 기준 미커밋 변경분 전체(2026-08-26 재확인, 2026-08-05 대비 변화 없음)**:
+- `M SESSION_LOG.md` — Lock.cpp 항목(코드 전문 포함).
+- `M WORK_STATUS.md` — 이 문서 자체.
+- `M GW2_CrossPlatformCore/Thread/Lock.cpp` — `WriteUnlock()`/`ReadLock()` 수정(§1-7-b 재진단 항목 참고).
+- `M APM_Agent/Agent/main.cpp` — 람다 서식 변경(한 줄 → 중괄호 개행, 로직 동일). **사용자 확인 완료(2026-08-26): 의도한 변경, 유지.**
+- `?? CODE_ARCHITECTURE.md` — 사용자 직접 분석용 Q&A 기록 문서. 2026-08-05 이후 크게 늘어남 — 현재 §1~12까지 구성:
+  §1 추천 순서, §2 Collector 생명주기, §3/§4 Agent↔Collector/Collector↔Console 패킷 구성, §5 프로세스 유지 방식 비교, §6 `APM_Common` 정적 라이브러리, §7 sender/scheduler 람다 이유, §8 WorkerQueue vs JobQueue, §9 Lock.cpp 이관 버그, §10 순서도(10-1~10-3), §11 Console 패킷 수신 상세(TcpListener/TLS, ReadExactAsync vs C++ 누적 버퍼 재조립 및 그 이유, id분기→복호화→저장→SignalR, 알림 엣지 트리거), §12 Console↔브라우저 통신(서버 렌더링 초기 로드 vs SignalR/WebSocket 실시간 갱신, WebSocket 탄생 배경).
+- `?? CODE_ARCHITECTURE_flowchart.html` — 순서도 HTML. §10-1~10-4(구 §6-1~6-4에서 번호만 이동), §11(Console 패킷 수신 순서도 신규) 구성.
+- `?? DOCUMENTATION_PLAYBOOK.md` — 이전 세션부터 미커밋 상태로 남아있던 것(변경 없음).
+
+**커밋 여부**: 사용자 확인 완료(2026-08-26) — **아직 커밋하지 않음, 분석 세션이 더 이어질 수 있으니 나중에 한 번에 커밋**. 다음에 이 판단이 바뀌지 않는 한 매 세션 커밋 여부를 다시 묻지 않아도 됨.
+
+**다음 세션 시작 시 확인할 것**: 없음 — 위 3건 전부 이번에 확정됨. 사용자의 원래 분석 목표(§10-3/10-4 메모): (1) 수집 항목별(CPU/메모리/디스크/네트워크/TCP) 개별 분석, (2) `APM_Agent/LoadTester/` 분석으로 이동은 여전히 유효.
+
+---
+
+### GitHub 원격 브랜치 불일치 발견 (2026-08-26, WSL 환경) — 원인 조사는 Windows PC 쪽에서 이어갈 것
+
+사용자가 "커밋 하나가 push되지 못하고 LFS에 물려 있을 것"이라고 언급해 이 WSL 저장소에서 확인 — **이 환경에는 LFS 문제 자체가 없었음**:
+- `.gitattributes`가 히스토리 전체에 한 번도 존재한 적 없음(LFS 필터 설정 없음), local/global/system git config 어디에도 `lfs.*` 없음, 이 머신엔 `git-lfs` 바이너리 자체가 미설치.
+- 히스토리 전체에서 가장 큰 blob도 21.8MB(`APM_Agent/loadtest_results/.../collector_stdout.log`)로 GitHub 100MB 하드 리밋/50MB 경고 기준에도 안 걸림. 저장소 전체 크기도 17MB 수준.
+
+**대신 발견한 실제 문제 — 로컬 `master`와 GitHub 원격이 완전히 갈라져 있음**:
+- `git ls-remote origin` 기준 GitHub엔 `master` 브랜치가 아예 없고 **`main`만 존재**(HEAD도 `main`).
+- `origin/main` 최신 커밋(`20e1822` "APM 2차 마무리")은 로컬에 캐시된 옛 `origin/master`(`2050b498`, 같은 커밋 메시지)와 **메시지는 같지만 해시가 다름** — 그 지점까지의 히스토리가 다시 쓰여(rewrite) `main`이라는 새 브랜치명으로 force-push된 것으로 보임(아마 다른 PC에서 큰 파일을 빼내려고 `git filter-repo`/`bfg`/LFS 마이그레이션 등을 수행한 흔적으로 추정).
+- 그 결과 **로컬 `master`에만 있고 GitHub 어디에도 없는 커밋이 5개**: `43becab`(크래시/500 버그 수정) → `04971d2` → `f08cb64` → `81d0f97` → `eb03286`(전부 2026-07-29 문서화/포트폴리오 마무리 세션 내용, 위 로드맵상 완료 처리된 작업).
+- `git merge-base eb03286 origin/main`이 공통 조상을 못 찾음(exit 1) — 두 히스토리가 동일 프로젝트의 연속임에도 blob/커밋 레벨에서 완전히 별개 계보로 갈라진 상태.
+
+**사용자 판단(2026-08-26)**: "아무래도 다른 PC(Windows)에서 처리된 듯하다" — LFS 마이그레이션/히스토리 재작성 작업 자체는 Windows PC 쪽에서 이미 진행된 것으로 추정, 이 WSL 환경에선 재현/확인 불가.
+
+**다음에 어느 환경에서든 이 문제를 다룰 때 확인할 것**:
+1. Windows PC에서 `git status`/`git log --oneline -10`/`git remote -v`로 실제 어느 브랜치에 있고 원격과 관계가 어떤지 확인.
+2. 로컬 `master`의 5개 커밋(`43becab`~`eb03286`)이 Windows PC나 GitHub `main` 어디에도 없다면, 그 5개 커밋의 변경사항을 유실 없이 `main` 위에 재적용(cherry-pick 등)하는 방법을 검토해야 함 — 히스토리가 이미 재작성된 상태라 단순 `git push origin master:main`은 안 될 가능성 높음(비-fast-forward).
+3. GitHub 웹(`https://github.com/shkim4548/APM`)에서 브랜치 목록/커밋 이력을 직접 봐도 빠르게 확인 가능.
+
+---
+
+### 문서 재정리 + Qt·MFC 포트폴리오 계획 문서화 (2026-09-05)
+
+**배경**: 트랙 1(네트워크+데스크톱 UI) 대응용 "Qt·MFC 포트폴리오 계획"을 채팅에서 초안으로 검토하던 중, 계획서의 "Collector에 직접 TCP로 붙을지" 결정 항목을 실제 코드(`Collector/main.cpp`, `APM_Console` 컨트롤러/SignalR 허브)로 재확인해보니 원래 초안의 A안/B안 구도가 부정확했음을 발견(Collector는 Agent 전용 암호화 리스너뿐이고 조회 포트가 없음, 반면 Console의 `/apm/hub/metrics` SignalR 허브는 표준 프로토콜이라 Qt가 코어 무수정으로 구독 가능). 이 발견을 계기로 채팅에만 있던 계획을 파일로 정리하기로 함.
+
+**사용자 요청**: "session log docs 아래로 옮기고 포트폴리오 계획 검토부터 새로 작성하자" — 저장소 문서 재배치 + 계획 문서 신규 작성.
+
+**적용 완료**:
+- `SESSION_LOG.md`(루트) → `Docs/SESSION_LOG.md`로 이동(`git mv`, 히스토리 보존). CLAUDE.md(rule 6)/`WORK_STATUS.md`/`CODE_ARCHITECTURE.md`/`APM_Agent/HOW_TO_RUN.md`/`APM_Console/HOW_TO_RUN.md`의 상호 참조를 전부 `Docs/SESSION_LOG.md`로 갱신. `Docs/` 안쪽 문서(`PROJECT_TECHNICAL_REVIEW.md`, `ARIA_TO_AES_MIGRATION.md`, `TLS_SSL_FUNDAMENTALS.md`, `WEBSERVER_TEST_SCENARIO.md`)의 참조는 같은 디렉토리라 경로 접두어 불필요 — 미변경.
+  - 이동 근거: `SESSION_LOG.md`는 CLAUDE.md rule 6 정의상 "채팅 코드 블록 렌더링 우회용 코드 전문 아카이브"라 `Docs/`의 다른 참고자료(`PROJECT_TECHNICAL_REVIEW.md` 등)와 성격이 같음. 반면 `CLAUDE.md`/`WORK_STATUS.md`/`DOCUMENTATION_PLAYBOOK.md`/`CODE_ARCHITECTURE.md`는 "새 세션이 가장 먼저 읽어야 할 진입점" 성격이라 루트에 그대로 둠.
+- `Docs/QT_MFC_PORTFOLIO_PLAN.md` 신규 작성 — 채팅 초안 전체를 재구성해 파일로 옮김. §3-2("데이터 연결 방식")를 A안/B안 대신 3가지 경로 비교표로 전면 재작성(Collector 직접 TCP / SQLite 폴링 / Console SignalR 구독), 권장안을 "SQLite(초기 적재)+SignalR 구독(실시간 갱신)" 하이브리드로 확정. §6 공수 견적에 SignalR 구현 단계(4~6시간)와 배포판 구성 단계(2시간)를 추가해 총 견적을 3~4일→4~5일로 조정. §8에 "확인 필요" 항목 중 Collector 포트 구조 질문을 해결됨으로 표시.
+- 코드 근거는 `Docs/QT_MFC_PORTFOLIO_PLAN.md`가 아니라 `CODE_ARCHITECTURE.md` §13(신규)에 기록 — 기존 관례(코드 분석 결과는 `CODE_ARCHITECTURE.md`, 계획/설계 판단은 별도 문서)를 그대로 따름.
+
+**남은 것**: `Docs/QT_MFC_PORTFOLIO_PLAN.md` §8의 미확정 2건(Qt 코드 저장소 내 위치, 테스트 대상 최소 범위) — 실제 착수 전에 결정 필요. 커밋 여부 미확인(위 GitHub 브랜치 불일치 이슈가 해소 안 된 상태라 커밋 타이밍 사용자 판단 대기).
+
+**같은 날 2차 수정 — 원칙 변경**: 사용자가 "원칙 하나는 제외해라, 커도 된다. 합격할만큼의 내용과 이론적 지식을 쌓는 것이 중요하다"고 지시 — `Docs/QT_MFC_PORTFOLIO_PLAN.md` §2의 "원칙 1(크게 만들지 않는다)"을 제거(구 원칙 2/3 → 원칙 1/2로 재번호). "면접에서 말할 판단 3~4개만 만들고 멈춘다"는 스코프 제한을 걷어내고, 대신 구현 범위를 넓히되 각 단계의 밑바탕 이론(Qt 이벤트 루프/메타오브젝트, signal/slot 내부 동작, MVC, WebSocket/SignalR 프로토콜, MFC 메시지 펌프 등)까지 설명 가능한 수준으로 쌓는 쪽으로 방향 전환. §6 공수 견적의 "2단계에서 끊어도 된다"는 문구와 §9 "시간 되는 만큼"이라는 표현도 같이 제거 — 4~5일 견적은 이제 "최소 바닥선"이라고 명시.
+
+---
+
+### 새 트랙 착수 — Qt/MFC 포트폴리오 확장 시작 방법 확정 (2026-09-06)
+
+**사용자 확인**: "APM은 사실상 더 변경할 거리가 없고, 여기에 Qt, MFC를 붙이니까 사실상 새로운 개발계획이다" — 위 로드맵(1~7)과는 독립된 신규 트랙으로 다루기로 확정. 이전 세션들의 세부 Q&A 내용을 매번 다시 참조할 필요 없이, 이 문서(로드맵 표 + 이 절)와 `Docs/QT_MFC_PORTFOLIO_PLAN.md`만 보고 시작할 수 있도록 정리.
+
+**시작 방법(확정)**:
+1. 위 로드맵 표에 **8순위(신규 트랙)**로 등록 — 1~7 로드맵과 섞지 않음.
+2. `Docs/QT_MFC_PORTFOLIO_PLAN.md` §8("남은 실행 준비")의 착수 차단 항목 2건을 이 자리에서 결정해 코딩 시작을 막지 않도록 함:
+   - **저장소 내 위치**: `APM_QtDashboard/`(신규 최상위 디렉토리, `APM_Agent`/`APM_Console`과 나란히) — 기존 저장소 관례 그대로 따름.
+   - **Qt 버전**: Qt 6.
+   - (테스트 범위·공고 재확인 2건은 비차단 항목으로 남겨둠 — 진행하면서 결정)
+3. 실제 코딩 착수는 `Docs/QT_MFC_PORTFOLIO_PLAN.md` §9 진행 순서의 1번부터: Qt 설치 확인 → Qt Creator로 `APM_QtDashboard/` 아래 빈 프로젝트 생성 → 빌드 확인(§6 0단계).
+
+**다음 세션 시작 시 확인할 것**: `APM_QtDashboard/` 디렉토리가 아직 생성되지 않았다면 위 3번부터 이어서 진행. 생성돼 있다면 `Docs/QT_MFC_PORTFOLIO_PLAN.md` §6 표에서 어느 단계까지 완료됐는지 먼저 확인(코드 파일이므로 Claude가 직접 만들지 않음 — CLAUDE.md rule 2, 사용자가 직접 진행).
+
+---
+
+### 0~1단계(빈 창 + Signal/Slot) 빌드/실행 검증 완료 (2026-09-07)
+
+**진행 내용**: 사용자가 `APM_QtDashboard/`에 0~1단계 코드(`main.cpp`, `MainWindow.h/.cpp`, `CMakeLists.txt`)를 직접 작성. 오타로 컴파일 실패 → 사용자의 명시적 요청("오타만 잡고")에 따라 Claude가 예외적으로 오타 4곳 직접 수정(`QMainWinodw`→`QMainWindow` ×2, 클래스 종료 세미콜론 누락, `clickeds`→`clicked`). `cmake --build .` 빌드 성공 확인, 이후 사용자가 직접 실행해 "Click me" 클릭 시 라벨 카운트 증가까지 검증 완료. 수정 전/후 코드 전문은 `Docs/SESSION_LOG.md` 2026-09-07 항목 참고.
+
+**다음 세션 시작 시 확인할 것**: `Docs/SESSION_LOG.md`에 이미 준비된 2단계(`webserver_apm.db` 초기 데이터 표시 — `MetricsRepository`, `QTableWidget` 2개, CMakeLists Sql 컴포넌트 추가) 제안을 따라 사용자가 직접 코드 작성 → 빌드/실행 검증. 검증 항목 3가지(§SESSION_LOG "검증" 절 참고): Sql 드라이버 `find_package` 성공 여부, DB에 실제 행이 있을 때 테이블 표시 여부, DB 파일 없을 때 `Open()` 실패 처리 여부.

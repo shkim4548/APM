@@ -32,7 +32,10 @@ int main()
 		sslContext.set_verify_mode(asio::ssl::verify_none);
 
 		ResilientSender sender(ioContext, sslContext, COLLECTOR_HOST, COLLECTOR_PORT,
-			[agentCollectorKey]() { return std::make_unique<AesGcmPayload>(agentCollectorKey); });
+			[agentCollectorKey]() 
+			{
+				return std::make_unique<AesGcmPayload>(agentCollectorKey); 
+			});
 
 		MetricScheduler scheduler(ioContext, std::chrono::seconds(5),
 			[&sender](const SystemMetrics& metrics)

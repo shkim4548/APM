@@ -1,7 +1,7 @@
 # APM_Agent 실행 가이드
 
 이 문서는 지금까지 만든 `Collector`/`Agent`를 처음부터 빌드하고 실행하는 방법만 다룬다.
-설계 이유나 코드 내용은 `README.md`(포트폴리오 공개용 설명)와 `SESSION_LOG.md`(개발 이력)를 참고.
+설계 이유나 코드 내용은 `README.md`(포트폴리오 공개용 설명)와 `Docs/SESSION_LOG.md`(개발 이력)를 참고.
 
 Linux(WSL 포함)와 Windows 둘 다 빌드+실행 검증됨(Windows는 2026-07-22 검증). 아래는 공통 절차 뒤에 OS별로 갈라지는 부분을 명시한다.
 

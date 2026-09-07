@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>순서도 — Agent 수집→Collector 발송 / Collector→Console 발송</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0D1117;
+    --card:      #161B22;
+    --card2:     #1C2230;
+    --border:    #30363D;
+    --border-2:  #21262D;
+    --accent:    #58A6FF;
+    --success:   #3FB950;
+    --warning:   #D29922;
+    --danger:    #F85149;
+    --violet:    #A371F7;
+    --text-1:    #E6EDF3;
+    --text-2:    #8B949E;
+    --text-3:    #6E7681;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text-1);
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  main { max-width: 880px; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
+  code { font-family: 'Fira Code', monospace; }
+
+  .doc-title { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 1.7rem; margin-bottom: 0.6rem; }
+  .doc-sub { color: var(--text-2); font-size: 0.92rem; margin-bottom: 0.4rem; }
+  .doc-meta { font-family: 'Fira Code'; font-size: 0.76rem; color: var(--text-3); margin-bottom: 2.6rem; }
+
+  section.sec { padding-top: 2.8rem; border-top: 1px solid var(--border-2); margin-top: 2.8rem; }
+  section.sec:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+  h2 { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 1.3rem; margin-bottom: 0.4rem; }
+  .sec-desc { color: var(--text-2); font-size: 0.85rem; margin-bottom: 1.6rem; }
+
+  /* ── FLOWCHART ── */
+  .flow { display: flex; flex-direction: column; align-items: center; }
+  .step {
+    width: 100%; max-width: 620px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.85rem 1.15rem;
+  }
+  .step .label {
+    font-family: 'JetBrains Mono'; font-weight: 700; color: var(--accent);
+    font-size: 0.88rem; margin-bottom: 0.25rem;
+  }
+  .step .path {
+    font-family: 'Fira Code'; font-size: 0.72rem; color: var(--text-3);
+    margin-bottom: 0.35rem;
+  }
+  .step .detail { color: var(--text-2); font-size: 0.8rem; }
+  .step .detail code { color: var(--text-1); }
+  .step.accent2 { border-color: var(--violet); }
+  .step.accent2 .label { color: var(--violet); }
+  .step.warn { border-color: var(--warning); }
+  .step.warn .label { color: var(--warning); }
+
+  .arrow { color: var(--text-3); font-size: 1.4rem; line-height: 1.2; margin: 0.15rem 0; }
+  .arrow-label {
+    font-family: 'Fira Code'; font-size: 0.72rem; color: var(--text-3);
+    text-align: center; margin: 0.1rem 0 0.3rem;
+  }
+
+  .branch-wrap { width: 100%; max-width: 620px; }
+  .branch-title {
+    font-family: 'Fira Code'; font-size: 0.72rem; color: var(--text-3);
+    text-align: center; margin: 0.2rem 0 0.5rem;
+  }
+  .branch-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0.6rem; width: 100%; max-width: 620px; margin-bottom: 0.2rem;
+  }
+  .branch-row .step { max-width: none; padding: 0.7rem 0.9rem; }
+  .branch-row .step .label { font-size: 0.8rem; }
+  .branch-row .step .os { font-family: 'Fira Code'; font-size: 0.7rem; }
+  .branch-row .step .os .linux { color: var(--success); }
+  .branch-row .step .os .win { color: var(--accent); }
+
+  .fork-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.6rem; width: 100%; max-width: 620px; margin-bottom: 0.2rem;
+  }
+  .fork-row .step { max-width: none; padding: 0.7rem 0.9rem; }
+
+  .badge {
+    display: inline-block; font-family: 'JetBrains Mono'; font-size: 0.68rem;
+    font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 4px; margin-right: 0.4rem;
+  }
+  .badge.thread1 { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .badge.thread2 { background: rgba(163,113,247,0.15); color: var(--violet); }
+  .badge.thread3 { background: rgba(63,185,80,0.15); color: var(--success); }
+
+  ol.notes { margin: 0 0 0 1.3rem; color: var(--text-2); font-size: 0.88rem; }
+  ol.notes li { margin-bottom: 0.7rem; }
+  ol.notes strong { color: var(--text-1); }
+
+  .sub-h {
+    font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.95rem;
+    color: var(--text-1); margin: 2rem 0 0.9rem; width: 100%; max-width: 620px;
+  }
+  .flow .sub-h:first-child { margin-top: 0; }
+  .loop-back {
+    font-family: 'Fira Code'; font-size: 0.75rem; color: var(--warning);
+    text-align: center; margin: 0.3rem 0;
+  }
+  .step.loop-cond { max-width: none; }
+  ul.mini-notes { margin: 0 0 0 1.2rem; color: var(--text-2); font-size: 0.82rem; width: 100%; max-width: 620px; }
+  ul.mini-notes li { margin-bottom: 0.55rem; }
+  ul.mini-notes strong { color: var(--text-1); }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff; --card: #f6f8fa; --card2: #eef1f4; --border: #d0d7de; --border-2: #e8ecef;
+      --text-1: #1f2328; --text-2: #57606a; --text-3: #6e7781;
+      --accent: #0969da; --success: #1a7f37; --warning: #9a6700; --danger: #cf222e; --violet: #8250df;
+    }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="doc-title">순서도 — 수집 항목별 발송 흐름</div>
+  <div class="doc-sub">Agent가 각 항목을 수집해 Collector로 보내는 경로, Collector가 그걸 다시 Console로 보내는 경로.</div>
+  <div class="doc-meta">source: CODE_ARCHITECTURE.md §10-11 · 2026-08-05 기준 디스크 상태로 확인</div>
+
+  <section class="sec">
+    <h2>10-1. Agent — 항목별 수집 → Collector 발송</h2>
+    <div class="sec-desc">5초 주기 타이머 1틱을 기준으로, 값이 어디서 나와 어떤 경로로 나가는지.</div>
+
+    <div class="flow">
+      <div class="step">
+        <div class="label">MetricScheduler 타이머 (5초 주기)</div>
+        <div class="path">Common/MetricScheduler.cpp</div>
+      </div>
+      <div class="arrow">↓</div>
+
+      <div class="step">
+        <div class="label">ResourceCollector::Collect()</div>
+        <div class="path">Common/ResourceCollector.cpp</div>
+      </div>
+      <div class="arrow-label">4개 세부 함수 순차 호출 (OS별 구현 분기)</div>
+
+      <div class="branch-row">
+        <div class="step">
+          <div class="label">ComputeCpuUsage()</div>
+          <div class="os"><span class="linux">Linux</span> /proc/stat 두 시점 델타</div>
+          <div class="os"><span class="win">Win</span> GetSystemTimes()</div>
+        </div>
+        <div class="step">
+          <div class="label">GetMemTotal() / GetMemUsed()</div>
+          <div class="os"><span class="linux">Linux</span> /proc/meminfo</div>
+          <div class="os"><span class="win">Win</span> GlobalMemoryStatusEx()</div>
+        </div>
+        <div class="step">
+          <div class="label">GetDiskUsage()</div>
+          <div class="os"><span class="linux">Linux</span> statvfs("/")</div>
+          <div class="os"><span class="win">Win</span> GetDiskFreeSpaceExA("C:\\")</div>
+        </div>
+        <div class="step">
+          <div class="label">ComputeNetworkUsage()</div>
+          <div class="os"><span class="linux">Linux</span> /proc/net/dev 델타(lo 제외)</div>
+          <div class="os"><span class="win">Win</span> GetIfTable2()(루프백/비활성 제외)</div>
+        </div>
+      </div>
+
+      <div class="arrow">↓</div>
+      <div class="step">
+        <div class="label">SystemMetrics { cpu, mem×2, disk×2, net×2 }</div>
+        <div class="detail">최초 1회 호출은 CPU/Net 델타 기준값이 없어 0으로 나옴 (<code>_hasPrevSample</code>)</div>
+      </div>
+      <div class="arrow">↓</div>
+
+      <div class="step">
+        <div class="label">apm::Metric pkt 채움 (7개 필드 set_*)</div>
+        <div class="path">Agent/main.cpp</div>
+      </div>
+      <div class="arrow">↓</div>
+
+      <div class="step accent2">
+        <div class="label">sender.GetConnectionInfo() → ApmSession::GetConnectionInfo()</div>
+        <div class="path">Common/ApmSession.cpp — getsockopt(TCP_INFO)</div>
+        <div class="detail">ResourceCollector와 무관한 별도 경로 — 소켓에서 직접 조회. pkt에 tcp_rtt_us / tcp_rtt_var_us / tcp_retransmits / tcp_total_retrans / tcp_snd_cwnd 5개 필드 추가</div>
+      </div>
+      <div class="arrow">↓</div>
+
+      <div class="step">
+        <div class="label">sender.Enqueue(pkt)</div>
+        <div class="path">Common/ResilientSender.cpp</div>
+      </div>
+      <div class="arrow-label">SerializeToString → id = descriptor()-&gt;index() → _queue.push_back(최대 100, 초과 시 최오래된 항목 드롭)</div>
+      <div class="arrow">↓</div>
+
+      <div class="step">
+        <div class="label">FlushNext() → ApmSession::Send()</div>
+        <div class="detail">
+          AesGcmPayload::Seal() — AES-256-GCM, <code>agent_collector_aes.key</code><br>
+          PacketHeader{size,id} 부착 → asio::async_write(TLS 스트림)
+        </div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step" style="border-color:var(--text-3); text-align:center;">
+        <div class="label" style="color:var(--text-1);">Collector로 전송 완료</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>10-2. Collector — 수신 → Console 발송</h2>
+    <div class="sec-desc">Agent 패킷 1건이 도착한 순간부터, Console로 나가기까지.</div>
+
+    <div class="flow">
+      <div class="step">
+        <div class="label">ApmSession::RegisterRecv() — async_read_some 콜백</div>
+        <div class="path">Common/ApmSession.cpp</div>
+      </div>
+      <div class="arrow">↓</div>
+
+      <div class="step">
+        <div class="label">누적 버퍼 → ProcessAccumulated()</div>
+        <div class="detail">header.size만큼 모이면 그 구간만 잘라냄 → Open()(복호화 + MAC 무결성 검증, agent_collector_aes.key)</div>
+      </div>
+
+      <div class="sub-h">상세 A — ProcessAccumulated() 재조립 루프 (TCP는 메시지 경계가 없음)</div>
+
+      <div class="step">
+        <div class="label">while(true) — 누적 버퍼에 완성된 패킷이 있는 만큼 반복 추출</div>
+        <div class="detail">한 번의 recv로 패킷 여러 개가 한꺼번에 오거나, 패킷 하나가 여러 recv에 걸쳐 나뉘어 올 수 있음 — 이 루프가 매번 "지금까지 쌓인 것 중 완성된 패킷"만 골라냄</div>
+      </div>
+
+      <div class="fork-row" style="grid-template-columns: repeat(2, 1fr);">
+        <div class="step">
+          <div class="label">① remaining &lt; HEADER_SIZE(4B)?</div>
+          <div class="detail">헤더조차 안 모였으면 루프 탈출 → 다음 recv 대기</div>
+        </div>
+        <div class="step">
+          <div class="label">② header 파싱</div>
+          <div class="detail">복사 없이 버퍼 앞 4바이트를 PacketHeader*로 그대로 캐스팅(reinterpret_cast)</div>
+        </div>
+        <div class="step warn">
+          <div class="label">③ remaining &lt; header-&gt;size?</div>
+          <div class="detail">페이로드가 아직 덜 옴(부분 패킷) → 루프 탈출, 다음 recv를 기다림</div>
+        </div>
+        <div class="step accent2">
+          <div class="label">④ sealed 잘라내기 → Open() 호출</div>
+          <div class="detail">[processed+4, processed+size) 구간만 실제로 복사 → 성공하면 processed 전진, 다시 ①부터 반복</div>
+        </div>
+      </div>
+      <div class="arrow-label">루프 종료 후: 처리한 만큼만 버퍼에서 잘라내고, 미완성 조각은 다음 recv를 위해 그대로 남김</div>
+
+      <div class="sub-h">상세 B — Open(): AES-256-GCM 복호화 + 태그 검증 (AesGcmPayload → AesGcmCipher, OpenSSL EVP)</div>
+
+      <div class="step">
+        <div class="label">sealed 와이어 포맷</div>
+        <div class="detail"><code>[Nonce 12B][ciphertext 가변][Tag 16B]</code> — 앞 12B/뒤 16B를 떼어내면 가운데가 ciphertext</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <div class="label">EVP_DecryptInit_ex(key, nonce) → EVP_DecryptUpdate(ciphertext)</div>
+        <div class="detail">OpenSSL EVP AES-256-GCM — 일단 평문으로 복호화(아직 인증 전 단계)</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step accent2">
+        <div class="label">EVP_CIPHER_CTX_ctrl(SET_TAG) → EVP_DecryptFinal_ex()</div>
+        <div class="detail">GCM이 내부적으로 태그를 재계산해 세팅해둔 태그와 비교 — 복호화와 무결성 검증이 이 한 번의 호출 안에서 동시에 처리됨(AEAD라 별도 HMAC 조합 불필요)</div>
+      </div>
+
+      <div class="branch-row" style="grid-template-columns: 1fr 1fr;">
+        <div class="step">
+          <div class="label">태그 일치</div>
+          <div class="detail">평문(payload) 반환 → _onPacket(id, payload) 호출로 이어짐</div>
+        </div>
+        <div class="step" style="border-color:var(--danger);">
+          <div class="label" style="color:var(--danger);">태그 불일치 (변조 / 키 불일치)</div>
+          <div class="detail">std::runtime_error 발생 → ProcessAccumulated()의 catch에서 그 세션만 끊음(NotifyDisconnected) — 실패 사유는 상대에게 응답하지 않음(정보 노출 방지)</div>
+        </div>
+      </div>
+      <div class="arrow">↓</div>
+
+      <div class="step">
+        <div class="label">PacketHandler::Dispatch(id, payload) → Register&lt;apm::Metric&gt; 핸들러</div>
+        <div class="path">Collector/main.cpp</div>
+      </div>
+      <div class="arrow-label">핸들러 하나가 아래 3가지를 동시에(큐잉 순서대로) 수행</div>
+
+      <div class="fork-row">
+        <div class="step">
+          <div><span class="badge thread1">①워커1</span></div>
+          <div class="label">metricStoreQueue.Push(...)</div>
+          <div class="detail">→ SqliteMetricStore::Store()</div>
+        </div>
+        <div class="step">
+          <div><span class="badge thread2">②워커2</span></div>
+          <div class="label">consoleLogQueue.Push(...)</div>
+          <div class="detail">→ std::cout "metric received"</div>
+        </div>
+        <div class="step">
+          <div><span class="badge thread3">③io_context</span></div>
+          <div class="label">pendingMetrics.push_back(pkt)</div>
+          <div class="detail">다음 flush까지 누적만</div>
+        </div>
+      </div>
+
+      <div class="arrow">↓</div>
+      <div class="branch-row" style="grid-template-columns: 1fr 1fr;">
+        <div class="step warn">
+          <div class="label">pushTimer 주기 재예약</div>
+          <div class="detail">collector_config.json의 pushIntervalSeconds</div>
+        </div>
+        <div class="step warn">
+          <div class="label">cliThread stdin "send"</div>
+          <div class="detail">asio::post(ioContext, flushToWebServer)</div>
+        </div>
+      </div>
+      <div class="arrow-label">둘 중 하나가 트리거</div>
+      <div class="arrow">↓</div>
+
+      <div class="step">
+        <div class="label">flushToWebServer()</div>
+        <div class="path">Collector/main.cpp</div>
+        <div class="detail">
+          pendingMetrics 순회 → webServerSender.Enqueue(m) — 파싱 끝난 pkt 재사용, 재직렬화만<br>
+          SpanRecorder::DrainAll() → apm::TransactionSpan 신규 채움 → webServerSender.Enqueue(pkt)<br>
+          pendingMetrics.clear()
+        </div>
+      </div>
+      <div class="arrow">↓</div>
+
+      <div class="step">
+        <div class="label">ResilientSender::Enqueue → EnqueueRaw → FlushNext() → ApmSession::Send()</div>
+        <div class="detail">
+          AesGcmPayload::Seal() — AES-256-GCM, <code>webserver_aes.key</code>(Agent↔Collector 키와 별개)<br>
+          PacketHeader{size,id} 부착 → asio::async_write(TLS 스트림)
+        </div>
+      </div>
+      <div class="arrow">↓</div>
+
+      <div class="step" style="border-color:var(--text-3);">
+        <div class="label" style="color:var(--text-1);">Console(.NET) MetricsReceiverService</div>
+        <div class="detail">헤더 4B 파싱 → Unseal → Parser.ParseFrom → EF Core 저장 + SignalR "NewMetric" 브로드캐스트 + EvaluateAlertsAsync (CODE_ARCHITECTURE.md §4-3 상세)</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>10-3. io_context — 작동 원리</h2>
+    <div class="sec-desc">10-1/10-2의 모든 화살표가 실제로는 이 루프 하나 위에서 등록→대기→콜백 실행을 반복한 결과. Agent/Collector/LoadTester 전부 프로세스당 1개, run()을 부른 스레드 하나에서만 동작.</div>
+
+    <div class="flow">
+      <div class="sub-h">A. run() 루프 자체</div>
+
+      <div class="step">
+        <div class="label">ready queue에 실행 대기 중인 핸들러가 있는가?</div>
+        <div class="detail">이벤트가 이미 발생했거나 post()로 직접 밀어넣어진 핸들러</div>
+      </div>
+
+      <div class="branch-row" style="grid-template-columns: 1fr 1fr;">
+        <div class="step">
+          <div class="label">있음 → 하나 꺼내 이 스레드 위에서 즉시 실행</div>
+        </div>
+        <div class="step warn">
+          <div class="label">없음 → epoll_wait(timeout) 진입</div>
+          <div class="detail">timeout = 가장 가까운 타이머 만료 시각. 이 구간에서 스레드는 실제로 잠듦(sleep) — busy-wait 아님</div>
+        </div>
+      </div>
+      <div class="arrow-label">epoll_wait가 깨어나면: 준비된 fd/타이머 → 각각의 완료 핸들러로 변환해 ready queue에 적재</div>
+      <div class="loop-back">↺ 다시 루프 처음(ready queue 확인)으로 — 미결 작업 수 0이 될 때까지 반복(§2: 사실상 절대 0 안 됨)</div>
+
+      <div class="sub-h">B. 실제 체이닝 예시 — ResilientSender::Connect()</div>
+
+      <div class="step">
+        <div class="label">async_resolve(host, port, 콜백A)</div>
+        <div class="path">Common/ResilientSender.cpp</div>
+        <div class="detail">등록만 하고 즉시 리턴 — 스레드는 A로 돌아가 다른 세션 이벤트 처리 가능</div>
+      </div>
+      <div class="arrow-label">DNS 응답 옴 → 콜백A가 ready queue에 들어가 실행</div>
+      <div class="arrow">↓</div>
+
+      <div class="step">
+        <div class="label">콜백A 안에서: async_connect(socket, endpoints, 콜백B)</div>
+      </div>
+      <div class="arrow-label">TCP 3-way handshake 완료 → 콜백B 실행</div>
+      <div class="arrow">↓</div>
+
+      <div class="step">
+        <div class="label">콜백B 안에서: ApmSession 생성 → Start() → DoHandshake()</div>
+        <div class="path">Common/ApmSession.cpp</div>
+        <div class="detail">_sslStream.async_handshake(..., 콜백C) — TLS 핸드셰이크도 내부적으로 async_read/write 여러 번을 체이닝(OpenSSL BIO를 io_context가 구동)</div>
+      </div>
+      <div class="arrow-label">TLS 핸드셰이크 완료 → 콜백C 실행</div>
+      <div class="arrow">↓</div>
+
+      <div class="step accent2">
+        <div class="label">콜백C 안에서: _onReady() → RegisterRecv() → async_read_some(..., 콜백D)</div>
+        <div class="detail">자기 자신을 재무장(re-arm) — §2 "자연 종료 불가 콜백" 패턴과 동일</div>
+      </div>
+      <div class="arrow-label">데이터 도착 → 콜백D 실행 → ProcessAccumulated() → RegisterRecv() 재호출</div>
+      <div class="loop-back">↺ 콜백D가 스스로를 다시 등록 — 이후 무한 반복</div>
+    </div>
+
+    <ul class="mini-notes">
+      <li><strong>화살표 하나 = 한 사이클</strong> — 콜스택이 계속 깊어지는 게 아니라, 매 핸들러가 실행되고 리턴하면 스레드는 다시 A의 ready queue 확인으로 돌아감. DNS/TCP/TLS 왕복에 걸리는 실제 시간 동안 이 스레드는 다른 세션의 이벤트를 처리할 수 있음.</li>
+      <li><strong>타이머도 같은 대기에 얹힘</strong> — <code>_reconnectTimer.async_wait(...)</code>(Common/ResilientSender.cpp), Collector의 <code>pushTimer</code>/<code>pruneTimer</code> 전부 별도 스레드가 아니라 A의 <code>epoll_wait(timeout)</code> 인자로 만료 시각이 들어가는 방식 — I/O 대기와 타이머 대기가 syscall 한 번으로 동시 처리됨.</li>
+      <li><strong>asio::post의 스레드 간 웨이크업</strong> — 10-2의 <code>cliThread</code>가 <code>asio::post(ioContext, flushToWebServer)</code>를 부르면, io_context 스레드가 A에서 <code>epoll_wait</code>에 잠들어 있어도 asio 내부 wake-up fd가 그 대기를 강제로 깨워 ready queue의 핸들러를 다음 차례로 실행시킴 — 소켓 이벤트 없이도 실행을 이 스레드로 넘기는 통로.</li>
+      <li><strong><code>self = shared_from_this()</code> 캡처 이유</strong> — 콜백이 등록된 시점부터 실제 실행되는 시점 사이 그 객체(예: <code>ApmSession</code>)는 io_context 내부에 "대기 중"으로 붙잡혀 있음. 그 사이 다른 참조가 다 사라져도 소멸되면 안 되므로 콜백 안에 shared_ptr을 같이 캡처해 생존을 보장.</li>
+    </ul>
+  </section>
+
+  <section class="sec">
+    <h2>10-4. 다음 분석 순서 메모</h2>
+    <ol class="notes">
+      <li><strong>수집 항목별 기능 분석</strong> — 10-1의 CPU/메모리/디스크/네트워크/TCP를 항목별로 나눠 Linux <code>/proc</code> 파싱 방식과 Windows WinAPI 방식을 짝지어 비교. "왜 이 값을 이렇게 계산하는가"(예: CPU/네트워크는 왜 델타 계산이 필요한가)가 여기서 드러남.</li>
+      <li><strong>LoadTester 분석</strong> — <code>APM_Agent/LoadTester/</code>로 이동해 "Agent인 척하는 코드가 실제 프로토콜/큐잉 로직을 어떻게 재사용하는지" 확인. 프로토콜을 소비자 관점에서 재검증하는 목적.</li>
+    </ol>
+  </section>
+
+  <section class="sec">
+    <h2>11. Console — 패킷 수신 후 처리 (MetricsReceiverService)</h2>
+    <div class="sec-desc">Collector가 보낸 패킷 1건이 TCP 소켓에 도착한 순간부터 브라우저 대시보드에 반영되기까지. CODE_ARCHITECTURE.md §11 상세.</div>
+
+    <div class="flow">
+      <div class="sub-h">A. 수신 계층 기동 — TcpListener + TLS(SslStream)</div>
+
+      <div class="step">
+        <div class="label">MetricsReceiverService : BackgroundService</div>
+        <div class="path">Infrastructure/MetricsReceiverService.cs</div>
+        <div class="detail">Hosted Service — 앱 부팅 시 .NET 제네릭 호스트가 자동 실행(수동 스레드 생성 없음)</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <div class="label">TcpListener(port).Start() → while: AcceptTcpClientAsync()</div>
+      </div>
+      <div class="arrow-label">연결마다 → HandleClientAsync(client)를 await 없이 던짐(fire-and-forget)</div>
+      <div class="arrow">↓</div>
+      <div class="step accent2">
+        <div class="label">SslStream.AuthenticateAsServerAsync(serverCert, clientCert 불필요)</div>
+        <div class="detail">TLS handshake — Agent↔Collector 구간엔 없던 전송계층 암호화가 여기 추가로 얹힘(payload AES-GCM과는 별개, 이중 암호화)</div>
+      </div>
+      <div class="loop-back">↺ accept 루프는 이 연결의 처리를 기다리지 않고 바로 다음 연결을 받으러 돌아감</div>
+
+      <div class="sub-h">B. 연결당 처리 루프 — "정확한 크기만큼 읽기" (C++ 누적 버퍼 재조립과 다른 전략)</div>
+
+      <div class="step">
+        <div class="label">while: ReadOnePacketAsync(sslStream)</div>
+        <div class="detail">null 리턴 = 연결 종료 → 루프 탈출</div>
+      </div>
+      <div class="arrow-label">헤더 4B → totalSize/id 파싱 → 바디 (totalSize-4)B, 각각 ReadExactAsync로 "모자란 만큼 반복 read"</div>
+
+      <div class="branch-row" style="grid-template-columns: 1fr 1fr;">
+        <div class="step">
+          <div class="label">C++ ApmSession::ProcessAccumulated</div>
+          <div class="detail">누적 버퍼에 아무 크기나 쌓아두고, 완성된 패킷이 나올 때까지 파싱 루프(10-2절 상세A)</div>
+        </div>
+        <div class="step accent2">
+          <div class="label">C# ReadExactAsync</div>
+          <div class="detail">필요한 길이(4B, 그다음 N B)를 미리 알고 그만큼만 목표로 반복 읽기 — 별도 누적 버퍼 불필요</div>
+        </div>
+      </div>
+      <div class="arrow-label">같은 "TCP엔 메시지 경계가 없다" 문제를 다른 전략으로 해결</div>
+      <div class="arrow">↓</div>
+
+      <div class="sub-h">C. id 분기 → 복호화/파싱 → 저장 → 브로드캐스트</div>
+
+      <div class="step">
+        <div class="label">id == Metric.Descriptor.Index ? / TransactionSpan.Descriptor.Index ?</div>
+        <div class="detail">C++ PacketHandler::Dispatch에 대응하는 자리 — C#엔 공용 디스패처가 없어 if/else로 직접 분기</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <div class="label">Unseal() — AES-256-GCM 복호화 (System.Security.Cryptography.AesGcm)</div>
+        <div class="detail">[Nonce 12B][ciphertext][Tag 16B] 동일 와이어 포맷 — webserver_aes.key와 짝이 맞는 키로 복호화</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <div class="label">Metric.Parser.ParseFrom(plaintext) / TransactionSpan.Parser.ParseFrom(plaintext)</div>
+        <div class="detail">Protobuf 자동 생성 파서</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step accent2">
+        <div class="label">scopeFactory.CreateScope() → ApmDbContext 획득 → db.SaveChangesAsync()</div>
+        <div class="detail">싱글톤(BackgroundService) 안에서 Scoped 서비스(DbContext)를 쓰려면 저장 시점마다 스코프를 새로 만들어야 함 — ASP.NET Core 표준 패턴</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <div class="label">hubContext.Clients.All.SendAsync("NewMetric", record)</div>
+        <div class="detail">SignalR로 연결된 모든 브라우저에 즉시 push(폴링 없음) — /apm/hub/metrics. TransactionSpan은 저장만 하고 브로드캐스트 없음(범위 밖)</div>
+      </div>
+
+      <div class="sub-h">D. 알림 평가 — 엣지 트리거 상태기계 (레벨 트리거 아님)</div>
+
+      <div class="step">
+        <div class="label">EvaluateAlertsAsync — 활성화된 AlertThreshold마다 순회</div>
+        <div class="detail">해당 지표에 현재 열려있는(ClosedAt == null) AlertRecord가 있는지 먼저 조회</div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="step">
+        <div class="label">AlertEvaluator.Evaluate(currentValue, threshold, currentlyOpen) — 순수 함수</div>
+        <div class="detail">isBreaching = currentValue &gt;= threshold</div>
+      </div>
+
+      <div class="branch-row" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="step">
+          <div class="label">Opened</div>
+          <div class="detail">breaching &amp;&amp; !open → AlertRecord insert + "AlertOpened" 브로드캐스트</div>
+        </div>
+        <div class="step warn">
+          <div class="label">Resolved</div>
+          <div class="detail">!breaching &amp;&amp; open → 기존 레코드 ClosedAt/ResolvedValue 기록 + "AlertResolved" 브로드캐스트</div>
+        </div>
+        <div class="step" style="border-color:var(--text-3);">
+          <div class="label" style="color:var(--text-1);">None</div>
+          <div class="detail">상태 변화 없음 — 아무것도 안 함(매 샘플 반복 알림 방지)</div>
+        </div>
+      </div>
+    </div>
+
+    <ul class="mini-notes">
+      <li><strong>이중 암호화 구조</strong> — TLS(SslStream, 전송계층) 위에 AES-GCM 페이로드 암호화(애플리케이션 계층)가 다시 얹힘. Collector는 클라이언트 인증서 없이 접속(<code>clientCertificateRequired: false</code>) — Collector의 신원 보장은 TLS가 아니라 AES 키 소유 여부에 의존.</li>
+      <li><strong>MetricsHub는 빈 클래스</strong> — 서버→클라이언트 단방향 push 전용이라 클라이언트가 호출할 서버 메서드가 필요 없음.</li>
+      <li><strong>엣지 트리거 이유</strong> — Zabbix/Nagios/Alertmanager와 동일 패턴. "임계치를 넘는 매 순간"이 아니라 "상태가 바뀌는 순간"에만 알려 반복 알림(flapping)을 방지.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

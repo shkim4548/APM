@@ -3,7 +3,7 @@
 #include "CoreTLS.h"
 #include "DeadLockProfiler.h"
 
-// Àü¿ª¿¡¼­ °ü¸®ÇÏ´ø LThreadId¸¦ Áö¿ª¿¡¼­ thread_local·Î ÀÚÃ¼ ÇØ°áÇÑ´Ù.
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ LThreadIdï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ thread_localï¿½ï¿½ ï¿½ï¿½Ã¼ ï¿½Ø°ï¿½ï¿½Ñ´ï¿½.
 namespace
 {
 	thread_local uint32 sThisThreadId = 0;
@@ -56,6 +56,25 @@ void Lock::WriteLock(const char* name)
 }
 
 void Lock::WriteUnlock(const char* name)
+{
+#ifdef _DEBUG
+	GDeadLockProfiler->PopLock(name);
+#endif
+
+	// ReadLockì´ ì•„ì§ ì•ˆ í’€ë¦° ìƒíƒœë©´ WriteUnlock ë¶ˆê°€ëŠ¥
+	if ((_lockFlag.load() & READ_COUNT_MASK) != 0)
+	{
+		CRASH("INVALID_UNLOCK_ORDER");
+	}
+
+	const int32 lockCount = --_writeCount;
+	if (lockCount == 0)
+	{
+		_lockFlag.store(EMPTY_FLAG);
+	}
+}
+
+void Lock::ReadLock(const char* name)
 {
 #ifdef _DEBUG
 	GDeadLockProfiler->PushLock(name);
