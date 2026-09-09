@@ -8480,3 +8480,228 @@ cd /home/shkim/dev/APM/APM_QtDashboard/build
 
 오타 수정은 CLAUDE.md 원칙 2 예외(명시적 "수정해달라" 요청)에 해당해 직접 편집함. 빌드까지는 이 세션에서 확인 완료, 실제 GUI 실행/클릭 동작 확인은 사용자 몫으로 남김. 실행까지 문제없이 확인되면 `WORK_STATUS.md`의 Qt/MFC 트랙 상태를 "코딩 미시작" → "0~1단계 완료"로 갱신 필요.
 
+## 2026-09-09 — Qt/MFC 트랙 2단계 진행 상황 점검: `MetricsRepository.cpp`에서 발견된 컴파일 차단 버그 (분석만, 미수정)
+
+### 배경
+
+사용자가 "남은 작업 브리핑" 요청. `APM_QtDashboard/`를 디스크에서 다시 읽어 2단계 진행 상황을 점검(원칙 7). `MainWindow.h`/`MetricsRepository.h`는 사용자가 직접 2단계 형태로 작성 중이고, `MetricsRepository.cpp`도 사용자가 직접 작성 완료한 상태. 리뷰 결과 이대로는 컴파일이 안 되는 오타/버그 5건을 발견 — CLAUDE.md 원칙 2에 따라 **직접 수정하지 않고 분석만 기록**.
+
+### 발견 1 — `#include` 오타 (파일을 못 찾음)
+
+**현재 코드** (`MetricsRepository.cpp` 1번째 줄):
+```cpp
+#include "MetricsfRepository.h"
+```
+
+**문제**: 실제 헤더 파일명은 `MetricsRepository.h`인데 `MetricsfRepository.h`로 "f"가 하나 더 들어가 있음. `#include` 처리 시 해당 이름의 파일을 못 찾아 "No such file or directory"로 컴파일 자체가 시작도 못 함(가장 먼저 걸리는 오류).
+
+**수정 방향**: `#include "MetricsRepository.h"`로 정정.
+
+### 발견 2 — `Open()` 함수: `setDatanaseName` 오타 + `qWarning` 괄호 누락
+
+**현재 코드** (`MetricsRepository.cpp`, `Open()` 함수 전문):
+```cpp
+bool MetricsRepository::Open()
+{
+    auto db = QSqlDatabase::addDatabase("QSQLITE", _connectionName);
+    db.setDatanaseName(_dbPath);
+
+    // 기존 코어 무수정 원칙 구현 : 여기서 Insert/Update 쿼리를 막아버린다
+    // 필요없는 체계의 훼손을 막는다
+    db.setConnectionOptions("QSQLITE_OPEN_READONLY");
+
+    if(!db.open())
+    {
+        qWarning << "MetricsRepository : failed to Open" << _dbPath << db.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+```
+
+**문제**:
+1. `db.setDatanaseName(_dbPath);` — `QSqlDatabase`에 그런 멤버 함수는 없음. 실제 함수는 `setDatabaseName`("Datanase"가 "Database"의 오타). "no member named 'setDatanaseName'" 컴파일 에러.
+2. `qWarning << ...` — `qWarning`은 `QDebug`를 반환하는 **함수**인데 괄호 없이 함수 이름 자체에 `<<`를 시도함(함수 포인터에 `operator<<`를 적용하려는 꼴이라 매칭되는 연산자가 없어 컴파일 에러). 65번째 줄과 100번째 줄에서는 `qWarning()`으로 올바르게 괄호를 붙였는데 이 자리만 빠짐.
+
+**수정 방향**:
+```cpp
+bool MetricsRepository::Open()
+{
+    auto db = QSqlDatabase::addDatabase("QSQLITE", _connectionName);
+    db.setDatabaseName(_dbPath);
+
+    // 기존 코어 무수정 원칙 구현 : 여기서 Insert/Update 쿼리를 막아버린다
+    // 필요없는 체계의 훼손을 막는다
+    db.setConnectionOptions("QSQLITE_OPEN_READONLY");
+
+    if(!db.open())
+    {
+        qWarning() << "MetricsRepository : failed to Open" << _dbPath << db.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+```
+
+### 발견 3 — `IsOpen()` 함수: `.IsOpen()` 대소문자 오타
+
+**현재 코드** (`MetricsRepository.cpp`, `IsOpen()` 함수 전문):
+```cpp
+bool MetricsRepository::IsOpen() const
+{
+    return QSqlDatabase::database(_connectionName, false).IsOpen();
+}
+```
+
+**문제**: `QSqlDatabase`의 실제 멤버 함수는 첫 글자가 소문자인 `isOpen()`(Qt 자체 API는 camelCase, 첫 글자 소문자 — 이 프로젝트 자체 클래스의 `MetricsRepository::IsOpen()`처럼 PascalCase로 만든 건 이 저장소 관례이지만, Qt 내장 클래스의 함수명까지 그 관례를 따라 대문자로 바꿔 부를 수는 없음). "no member named 'IsOpen' in 'QSqlDatabase'" 컴파일 에러.
+
+**수정 방향**:
+```cpp
+bool MetricsRepository::IsOpen() const
+{
+    return QSqlDatabase::database(_connectionName, false).isOpen();
+}
+```
+
+### 발견 4 — `FetchLatestMetrics()` 함수: `MetricSample` 구조체명 오타
+
+**현재 코드** (`MetricsRepository.cpp`, `FetchLatestMetrics()` 함수 전문):
+```cpp
+QVector<MetricsSample> MetricsRepository::FetchLatestMetrics(int limit) const
+{
+    QVector<MetricsSample> result;
+
+    QSqlQuery query(QSqlDatabase::database(_connectionName));
+    // Ts는 .NET DataTimeOffset의 TEXT 직렬화라 소숫점 자리가 행마다 다르다.
+    // 따라서 문자열 정렬 기준으로 쓰면 같은 초 안에서 순서가 어긋날 수 있다.
+
+    query.prepare(
+        "SELECT Id, Ts, CpuUsagePercent, MemUsedBytes, MemTotalBytes, "
+        "DiskUsedBytes, DiskTotalBytes, NetRxBytesPerSec, NetTxBytesPerSec "
+        "FROM Metrics ORDER BY Id DESC LIMIT ?");
+    query.addBindValue(limit);
+
+    if(!query.exec())
+    {
+        qWarning() << "MetricsRepository::FetchLatestMetrics failed : " << query.lastError().text();
+        return result;
+    }
+
+    // 리눅스에서 터미널 명령어를 이용해 결과 메시지를 받아올 때랑 같은 이유로 while을 사용
+    // query.next()에서 가져온 결과 메시지의 다음줄이 있는지를 확인 있으면 반복하는 것
+    while (query.next())
+    {
+        MetricSample sample;
+        sample.id = query.value(0).toLongLong();
+        sample.ts = query.value(1).toString();
+        sample.cpuUsagePercent = query.value(2).toDouble();
+        sample.memUsedBytes = query.value(3).toLongLong();
+        sample.memTotalBytes = query.value(4).toLongLong();
+        sample.diskUsedBytes = query.value(5).toLongLong();
+        sample.diskTotalBytes = query.value(6).toLongLong();
+        sample.netRxBytesPerSec = query.value(7).toLongLong();
+        sample.netTxBytesPerSec = query.value(8).toLongLong();
+        result.push_back(sample);
+    }
+    return result;
+}
+```
+
+**문제**: 함수 시그니처/`result` 선언은 `MetricsSample`(맞는 이름, `MetricsRepository.h`의 실제 구조체명)을 쓰는데, 반복문 안 지역 변수 선언만 `MetricSample`(s 빠짐)로 돼 있음. 그런 타입은 어디에도 선언돼 있지 않으므로 "unknown type name 'MetricSample'" 컴파일 에러.
+
+**수정 방향**: `MetricSample sample;` → `MetricsSample sample;`로 정정(그 아래 필드 접근 코드는 전부 정확해서 이 한 줄만 고치면 됨).
+
+### 발견 5 — 헤더/구현부 함수 이름 불일치: `FetchOpenAlerts` vs `FetchOpenAlert`
+
+**현재 코드** (`MetricsRepository.h`, 해당 선언):
+```cpp
+QVector<AlertSample> FetchOpenAlerts(int limit) const;
+```
+
+**현재 코드** (`MetricsRepository.cpp`, 구현부 함수 전문):
+```cpp
+QVector<AlertSample> MetricsRepository::FetchOpenAlert(int limit) const
+{
+    QVector<AlertSample> result;
+
+    QSqlQuery query(QSqlDatabase::database(_connectionName));
+    query.prepare(
+        "SELECT Id, MetricType, ThresholdValue, TriggerValue, OpenedAt "
+        "FROM AlertRecords WHERE ClosedAt IS NULL ORDER BY Id DESC LIMIT ?");
+    query.addBindValue(limit);
+
+    if(!query.exec())
+    {
+        qWarning() << "MetricsRepository::FetchOpenAlerts failed : " << query.lastError().text();
+        return result;
+    }
+
+    while(query.next())
+    {
+        AlertSample sample;
+        sample.id = query.value(0).toLongLong();
+        sample.metricType = query.value(1).toInt();
+        sample.thresholdValue = query.value(2).toDouble();
+        sample.triggerValue = query.value(3).toDouble();
+        sample.openedAt = query.value(4).toString();
+        result.push_back(sample);
+    }
+    return result;
+}
+```
+
+**문제**: 헤더는 `FetchOpenAlerts`(복수형, s로 끝남)로 선언했는데 구현부는 `FetchOpenAlert`(단수형)로 정의함. C++ 입장에서는 클래스에 선언되지 않은 새 함수를 정의하려는 것으로 보여 "out-of-line definition does not match any declaration" 컴파일 에러가 나고, 동시에 헤더가 선언한 `FetchOpenAlerts`는 정의가 없는 상태로 남음(나중에 `MainWindow`에서 호출하면 그건 그것대로 링크 에러).
+
+**수정 방향**: 둘 중 하나로 통일 — 구현부를 헤더와 맞춰 `MetricsRepository::FetchOpenAlerts(int limit) const`로 정정하는 쪽을 권장(2단계 제안 문서 원안이 복수형).
+
+### 검증
+
+**미검증** — 5건 모두 코드 읽기로 발견한 정적 분석 결과이고 실제 빌드는 시도하지 않음(원칙 2 — 코드 직접 수정 안 함). 사용자가 위 5곳을 직접 고친 뒤 `cmake --build .`로 재확인 필요. 이 5건을 전부 고쳐도 여전히 남아있는 별도 이슈(직전 답변에서 이미 안내함): `MainWindow.h`의 include 누락/`QTableWidget` forward decl 누락/`_repository` 멤버 초기화, `CMakeLists.txt`의 `find_package`에 `Sql` 컴포넌트 누락, `MainWindow.cpp`가 아직 0~1단계 코드 그대로라 2단계 UI로 재작성 필요, `main.cpp`의 `resize()`가 아직 720x480으로 안 바뀜.
+
+### 결정 사항
+
+이번에도 분석만 하고 코드는 건드리지 않음 — 사용자가 직접 고치는 게 원칙(CLAUDE.md 원칙 2). 다음 세션에서 "현황 파악"하면 이 5건이 고쳐졌는지 디스크에서 다시 확인.
+
+## 2026-09-09 — 2단계 CMake 에러 재현: `Qt6::Sql` 타겟 없음 (위 "참고" 항목이 실제로 발생)
+
+### 배경
+
+사용자가 `cmake build` 실행 시 아래 에러를 받아 공유:
+```
+CMake Error at CMakeLists.txt:24 (target_link_libraries):
+  Target "APM_QtDashboard" links to:
+
+    Qt6::Sql
+
+  but the target was not found.
+```
+바로 위 항목("검증" 절)에서 이미 예견했던 문제 그대로 — `find_package`에 `Sql` 컴포넌트를 안 넣었는데 `target_link_libraries`가 `Qt6::Sql`을 요구해서 발생.
+
+### 제안 — CMakeLists.txt (수정)
+
+**수정 전**:
+```cmake
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
+```
+
+**수정 후**:
+```cmake
+find_package(Qt6 REQUIRED COMPONENTS Widgets Sql)
+```
+
+**변경 사유**: `find_package(... COMPONENTS ...)`에 나열된 모듈만 그 모듈의 CMake 임포트 타겟(`Qt6::위젯이름`)이 생성된다. `Sql`을 안 넣었으니 `Qt6::Sql`이라는 타겟 자체가 존재하지 않는 상태였고, `target_link_libraries`가 그 존재하지 않는 타겟을 요구해서 "target was not found" 에러가 남.
+
+### 참고 — 명령어 자체 오타
+
+`cmake build`가 아니라 `cmake --build build`(빌드 디렉터리 안에서는 `cmake --build .`)가 맞음. `cmake build`는 "build"라는 이름의 소스 디렉터리를 구성(configure)하라는 뜻이라 지금 로그가 사실은 재구성(configure) 단계 출력임 — 우연히 `build/` 안에 이미 있던 `CMakeCache.txt`를 그대로 재사용하면서 에러만 표시된 것으로 보임.
+
+### 검증
+
+미검증 — 사용자가 위 한 줄을 고친 뒤 `cmake --build build`(또는 `build/`로 이동 후 `cmake --build .`)로 재확인 필요.
+
+### 결정 사항
+
+분석만 하고 코드는 건드리지 않음(원칙 2). 이 한 줄을 고쳐도 지난 항목의 나머지 미해결 사항(`MetricsRepository.cpp` 오타 5건, `MainWindow.h`/`.cpp`/`main.cpp` 관련 사항)이 남아있으므로 순차적으로 처리 필요.
+

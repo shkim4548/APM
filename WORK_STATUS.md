@@ -33,7 +33,7 @@
 5순위 : 백분위/집계 통계                                ✅ 코드 적용 + 빌드/테스트 검증 완료
 6순위 : OpenTelemetry — 구현 보류, 면접용 답변 정리만  ⬜ 미착수
 7순위 : 원격 명령 실행 기능                            ⏸️ 보류(사유 아래 참고), 착수 여부 미정
-8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-07) — 0~1단계(빈 창+Signal/Slot) 빌드/실행 검증 완료, 2단계(SQLite) 착수 전
+8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-09) — 0~2단계(빈 창+Signal/Slot+SQLite 초기 로드) 빌드/실행 검증 완료, 3단계(QThread) 착수 전
 ```
 
 **8순위는 위 1~7과 독립된 별개 트랙이다** — APM 백엔드(1~7)는 완료 상태로 더 손댈 것이 없고, 여기에 Qt(신규)·MFC(기존 Viewer 보강)를 얹는 프론트엔드 작업을 새로 시작하는 것. 계획 전문은 `Docs/QT_MFC_PORTFOLIO_PLAN.md`.
@@ -596,6 +596,19 @@ Agent/Collector 변경 없음(Console 쪽만 닫히는 작업 — C++ 재빌드 
 **진행 내용**: 사용자가 `APM_QtDashboard/`에 0~1단계 코드(`main.cpp`, `MainWindow.h/.cpp`, `CMakeLists.txt`)를 직접 작성. 오타로 컴파일 실패 → 사용자의 명시적 요청("오타만 잡고")에 따라 Claude가 예외적으로 오타 4곳 직접 수정(`QMainWinodw`→`QMainWindow` ×2, 클래스 종료 세미콜론 누락, `clickeds`→`clicked`). `cmake --build .` 빌드 성공 확인, 이후 사용자가 직접 실행해 "Click me" 클릭 시 라벨 카운트 증가까지 검증 완료. 수정 전/후 코드 전문은 `Docs/SESSION_LOG.md` 2026-09-07 항목 참고.
 
 **다음 세션 시작 시 확인할 것**: `Docs/SESSION_LOG.md`에 이미 준비된 2단계(`webserver_apm.db` 초기 데이터 표시 — `MetricsRepository`, `QTableWidget` 2개, CMakeLists Sql 컴포넌트 추가) 제안을 따라 사용자가 직접 코드 작성 → 빌드/실행 검증. 검증 항목 3가지(§SESSION_LOG "검증" 절 참고): Sql 드라이버 `find_package` 성공 여부, DB에 실제 행이 있을 때 테이블 표시 여부, DB 파일 없을 때 `Open()` 실패 처리 여부.
+
+### 2단계(SQLite 초기 데이터 표시) 완료 (2026-09-09)
+
+**진행 내용**: 사용자가 `MetricsRepository.h/.cpp`, `MainWindow.h/.cpp`, `CMakeLists.txt`(`Sql` 컴포넌트 추가), `main.cpp`(`resize(720,480)`)까지 2단계 코드를 전부 직접 작성. 그 과정에서 나온 컴파일 에러들(`MetricsRepository.cpp`의 오타 6건 — `#include` 오타/`setDatanaseName`/`.IsOpen()`/`MetricSample`/`FetchOpenAlert`/`setConnectionOptions`, `MainWindow.h`의 include·forward declaration 누락, `CMakeLists.txt`의 `Sql` 컴포넌트 누락)를 세션 중 순차적으로 진단 → 오타류는 사용자의 명시적 요청("오타만 잡고"/"오타가 확실한 에러만 고쳐줘")에 따라 Claude가 직접 수정, 나머지(include 추가·설계성 판단 필요한 것)는 제안만 하고 사용자가 직접 반영.
+
+**최종 검증(2026-09-09, 이 세션에서 직접 재확인)**:
+- `rm -rf build/*` 후 `cmake .. && cmake --build .` 클린 빌드 성공 확인(3개 소스 파일 전부 컴파일+링크 성공).
+- `APM_Console/webserver_apm.db`를 직접 쿼리해 `Metrics` 3행, `AlertRecords`(열린 알림) 1행이 실제로 존재함을 확인 — 사용자가 보고한 "창 뜨는 것까지 확인"이 실제 데이터가 있는 DB를 가리키고 있었음을 뒷받침.
+- DB 없을 때의 `Open()` 실패 처리(창 제목에 실패 문구 추가)는 코드 리뷰로 로직 확인, 이번 세션에서 실제로 DB를 지우고 실행해보는 것까지는 하지 않음(선택적 엣지케이스, 낮은 우선순위로 남김).
+
+**평가**: 2단계 완료로 판단 — 위 3개 검증 항목 중 핵심 2개(빌드 성공, 실데이터 표시 가능한 상태)는 직접 확인, 나머지 1개(DB 없음 케이스)는 코드 검토로만 확인. §6 이어서 3단계(QThread 워커 분리 — Sql 쿼리를 UI 스레드에서 분리)로 진행 가능한 상태.
+
+**커밋 완료**: 아래 참고.
 
 **커밋 완료(2026-09-07, `2a85702` "Add Qt/MFC portfolio track and code-analysis docs, fix a lock bug")** — 그동안 누적돼 있던 미커밋 변경분 전체를 한 번에 커밋: `Docs/SESSION_LOG.md` 이동(구 `SESSION_LOG.md`) 및 참조 갱신(`CLAUDE.md`/`HOW_TO_RUN.md` 2개), `GW2_CrossPlatformCore/Thread/Lock.cpp`(2026-08-05 `WriteUnlock`/`ReadLock` 버그 수정), `CODE_ARCHITECTURE.md`/`CODE_ARCHITECTURE_flowchart.html`/`DOCUMENTATION_PLAYBOOK.md`(신규), `Docs/QT_MFC_PORTFOLIO_PLAN.md`(신규), `APM_QtDashboard/`(0~1단계 스캐폴드), `APM_Agent/Agent/main.cpp`(람다 서식, 로직 무변경). `git add -A`로 스테이징 — `.gitignore`가 `build/`를 이미 걸러줘서 `APM_QtDashboard/build/`는 제외됨.
 
