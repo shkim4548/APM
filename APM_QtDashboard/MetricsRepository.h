@@ -1,4 +1,5 @@
 #pragma once
+#include <QMetaType>
 #include <QString>
 #include <QVector>
 #include <qglobal.h>
@@ -26,6 +27,10 @@ struct AlertSample
     double triggerValue = 0.0;
     QString openedAt;
 };
+
+// 워커 쓰레드 -> UI쓰레드로 QVector를 큐 연결로 넘기기 위해선 메타타입 등록이 필요하다
+Q_DECLARE_METATYPE(MetricsSample)
+Q_DECLARE_METATYPE(AlertSample)
 
 class MetricsRepository
 {

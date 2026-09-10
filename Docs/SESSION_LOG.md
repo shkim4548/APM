@@ -8705,3 +8705,742 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets Sql)
 
 분석만 하고 코드는 건드리지 않음(원칙 2). 이 한 줄을 고쳐도 지난 항목의 나머지 미해결 사항(`MetricsRepository.cpp` 오타 5건, `MainWindow.h`/`.cpp`/`main.cpp` 관련 사항)이 남아있으므로 순차적으로 처리 필요.
 
+## 2026-09-10 — Qt/MFC 트랙 3단계 설계·코드 제안: QThread 워커 분리 (SQLite 조회를 UI 스레드에서 뺀다)
+
+### 배경
+
+2단계 완료(커밋 `b0129e6`). 현재 `MainWindow`는 생성자와 `OnRefreshClicked()`에서 `_repository.FetchLatestMetrics()` / `FetchOpenAlerts()`를 **UI 스레드에서 동기로** 호출한다. 지금은 로컬 SQLite에 행이 3개뿐이라 체감이 없지만, 조회가 느려지거나(원격 DB, 큰 결과셋) 나중에 SignalR 수신(7단계)이 붙으면 UI가 그 시간만큼 얼어붙는다.
+
+**이 문제가 APM Agent의 fdatasync 사건과 같은 구조다** (`WORK_STATUS.md` §1-7, `Docs/PROJECT_TECHNICAL_REVIEW.md`): 그때는 `SqliteMetricStore::Store()`의 `fdatasync`가 **네트워크 수신 스레드**를 블로킹했고, 해결책은 저장을 `WorkerQueue`(별도 스레드)로 빼고 네트워크 스레드는 큐에 넣기만 하도록 바꾼 것이었다. 3단계는 층위만 다르고 구조가 동일하다 — 블로킹 가능성이 있는 작업(DB 조회)을 **워커 스레드**로 빼고, UI 스레드는 시그널로 결과만 받아 그린다. 면접에서 이 두 사건을 같은 문제로 묶어 설명할 수 있는 게 이 단계의 핵심 목표(계획 §3-3 ②).
+
+### 설계 결정 1 — `QThread` 상속이 아니라 워커 객체 + `moveToThread()`
+
+Qt에서 스레드를 쓰는 방식은 두 가지다:
+
+| 방식 | 설명 | 이 프로젝트 |
+| --- | --- | --- |
+| `QThread` 상속 후 `run()` 오버라이드 | `run()` 안에서 직접 루프를 돈다. 이벤트 루프가 없어 슬롯/타이머를 못 쓴다. | ✗ |
+| 워커 `QObject` + `moveToThread(QThread*)` | 워커는 평범한 `QObject`. `QThread`는 기본 `run()`(=이벤트 루프)을 그대로 쓰고, 워커의 슬롯이 그 스레드의 이벤트 루프에서 실행된다. | **✓** |
+
+두 번째를 택한다. Qt 공식 문서([QThread](https://doc.qt.io/qt-6/qthread.html))가 권장하는 방식이고, "워커의 슬롯을 시그널로 호출 → 결과를 시그널로 회신"이라는 signal/slot 모델(1단계에서 배운 것)을 스레드 경계에도 그대로 적용할 수 있다. 스레드가 다르면 `connect()`가 자동으로 **Queued Connection**으로 동작해서, `emit` 측은 인자를 이벤트 큐에 넣고 즉시 반환하고 수신 측 스레드의 이벤트 루프가 나중에 슬롯을 실행한다 — UI 스레드가 워커를 기다리지 않는 이유가 이 지점이다.
+
+### 설계 결정 2 — `QSqlDatabase` 연결은 워커 스레드에서 열어야 한다
+
+`QSqlDatabase` 연결은 **만든 스레드에서만 사용 가능**하다(Qt SQL의 제약, 문서 명시). 그래서 `MetricsRepository::Open()`(내부에서 `QSqlDatabase::addDatabase`)을 UI 스레드(=`MainWindow` 생성자)에서 부르면 안 되고, 워커가 자기 스레드로 옮겨진(`moveToThread`) **다음에** 호출해야 한다. 이를 위해 워커에 `Initialize()` 슬롯을 두고, 스레드 시작 직후 큐 연결로 한 번 호출한다. `MetricsRepository`의 생성자 자체는 `QString` 두 개만 저장하므로 UI 스레드에서 생성해도 무방하다(스레드 민감한 작업은 `Open()`부터 시작).
+
+따라서 `MetricsRepository`의 소유권이 `MainWindow`(값 멤버)에서 `MetricsWorker`로 넘어간다.
+
+### 설계 결정 3 — 커스텀 구조체를 스레드 경계로 넘기려면 메타타입 등록이 필요
+
+Queued Connection은 인자를 이벤트 큐에 복사해 담기 때문에, 넘기는 모든 타입이 Qt 메타타입 시스템에 등록돼 있어야 한다. `QVector<MetricsSample>` / `QVector<AlertSample>`가 그 대상이다. `Q_DECLARE_METATYPE`(헤더)와 `qRegisterMetaType`(main 진입부에서 1회)로 등록한다. 등록을 빼먹으면 런타임에 "QObject::connect: Cannot queue arguments of type 'QVector<MetricsSample>'" 경고가 뜨고 슬롯이 호출되지 않는다 — 컴파일은 되므로 놓치기 쉬운 지점.
+
+### 제안 — MetricsWorker.h (신규)
+
+```cpp
+#pragma once
+#include <QObject>
+#include <QString>
+#include <QVector>
+
+#include "MetricsRepository.h"
+
+// step 3 : SQLite 조회를 UI 스레드에서 분리한다.
+// 이 객체는 moveToThread()로 워커 스레드로 옮겨진 뒤에만 슬롯이 호출되어야 한다.
+class MetricsWorker : public QObject
+{
+    Q_OBJECT
+public:
+    explicit MetricsWorker(const QString& dbPath, QObject* parent = nullptr);
+
+public slots:
+    // moveToThread() 이후 워커 스레드에서 실행된다. 여기서 DB 연결을 연다.
+    void Initialize();
+    // 최신 지표/열린 알림을 조회해 결과를 시그널로 넘긴다.
+    void Refresh();
+
+signals:
+    void Initialized(bool ok);
+    void MetricsReady(const QVector<MetricsSample>& samples);
+    void AlertsReady(const QVector<AlertSample>& alerts);
+    void RefreshFailed(const QString& reason);
+
+private:
+    MetricsRepository _repository;
+    bool _ready = false;
+};
+```
+
+### 제안 — MetricsWorker.cpp (신규)
+
+```cpp
+#include "MetricsWorker.h"
+
+namespace
+{
+constexpr int kFetchLimit = 20;
+}
+
+MetricsWorker::MetricsWorker(const QString& dbPath, QObject* parent)
+    : QObject(parent)
+    , _repository(dbPath)
+{
+}
+
+void MetricsWorker::Initialize()
+{
+    // QSqlDatabase 연결은 만든 스레드에서만 쓸 수 있으므로 Open()을 이 슬롯에서 호출한다.
+    // (이 슬롯은 워커 스레드의 이벤트 루프에서 실행된다.)
+    _ready = _repository.Open();
+    emit Initialized(_ready);
+}
+
+void MetricsWorker::Refresh()
+{
+    if (!_ready)
+    {
+        emit RefreshFailed("repository not open");
+        return;
+    }
+    emit MetricsReady(_repository.FetchLatestMetrics(kFetchLimit));
+    emit AlertsReady(_repository.FetchOpenAlerts(kFetchLimit));
+}
+```
+
+### 제안 — MetricsRepository.h (수정)
+
+> **[2026-09-10 정정]** 아래 "변경 사유"에 `<QMetaType>`가 `<QString>` 등에서 딸려 온다고 적었으나 **틀렸다**(Qt 6.x, 이 환경). `#include <QMetaType>`를 파일 최상단에 **명시적으로 추가해야 한다**. "수정 후" 블록에 이 include를 반영해 아래에 다시 적는다.
+
+**수정 전** (파일 최상단 + 구조체 선언부 끝):
+```cpp
+#pragma once
+#include <QString>
+#include <QVector>
+#include <qglobal.h>
+
+// ... (구조체 정의) ...
+
+// 이 구조체는 사실상 WebConsole에 보이는 열을 구조체로 재 모델링
+struct AlertSample
+{
+    qlonglong id = 0;
+    int metricType = 0;
+    double thresholdValue = 0.0;
+    double triggerValue = 0.0;
+    QString openedAt;
+};
+
+class MetricsRepository
+{
+```
+
+**수정 후**:
+```cpp
+#pragma once
+#include <QMetaType>
+#include <QString>
+#include <QVector>
+#include <qglobal.h>
+
+// ... (구조체 정의) ...
+
+// 이 구조체는 사실상 WebConsole에 보이는 열을 구조체로 재 모델링
+struct AlertSample
+{
+    qlonglong id = 0;
+    int metricType = 0;
+    double thresholdValue = 0.0;
+    double triggerValue = 0.0;
+    QString openedAt;
+};
+
+// 워커 스레드 → UI 스레드로 QVector<...>를 큐 연결로 넘기려면 메타타입 등록이 필요하다.
+Q_DECLARE_METATYPE(MetricsSample)
+Q_DECLARE_METATYPE(AlertSample)
+
+class MetricsRepository
+{
+```
+
+**변경 사유**: `Q_DECLARE_METATYPE`는 `<QMetaType>`에 정의된 매크로로, 해당 타입을 `QVariant`/큐 연결에 담을 수 있게 등록한다. **`<QMetaType>`는 명시적으로 include해야 한다** — `<QString>`/`<QVector>`/`<qglobal.h>`만으로는 안 딸려 오고, 없으면 `error: expected constructor, destructor, or type conversion before 'Q_DECLARE_METATYPE'`가 나면서 그 아래 `class` 정의까지 통째로 무너진다. `Q_DECLARE_METATYPE(...)`는 구조체 정의 **뒤**, 네임스페이스 **밖**에 둬야 한다. `QVector<T>`는 `T`가 등록돼 있으면 Qt6에서 대체로 자동 인식되지만, 확실히 하려면 `main`에서 `qRegisterMetaType`도 호출한다(아래).
+
+### 제안 — main.cpp (수정)
+
+**수정 전** (함수 전문):
+```cpp
+#include <QApplication>
+
+#include "MainWindow.h"
+
+int main(int argc, char* argv[])
+{
+    QApplication app(argc, argv);
+
+    MainWindow window;
+    window.resize(720, 480);
+    window.show();
+
+    return app.exec();
+}
+```
+
+**수정 후**:
+```cpp
+#include <QApplication>
+#include <QMetaType>
+#include <QVector>
+
+#include "MainWindow.h"
+#include "MetricsRepository.h"
+
+int main(int argc, char* argv[])
+{
+    QApplication app(argc, argv);
+
+    // 워커 스레드에서 UI 스레드로 결과를 큐 연결로 넘기기 전에 컨테이너 타입을 등록한다.
+    qRegisterMetaType<QVector<MetricsSample>>("QVector<MetricsSample>");
+    qRegisterMetaType<QVector<AlertSample>>("QVector<AlertSample>");
+
+    MainWindow window;
+    window.resize(720, 480);
+    window.show();
+
+    return app.exec();
+}
+```
+
+**변경 사유**: `qRegisterMetaType`는 프로세스당 1회, 스레드 간 시그널 연결이 만들어지기 전에 호출돼야 한다. `main` 진입부가 가장 안전한 위치.
+
+### 제안 — MainWindow.h (수정)
+
+**수정 전** (파일 전문):
+```cpp
+#pragma once
+#include <QMainWindow>
+#include <QVector>
+
+#include "MetricsRepository.h"
+
+class QPushButton;
+class QTableWidget;
+
+// 검증용 최소 창 : QPushButton::clicked 신호를 이 클래스의 슬롯에 연결
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+public:
+    explicit MainWindow(QWidget* parent = nullptr);
+
+private slots:
+    void OnRefreshClicked();
+
+private:
+    void LoadData();
+    void PopulateMetricsTable(const QVector<MetricsSample>& samples);
+    void PopulateAlertTable(const QVector<AlertSample>& alerts);
+
+private:
+    MetricsRepository _repository;
+    QTableWidget* _metricsTable;
+    QTableWidget* _alertsTable;
+    QPushButton* _refreshButton;
+};
+```
+
+**수정 후**:
+```cpp
+#pragma once
+#include <QMainWindow>
+#include <QThread>
+#include <QVector>
+
+#include "MetricsRepository.h"
+
+class QLabel;
+class QPushButton;
+class QTableWidget;
+class MetricsWorker;
+
+// step 3 : SQLite 조회를 MetricsWorker(워커 스레드)로 넘긴다.
+// UI 스레드는 시그널로 결과만 받아 그리므로, 조회 중에도 창이 멈추지 않는다.
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+public:
+    explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
+
+signals:
+    // 워커 스레드의 Refresh() 슬롯에 큐 연결된다. emit 후 즉시 반환한다.
+    void RefreshRequested();
+
+private slots:
+    void OnRefreshClicked();
+    void OnWorkerInitialized(bool ok);
+    void OnRefreshFailed(const QString& reason);
+    void PopulateMetricsTable(const QVector<MetricsSample>& samples);
+    void PopulateAlertTable(const QVector<AlertSample>& alerts);
+
+private:
+    void SetStatus(const QString& text);
+
+private:
+    QThread _workerThread;
+    MetricsWorker* _worker = nullptr;   // _workerThread.finished 시 deleteLater로 정리
+
+    QTableWidget* _metricsTable = nullptr;
+    QTableWidget* _alertsTable = nullptr;
+    QPushButton* _refreshButton = nullptr;
+    QLabel* _statusLabel = nullptr;
+};
+```
+
+**변경 사유**:
+- `_repository` 값 멤버 제거 → 소유권이 `MetricsWorker`로 이동(설계 결정 2). 대신 `QThread _workerThread`와 `MetricsWorker* _worker`를 든다.
+- `RefreshRequested()` 시그널 추가 — 버튼 클릭이나 초기 로드 시 이걸 `emit`하면 워커 스레드에서 `Refresh()`가 실행된다. UI 스레드는 대기하지 않는다.
+- `PopulateMetricsTable`/`PopulateAlertTable`이 이제 워커의 시그널에 연결되는 슬롯이므로 `private slots:`로 이동.
+- `LoadData()` 제거 — 동기 호출 묶음이었는데 이제 `emit RefreshRequested()` 한 줄로 대체됨.
+- `OnWorkerInitialized(bool)` / `OnRefreshFailed(QString)` 슬롯 추가 — 비동기 상태(연결 성공/실패, 조회 실패)를 받아 `_statusLabel`에 표시(계획 원칙 2 "실패 경로 처리", §3-1 "연결 상태 인디케이터").
+- `~MainWindow()` 선언 추가 — 소멸자에서 워커 스레드를 정상 종료(`quit()` + `wait()`)시켜야 함. `override`를 붙이는 이유는 `QMainWindow`(→`QObject`)의 가상 소멸자를 재정의한다는 걸 컴파일러가 확인하게 하려고.
+- `class QLabel;` 전방 선언 추가(`_statusLabel` 포인터용), `class MetricsWorker;` 전방 선언 추가(멤버가 포인터라 정의 불필요).
+
+### 제안 — MainWindow.cpp (수정)
+
+**수정 전** (파일 전문 — 2단계 버전):
+```cpp
+#include "MainWindow.h"
+
+#include <QAbstractItemView>
+#include <QHeaderView>
+#include <QPushButton>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QVBoxLayout>
+#include <QWidget>
+
+namespace
+{
+// APM_Console의 appsettings.json Apm:ConnectionString과 같은 파일을 가리켜야 한다.
+// 이 체크아웃 기준 절대경로를 하드코딩 - Console 쪽도 지금 절대경로 하드코딩
+// 상태라 이식성 문제가 새로 생기는 건 아니다. 배포판을 만들 때(§6 8단계)
+// 커맨드라인 인자나 설정 파일로 뺄 것.
+const QString kConsoleDbPath = "/home/shkim/dev/APM/APM_Console/webserver_apm.db";
+
+// AlertRecords.MetricType 값 순서는 APM_Console의 AlertMetricType enum과 반드시
+// 일치해야 한다(AlertThreshold.cs) - 두 프로젝트 사이의 암묵적 데이터 계약.
+QString MetricTypeToString(int metricType)
+{
+    switch (metricType)
+    {
+    case 0: return "CPU";
+    case 1: return "Memory";
+    case 2: return "Disk";
+    case 3: return "TCP RTT";
+    default: return QString("Unknown(%1)").arg(metricType);
+    }
+}
+}
+
+MainWindow::MainWindow(QWidget* parent)
+    : QMainWindow(parent)
+    , _repository(kConsoleDbPath)
+{
+    setWindowTitle("APM Qt Dashboard - step 2 (SQLite initial load)");
+
+    auto* central = new QWidget(this);
+    auto* layout = new QVBoxLayout(central);
+
+    _refreshButton = new QPushButton("새로고침", central);
+
+    _metricsTable = new QTableWidget(central);
+    _metricsTable->setColumnCount(6);
+    _metricsTable->setHorizontalHeaderLabels(
+        {"Id", "Ts", "CPU %", "Mem %", "Disk %", "Net Rx/Tx (B/s)"});
+    _metricsTable->horizontalHeader()->setStretchLastSection(true);
+    _metricsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    _alertsTable = new QTableWidget(central);
+    _alertsTable->setColumnCount(5);
+    _alertsTable->setHorizontalHeaderLabels(
+        {"Id", "Metric", "Threshold", "Trigger", "Opened At"});
+    _alertsTable->horizontalHeader()->setStretchLastSection(true);
+    _alertsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    layout->addWidget(_refreshButton);
+    layout->addWidget(_metricsTable);
+    layout->addWidget(_alertsTable);
+    setCentralWidget(central);
+
+    connect(_refreshButton, &QPushButton::clicked, this, &MainWindow::OnRefreshClicked);
+
+    if (!_repository.Open())
+    {
+        setWindowTitle(windowTitle() + " - DB open failed (see stderr)");
+        return;
+    }
+    LoadData();
+}
+
+void MainWindow::OnRefreshClicked()
+{
+    LoadData();
+}
+
+void MainWindow::LoadData()
+{
+    PopulateMetricsTable(_repository.FetchLatestMetrics(20));
+    PopulateAlertTable(_repository.FetchOpenAlerts(20));
+}
+
+void MainWindow::PopulateMetricsTable(const QVector<MetricsSample>& samples)
+{
+    _metricsTable->setRowCount(samples.size());
+    for (int row = 0; row < samples.size(); ++row)
+    {
+        const MetricsSample& s = samples[row];
+        const double memPercent = s.memTotalBytes > 0
+            ? s.memUsedBytes * 100.0 / s.memTotalBytes
+            : 0.0;
+        const double diskPercent = s.diskTotalBytes > 0
+            ? s.diskUsedBytes * 100.0 / s.diskTotalBytes
+            : 0.0;
+
+        _metricsTable->setItem(row, 0, new QTableWidgetItem(QString::number(s.id)));
+        _metricsTable->setItem(row, 1, new QTableWidgetItem(s.ts));
+        _metricsTable->setItem(row, 2, new QTableWidgetItem(QString::number(s.cpuUsagePercent, 'f', 1)));
+        _metricsTable->setItem(row, 3, new QTableWidgetItem(QString::number(memPercent, 'f', 1)));
+        _metricsTable->setItem(row, 4, new QTableWidgetItem(QString::number(diskPercent, 'f', 1)));
+        _metricsTable->setItem(row, 5, new QTableWidgetItem(
+            QString("%1 / %2").arg(s.netRxBytesPerSec).arg(s.netTxBytesPerSec)));
+    }
+}
+
+void MainWindow::PopulateAlertTable(const QVector<AlertSample>& alerts)
+{
+    _alertsTable->setRowCount(alerts.size());
+    for (int row = 0; row < alerts.size(); ++row)
+    {
+        const AlertSample& a = alerts[row];
+        _alertsTable->setItem(row, 0, new QTableWidgetItem(QString::number(a.id)));
+        _alertsTable->setItem(row, 1, new QTableWidgetItem(MetricTypeToString(a.metricType)));
+        _alertsTable->setItem(row, 2, new QTableWidgetItem(QString::number(a.thresholdValue, 'f', 1)));
+        _alertsTable->setItem(row, 3, new QTableWidgetItem(QString::number(a.triggerValue, 'f', 1)));
+        _alertsTable->setItem(row, 4, new QTableWidgetItem(a.openedAt));
+    }
+}
+```
+
+**수정 후**:
+```cpp
+#include "MainWindow.h"
+
+#include <QAbstractItemView>
+#include <QDateTime>
+#include <QHeaderView>
+#include <QLabel>
+#include <QPushButton>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QVBoxLayout>
+#include <QWidget>
+
+#include "MetricsWorker.h"
+
+namespace
+{
+// APM_Console의 appsettings.json Apm:ConnectionString과 같은 파일을 가리켜야 한다.
+// 이 체크아웃 기준 절대경로를 하드코딩 - Console 쪽도 지금 절대경로 하드코딩
+// 상태라 이식성 문제가 새로 생기는 건 아니다. 배포판을 만들 때(§6 8단계)
+// 커맨드라인 인자나 설정 파일로 뺄 것.
+const QString kConsoleDbPath = "/home/shkim/dev/APM/APM_Console/webserver_apm.db";
+
+// AlertRecords.MetricType 값 순서는 APM_Console의 AlertMetricType enum과 반드시
+// 일치해야 한다(AlertThreshold.cs) - 두 프로젝트 사이의 암묵적 데이터 계약.
+QString MetricTypeToString(int metricType)
+{
+    switch (metricType)
+    {
+    case 0: return "CPU";
+    case 1: return "Memory";
+    case 2: return "Disk";
+    case 3: return "TCP RTT";
+    default: return QString("Unknown(%1)").arg(metricType);
+    }
+}
+}
+
+MainWindow::MainWindow(QWidget* parent)
+    : QMainWindow(parent)
+{
+    setWindowTitle("APM Qt Dashboard - step 3 (QThread worker)");
+
+    auto* central = new QWidget(this);
+    auto* layout = new QVBoxLayout(central);
+
+    _refreshButton = new QPushButton("새로고침", central);
+    _statusLabel = new QLabel("초기화 중...", central);
+
+    _metricsTable = new QTableWidget(central);
+    _metricsTable->setColumnCount(6);
+    _metricsTable->setHorizontalHeaderLabels(
+        {"Id", "Ts", "CPU %", "Mem %", "Disk %", "Net Rx/Tx (B/s)"});
+    _metricsTable->horizontalHeader()->setStretchLastSection(true);
+    _metricsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    _alertsTable = new QTableWidget(central);
+    _alertsTable->setColumnCount(5);
+    _alertsTable->setHorizontalHeaderLabels(
+        {"Id", "Metric", "Threshold", "Trigger", "Opened At"});
+    _alertsTable->horizontalHeader()->setStretchLastSection(true);
+    _alertsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    layout->addWidget(_refreshButton);
+    layout->addWidget(_statusLabel);
+    layout->addWidget(_metricsTable);
+    layout->addWidget(_alertsTable);
+    setCentralWidget(central);
+
+    connect(_refreshButton, &QPushButton::clicked, this, &MainWindow::OnRefreshClicked);
+
+    // 워커를 만들고 워커 스레드로 옮긴다. 이 시점 이후 워커의 슬롯은 워커 스레드에서 실행된다.
+    _worker = new MetricsWorker(kConsoleDbPath);
+    _worker->moveToThread(&_workerThread);
+
+    // 스레드가 끝나면 워커를 그 스레드에서 안전하게 삭제한다.
+    connect(&_workerThread, &QThread::finished, _worker, &QObject::deleteLater);
+
+    // UI → 워커 (스레드가 다르므로 자동으로 Queued Connection)
+    connect(this, &MainWindow::RefreshRequested, _worker, &MetricsWorker::Refresh);
+
+    // 워커 → UI (역시 Queued. 슬롯 본문은 UI 스레드에서 실행됨)
+    connect(_worker, &MetricsWorker::Initialized, this, &MainWindow::OnWorkerInitialized);
+    connect(_worker, &MetricsWorker::MetricsReady, this, &MainWindow::PopulateMetricsTable);
+    connect(_worker, &MetricsWorker::AlertsReady, this, &MainWindow::PopulateAlertTable);
+    connect(_worker, &MetricsWorker::RefreshFailed, this, &MainWindow::OnRefreshFailed);
+
+    _workerThread.start();
+
+    // 워커가 워커 스레드로 옮겨진 뒤 Initialize()가 그 스레드에서 실행되도록 큐에 넣는다.
+    QMetaObject::invokeMethod(_worker, "Initialize", Qt::QueuedConnection);
+}
+
+MainWindow::~MainWindow()
+{
+    // 워커 스레드의 이벤트 루프를 멈추고, 실제로 끝날 때까지 기다린다.
+    // 이걸 빼면 프로세스 종료 시 "QThread: Destroyed while thread is still running" 경고/크래시.
+    _workerThread.quit();
+    _workerThread.wait();
+}
+
+void MainWindow::OnRefreshClicked()
+{
+    SetStatus("불러오는 중...");
+    emit RefreshRequested();
+}
+
+void MainWindow::OnWorkerInitialized(bool ok)
+{
+    if (!ok)
+    {
+        SetStatus("DB 열기 실패 - stderr 확인");
+        return;
+    }
+    SetStatus("연결됨");
+    emit RefreshRequested();
+}
+
+void MainWindow::OnRefreshFailed(const QString& reason)
+{
+    SetStatus("조회 실패: " + reason);
+}
+
+void MainWindow::SetStatus(const QString& text)
+{
+    _statusLabel->setText(text);
+}
+
+void MainWindow::PopulateMetricsTable(const QVector<MetricsSample>& samples)
+{
+    _metricsTable->setRowCount(samples.size());
+    for (int row = 0; row < samples.size(); ++row)
+    {
+        const MetricsSample& s = samples[row];
+        const double memPercent = s.memTotalBytes > 0
+            ? s.memUsedBytes * 100.0 / s.memTotalBytes
+            : 0.0;
+        const double diskPercent = s.diskTotalBytes > 0
+            ? s.diskUsedBytes * 100.0 / s.diskTotalBytes
+            : 0.0;
+
+        _metricsTable->setItem(row, 0, new QTableWidgetItem(QString::number(s.id)));
+        _metricsTable->setItem(row, 1, new QTableWidgetItem(s.ts));
+        _metricsTable->setItem(row, 2, new QTableWidgetItem(QString::number(s.cpuUsagePercent, 'f', 1)));
+        _metricsTable->setItem(row, 3, new QTableWidgetItem(QString::number(memPercent, 'f', 1)));
+        _metricsTable->setItem(row, 4, new QTableWidgetItem(QString::number(diskPercent, 'f', 1)));
+        _metricsTable->setItem(row, 5, new QTableWidgetItem(
+            QString("%1 / %2").arg(s.netRxBytesPerSec).arg(s.netTxBytesPerSec)));
+    }
+    SetStatus(QString("갱신 완료 %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
+}
+
+void MainWindow::PopulateAlertTable(const QVector<AlertSample>& alerts)
+{
+    _alertsTable->setRowCount(alerts.size());
+    for (int row = 0; row < alerts.size(); ++row)
+    {
+        const AlertSample& a = alerts[row];
+        _alertsTable->setItem(row, 0, new QTableWidgetItem(QString::number(a.id)));
+        _alertsTable->setItem(row, 1, new QTableWidgetItem(MetricTypeToString(a.metricType)));
+        _alertsTable->setItem(row, 2, new QTableWidgetItem(QString::number(a.thresholdValue, 'f', 1)));
+        _alertsTable->setItem(row, 3, new QTableWidgetItem(QString::number(a.triggerValue, 'f', 1)));
+        _alertsTable->setItem(row, 4, new QTableWidgetItem(a.openedAt));
+    }
+}
+```
+
+**변경 사유**:
+- 생성자 초기화 목록에서 `_repository(kConsoleDbPath)` 제거(멤버 자체가 없어짐). 대신 `_worker = new MetricsWorker(...)` + `moveToThread` + 시그널 배선 + `_workerThread.start()`.
+- 생성자에서 하던 동기 `_repository.Open()` / `LoadData()` 제거 → `Open()`은 워커의 `Initialize()`가 워커 스레드에서 하고, 첫 로드는 `OnWorkerInitialized(true)`가 `emit RefreshRequested()`로 트리거.
+- `QMetaObject::invokeMethod(_worker, "Initialize", Qt::QueuedConnection)` — `moveToThread` 직후 `_worker->Initialize()`를 **직접** 부르면 UI 스레드에서 실행돼 버리므로(설계 결정 2 위반), 반드시 큐에 넣어 워커 스레드 이벤트 루프가 실행하게 한다.
+- `~MainWindow()` 구현 추가 — `quit()`(이벤트 루프 종료 요청) + `wait()`(실제 종료 대기). 누락 시 종료 시점 경고/크래시.
+- `_statusLabel` 추가로 비동기 상태를 눈에 보이게 함(로딩 중 / 연결됨 / 실패 / 갱신 완료 시각). `PopulateMetricsTable` 끝에서 "갱신 완료 HH:mm:ss" 표시.
+- `#include "MetricsWorker.h"`, `<QLabel>`, `<QDateTime>` 추가.
+
+### 제안 — CMakeLists.txt (수정)
+
+**수정 전**:
+```cmake
+add_executable(APM_QtDashboard
+    main.cpp
+    MainWindow.cpp
+    MainWindow.h
+    MetricsRepository.cpp
+    MetricsRepository.h
+)
+```
+
+**수정 후**:
+```cmake
+add_executable(APM_QtDashboard
+    main.cpp
+    MainWindow.cpp
+    MainWindow.h
+    MetricsRepository.cpp
+    MetricsRepository.h
+    MetricsWorker.cpp
+    MetricsWorker.h
+)
+```
+
+**변경 사유**: `MetricsWorker`에 `Q_OBJECT`가 있으므로 소스 목록에 넣어 AUTOMOC이 moc를 돌리게 해야 한다. `QThread`는 `Qt6::Core`(→`Qt6::Widgets`가 전이 포함)라 컴포넌트 추가는 불필요.
+
+### 검증 (미검증 — 사용자가 직접 작성/빌드 후 확인)
+
+1. 클린 빌드 성공 여부(`MetricsWorker` moc 포함).
+2. 실행 시 상태 라벨이 "초기화 중..." → "연결됨" → "갱신 완료 HH:mm:ss" 순으로 바뀌고 테이블 2개가 채워지는지.
+3. "새로고침" 버튼을 연타해도 창이 멈추지 않는지(2단계와 달리 조회가 워커 스레드에서 일어남).
+4. 창을 닫을 때 "QThread: Destroyed while thread is still running" 경고가 **안** 뜨는지(`~MainWindow`의 quit/wait 확인).
+5. (선택) DB 경로를 일부러 틀리게 바꿔 실행 → 상태 라벨이 "DB 열기 실패"로 뜨는지.
+6. 실행 중 stderr에 "Cannot queue arguments of type 'QVector<MetricsSample>'" 경고가 없는지(메타타입 등록 확인).
+
+### 설계 보충 — "Repository를 UI에서 뗐으면, Repo 없이 DB에서 바로 가져오나?" (2026-09-10 사용자 질문)
+
+**답: 아니다. `MetricsRepository`는 제거되지 않는다. 소유 스레드만 바뀐다.**
+
+3단계에서 바뀌는 것은 "레포지토리가 어느 스레드에 사는가"이지, 레포지토리를 없애는 게 아니다.
+
+**2단계 (현재):**
+```
+MainWindow (UI 스레드)
+  └─ _repository   ← MainWindow이 소유, UI 스레드에서 직접 호출
+       └─ QSqlDatabase / QSqlQuery → SQLite
+```
+
+**3단계 (제안):**
+```
+MainWindow (UI 스레드)
+  │  emit RefreshRequested()          ← 큐 연결, 즉시 반환
+  ▼
+MetricsWorker (워커 스레드)
+  └─ _repository   ← 이제 Worker가 소유(값 멤버), 워커 스레드에서 호출
+       └─ QSqlDatabase / QSqlQuery → SQLite
+  │  emit MetricsReady(samples) / AlertsReady(alerts)   ← 큐 연결로 결과를 UI 스레드로
+  ▼
+MainWindow::PopulateMetricsTable / PopulateAlertTable (UI 스레드) → 테이블 갱신
+```
+
+`MetricsRepository`는 여전히 **`QSqlDatabase`/`QSqlQuery`를 실제로 만지는 유일한 지점**이다. SQL 문자열, 컬럼 매핑, `QSQLITE_OPEN_READONLY` 연결 설정 전부 그대로 레포지토리 안에 있다. `MetricsWorker`는 DB를 직접 건드리지 않고 `_repository.FetchLatestMetrics(kFetchLimit)`처럼 **위임**만 한다.
+
+**왜 Worker와 Repository를 합치지 않고 따로 두나 — 역할 분리:**
+
+| 클래스 | 아는 것 | 모르는 것 |
+| --- | --- | --- |
+| `MetricsRepository` | 이 DB의 스키마, SQL, 읽기 전용 연결 | 스레드 |
+| `MetricsWorker` | 워커 스레드, signal/slot, 생명주기 | SQL |
+
+이렇게 나눠두면 7단계(SignalR 구독)에서 데이터 소스를 바꿀 때 스레딩 코드를 안 건드리고, 반대로 스레딩 방식을 바꿀 때 SQL을 안 건드린다. 각각 따로 이해·검증 가능. → 이 항목은 나중에 `Docs/QT_CONCEPTS_NOTES.md`(또는 `CODE_ARCHITECTURE.md`)에도 "Qt 스레딩에서 관심사 분리" 예시로 옮길 것.
+
+**이 질문이 나온 맥락**: 이 시점 디스크의 `MainWindow.h`가 반쯤만 반영된 상태였음 — `~MainWindow()`/`_workerThread`/`_worker`는 추가됐는데 `MetricsRepository _repository;`가 `MainWindow`에 그대로 남아있었고, `RefreshRequested()` 시그널·`OnWorkerInitialized`/`OnRefreshFailed` 슬롯·`class MetricsWorker;` 전방 선언·`Populate*`의 `private slots:` 이동이 아직 안 들어와 있었음. 위 "수정 후" 전문과 다시 대조 필요.
+
+### 결정 사항
+
+문서 제안만 — `APM_QtDashboard/`의 실제 소스는 사용자가 직접 작성(원칙 2, [[feedback_claude_md_rule2_scope]]). 2단계 때처럼 작성 중 나오는 오타/컴파일 에러는 요청 시 수정 지원. 완료되면 `WORK_STATUS.md` 갱신 후 커밋.
+
+### 사용자 작성분 1차 오타 수정 (2026-09-10)
+
+사용자가 3단계 코드 7개 파일을 직접 작성 완료 → "명백한 오타만 고쳐줄 수 있는가" 요청. Claude가 직접 수정한 것:
+
+| 파일 | 위치 | 수정 전 → 수정 후 |
+| --- | --- | --- |
+| `MainWindow.h` | 20 | `siganls:` → `signals:` |
+| `MainWindow.h` | 26 | `void OnWorkerInitialized(book ok)` → `bool ok` |
+| `MetricsWorker.h` | 1 | `#prgama once` → `#pragma once` |
+| `MetricsWorker.h` | 13 | `explicit MetriricsWorker(...)` → `MetricsWorker` |
+
+**오타 아님 — 사용자에게 넘긴 것(제안서 "수정 후" MainWindow.h 전사 시 누락된 줄들)**:
+1. `MainWindow.h`에 `#include <QThread>` 누락 → `error: field '_workerThread' has incomplete type 'QThread'`. (지난번 `<QSqlError>`와 같은 "빠진 include" 케이스 — 범위 밖.)
+2. `MainWindow.h:38` `MetricsRepository _repository = nullptr;` 줄 자체를 삭제해야 함 — `_repository`는 3단계에서 `MetricsWorker`로 이동. `error: could not convert 'nullptr' ... to 'MetricsRepository'`.
+3. `MainWindow.h`에 `QLabel* _statusLabel = nullptr;` 멤버 선언 누락 — `.cpp`에서 쓰는데 헤더에 없음. 위 2개 고치면 다음 빌드에서 드러남.
+
+빌드 확인: 위 4개 오타 수정 후 `cmake --build .` → 오타 관련 에러는 전부 사라지고 위 3개 구조 이슈만 남음.
+
+### 2차 — 제안서 자체의 결함 수정: `MetricsRepository.h`에 `#include <QMetaType>` 누락 (2026-09-10)
+
+사용자가 위 3개 구조 이슈를 직접 반영(`#include <QThread>` 추가, `_repository` 줄 주석 처리, `_statusLabel` 멤버 추가)한 뒤에도 빌드가 실패 → 사용자 "오타가 하나도 수정이 안 된 것 같다"(에러 캐스케이드 때문에 그렇게 보였음).
+
+**실제 원인**: `MetricsRepository.h`의 `Q_DECLARE_METATYPE` 매크로가 미정의 상태 →
+```
+MetricsRepository.h:32:1: error: expected constructor, destructor, or type conversion before 'Q_DECLARE_METATYPE'
+```
+이 한 줄이 `class MetricsRepository` 정의를 통째로 무너뜨려서, `.cpp` 전체에 "MetricsRepository has not been declared / _connectionName was not declared"가 20줄 넘게 쏟아짐 → 오타 수정이 안 먹은 것처럼 보였음. 오타 4건은 실제로는 정상 수정돼 있었음(`grep`로 확인).
+
+**이건 사용자 오타가 아니라 이 제안서(2026-09-10 항목)의 결함이다.** 위 "제안 — MetricsRepository.h (수정)"의 변경 사유에 "`Q_DECLARE_METATYPE`는 사실상 `<QString>` 등에서 이미 딸려 옴"이라고 적었는데, **이 환경(Qt 6.x)에서는 안 딸려 온다**. 별도 컴파일 테스트로 확인:
+```cpp
+#include <QString>
+#include <QVector>
+#include <qglobal.h>
+struct Foo { int x = 0; };
+Q_DECLARE_METATYPE(Foo)   // → error: expected constructor... (QMetaType 없이는 실패)
+```
+`#include <QMetaType>` 추가 시 통과.
+
+**수정**: `MetricsRepository.h` 최상단에 `#include <QMetaType>` 추가(Claude가 직접 — 제안서 결함 정정 성격). 위 "제안 — MetricsRepository.h (수정)"의 "수정 후" 코드도 이 include를 포함하도록 정정해야 함(TODO). 이후 `rm -rf build && cmake .. && cmake --build .` 클린 빌드 성공(3개 소스 + moc 전부 컴파일·링크).
+
+**현재 상태**: 3단계 코드 빌드 성공. 실행/동작 검증은 사용자 몫(SESSION_LOG "검증" 6개 항목 — 특히 항목 6: stderr에 "Cannot queue arguments of type 'QVector<MetricsSample>'" 경고 없는지).
+
+### 3차 — 완료 평가 + 헤드리스 실행 검증 + 커밋/푸시 (2026-09-10)
+
+사용자 "완료로 평가되면 현황 최신화 및 커밋 및 푸싱하자" → 디스크의 7개 파일 다시 읽어 최종 상태 확인(원칙 7), 클린 빌드 + 헤드리스 실행 검증 후 완료 판정.
+
+**검증 결과**:
+- `rm -rf build && cmake .. && cmake --build .` → `[100%] Built target APM_QtDashboard` (main.cpp / MainWindow.cpp / MetricsRepository.cpp / MetricsWorker.cpp + moc 전부 통과).
+- `QT_QPA_PLATFORM=offscreen timeout 4 ./APM_QtDashboard 2> stderr` → stderr에 `This plugin does not support propagateSizeHints()`(offscreen 플러그인의 무해한 메시지) 외 아무 경고 없음:
+  - "Cannot queue arguments of type 'QVector<MetricsSample>'" **없음** → `Q_DECLARE_METATYPE` + `qRegisterMetaType` 등록이 실제로 동작, 워커→UI 큐 연결로 벡터가 마샬링됨.
+  - "MetricsRepository : failed to Open" **없음** → 읽기 전용 연결로 `webserver_apm.db` 열림.
+  - SQL 에러 **없음** → `FetchLatestMetrics`/`FetchOpenAlerts` 쿼리 정상 실행.
+  - 즉 `MainWindow 생성 → 워커 스레드 start → Initialize(DB open) → OnWorkerInitialized → emit RefreshRequested → Refresh(쿼리) → MetricsReady/AlertsReady 큐 연결 → Populate*` 전체 비동기 경로가 에러 없이 한 바퀴 돎.
+- **미검증(GUI 필요, 사용자 몫)**: 상태 라벨 시각적 전이, 테이블 렌더링, 새로고침 연타 시 무정지, 창 닫을 때 `~MainWindow`의 quit/wait로 "QThread: Destroyed while thread is still running" 경고 안 뜨는지(헤드리스 SIGTERM 종료는 소멸자 미실행이라 확인 불가 — 코드 리뷰상 정상).
+
+**평가**: 2단계와 동일 기준(빌드 + 내가 할 수 있는 실행 검증까지 직접 확인, GUI 시각 확인은 사용자)으로 **3단계 완료**.
+
+**커밋**: `WORK_STATUS.md`/`Docs/SESSION_LOG.md`/`Docs/CPP_KEYWORDS_NOTES.md`(신규) + `APM_QtDashboard/` 7개 파일. `now_session.md`(루트, 사용자 작업 스크래치로 추정)는 커밋 대상에서 제외. 이어서 `origin/main`+`origin/master` push.
+

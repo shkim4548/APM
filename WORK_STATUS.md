@@ -33,7 +33,7 @@
 5순위 : 백분위/집계 통계                                ✅ 코드 적용 + 빌드/테스트 검증 완료
 6순위 : OpenTelemetry — 구현 보류, 면접용 답변 정리만  ⬜ 미착수
 7순위 : 원격 명령 실행 기능                            ⏸️ 보류(사유 아래 참고), 착수 여부 미정
-8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-09) — 0~2단계(빈 창+Signal/Slot+SQLite 초기 로드) 빌드/실행 검증 완료, 3단계(QThread) 착수 전
+8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-10) — 0~3단계(빈 창 / Signal·Slot / SQLite 초기 로드 / QThread 워커 분리) 빌드+헤드리스 실행 검증 완료, 4단계(Model/View) 착수 전
 ```
 
 **8순위는 위 1~7과 독립된 별개 트랙이다** — APM 백엔드(1~7)는 완료 상태로 더 손댈 것이 없고, 여기에 Qt(신규)·MFC(기존 Viewer 보강)를 얹는 프론트엔드 작업을 새로 시작하는 것. 계획 전문은 `Docs/QT_MFC_PORTFOLIO_PLAN.md`.
@@ -607,6 +607,49 @@ Agent/Collector 변경 없음(Console 쪽만 닫히는 작업 — C++ 재빌드 
 - DB 없을 때의 `Open()` 실패 처리(창 제목에 실패 문구 추가)는 코드 리뷰로 로직 확인, 이번 세션에서 실제로 DB를 지우고 실행해보는 것까지는 하지 않음(선택적 엣지케이스, 낮은 우선순위로 남김).
 
 **평가**: 2단계 완료로 판단 — 위 3개 검증 항목 중 핵심 2개(빌드 성공, 실데이터 표시 가능한 상태)는 직접 확인, 나머지 1개(DB 없음 케이스)는 코드 검토로만 확인. §6 이어서 3단계(QThread 워커 분리 — Sql 쿼리를 UI 스레드에서 분리)로 진행 가능한 상태.
+
+**커밋 완료(2026-09-09, `b0129e6` "Qt/MFC track: complete stage 2 (SQLite initial data load)")** — `MetricsRepository.h/.cpp`(신규), `MainWindow.h/.cpp`/`CMakeLists.txt`/`main.cpp`(수정), `WORK_STATUS.md`/`Docs/SESSION_LOG.md`. 2026-09-09 이어지는 세션에서 `origin/main`/`origin/master` 둘 다 fast-forward push 완료(히스토리 불일치 없음).
+
+### 3단계(QThread 워커 분리) 완료 (2026-09-10)
+
+**설계**: `Docs/SESSION_LOG.md` 2026-09-10 항목에 제안 작성(제안만, 소스는 사용자 직접 작성 — 원칙 2). 핵심:
+- `QThread` 상속이 아니라 워커 `QObject`(`MetricsWorker`) + `moveToThread()` 방식(Qt 공식 권장, signal/slot 모델을 스레드 경계에 그대로 적용).
+- `MetricsRepository` 소유권을 `MainWindow`(값 멤버) → `MetricsWorker`로 이동. `QSqlDatabase` 연결은 만든 스레드에서만 쓸 수 있으므로 `Open()`을 워커의 `Initialize()` 슬롯(워커 스레드 실행)에서 호출.
+- 커스텀 구조체를 큐 연결로 넘기려면 `Q_DECLARE_METATYPE` + `qRegisterMetaType` 필요.
+- `~MainWindow()`에서 `_workerThread.quit()` + `wait()`, 상태 라벨(`_statusLabel`)로 비동기 상태 표시(원칙 2 실패 경로).
+- **fdatasync 사건(§1-7)과 같은 구조**임을 배경에 명시 — 면접용 연결 포인트.
+- 신규 파일 `MetricsWorker.h/.cpp`, 수정 파일 `MetricsRepository.h`(메타타입 + `#include <QMetaType>`)/`main.cpp`(qRegisterMetaType)/`MainWindow.h/.cpp`/`CMakeLists.txt`.
+
+**작성·수정 경위**: 사용자가 7개 파일 직접 작성 → Claude가 명백한 오타 4건 수정(`siganls`/`book ok`/`#prgama`/`MetriricsWorker`) + 제안서 결함 1건 정정(`MetricsRepository.h`에 `#include <QMetaType>` 누락 — 제안서 변경 사유가 "`<QString>`에서 딸려 온다"고 잘못 적었음, Qt 6.x에서는 안 딸려 옴). 나머지(누락 include `<QThread>`, 삭제할 `_repository` 줄, 누락 멤버 `_statusLabel`)는 사용자가 직접 반영.
+
+**검증(2026-09-10, 이 세션에서 직접)**:
+- `rm -rf build && cmake .. && cmake --build .` 클린 빌드 성공(`MetricsWorker` moc 포함, 4개 소스 컴파일+링크).
+- `QT_QPA_PLATFORM=offscreen`으로 헤드리스 실행 → 워커 스레드 시작 → `Initialize()`가 DB 열기 → `Refresh()`가 쿼리 → `QVector<MetricsSample>`/`QVector<AlertSample>`가 큐 연결로 UI 스레드로 마샬링되는 전체 파이프라인이 **stderr에 경고 0줄로** 통과. 특히 "QObject::connect: Cannot queue arguments of type 'QVector<MetricsSample>'" 경고 없음 → 메타타입 등록 정상. SQL 에러 없음 → 읽기 전용 연결·쿼리 정상.
+- **미검증(사용자 몫)**: GUI 화면에서 상태 라벨 전이("초기화 중"→"연결됨"→"갱신 완료 HH:mm:ss")·테이블 채워짐·새로고침 연타 시 UI 안 멈춤·창 닫을 때 "QThread: Destroyed while thread is still running" 경고 없음. `~MainWindow`의 quit/wait는 코드 리뷰로만 확인(헤드리스 SIGTERM 종료는 소멸자를 안 태움).
+
+**평가**: 3단계 완료로 판단 — 빌드 + 비동기 파이프라인 헤드리스 검증까지 직접 확인. GUI 시각 확인은 2단계와 동일한 수준으로 사용자에게 남김.
+
+**다음**: §6 4단계(Model/View — `QAbstractTableModel`로 `QTableWidget` 대체). 이 단계 완료 시 나온 Qt 개념(스레드 친화성, 큐 연결, 메타타입)을 `Docs/QT_CONCEPTS_NOTES.md`(신규)에 정리할 것.
+
+**참고 문서 신규**: `Docs/CPP_KEYWORDS_NOTES.md` — 트랙 진행 중 사용자가 반복해서 헷갈린 C++ 키워드 정리(현재 `constexpr`, `explicit`). 새로 헷갈리는 게 나오면 이 파일에 추가.
+
+### [예정 작업] Qt/C++ 학습 내용 문서화 (2026-09-10 사용자 요청, 트랙 진행하면서 채움)
+
+사용자 요청: "이 프로젝트에 사용된 키워드나 Qt의 특성 등을 정리해서 문서화해야 할 듯하다." — 트랙을 진행하면서 나온 언어/프레임워크 지식을 흩어놓지 말고 참고 문서로 모은다. 계획 §2("각 단계 밑의 이론까지 설명 가능한 수준으로")와 직결되는, 면접 대비 자산.
+
+**구성(안)**:
+- `Docs/CPP_KEYWORDS_NOTES.md` (이미 착수) — 순수 C++ 키워드. 현재 `constexpr`, `explicit`. 추가 예정 후보: `override`/`final`, `noexcept`, `std::unique_ptr`/RAII, 이니셜라이저 리스트 순서, `auto`, 람다 캡처.
+- **신규 예정** `Docs/QT_CONCEPTS_NOTES.md` — Qt 고유 특성. 후보 항목:
+  - 매크로 3형제 + `Q_OBJECT` (`signals`/`slots`/`emit`가 전처리 후 무엇이 되는지, moc이 하는 일) — **이미 세션에서 3회 설명함(2026-09-09 `private slots`, `emit` 등), 문서화 안 됨**
+  - moc / AUTOMOC 빌드 파이프라인
+  - signal/slot 연결 타입(Direct/Queued/Auto/BlockingQueued)과 스레드 친화성(`moveToThread`, `QObject` 부모-자식)
+  - 메타타입 시스템(`Q_DECLARE_METATYPE`/`qRegisterMetaType`), `QVariant`
+  - 이벤트 루프 / `QCoreApplication::exec` / 이벤트 vs 시그널
+  - `QSqlDatabase` 명명 연결·스레드 제약
+  - Model/View 아키텍처(4단계 때)
+  - 라이선스(LGPL 동적 링크, 8단계 때)
+
+**진행 방식**: 각 단계(§6) 끝낼 때 그 단계에서 새로 나온 개념을 위 문서에 한 절씩 append. 별도 시간 빼지 말고 단계 완료의 일부로 처리.
 
 **커밋 완료**: 아래 참고.
 
