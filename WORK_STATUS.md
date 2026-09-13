@@ -33,7 +33,7 @@
 5순위 : 백분위/집계 통계                                ✅ 코드 적용 + 빌드/테스트 검증 완료
 6순위 : OpenTelemetry — 구현 보류, 면접용 답변 정리만  ⬜ 미착수
 7순위 : 원격 명령 실행 기능                            ⏸️ 보류(사유 아래 참고), 착수 여부 미정
-8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-13) — 0~4단계(빈 창/Signal·Slot/SQLite/QThread/Model·View) 빌드+헤드리스 검증 완료, 5단계(QtCharts)부터 사용자가 직접 작성하며 학습
+8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-13) — 0~4단계 완료, 5단계(QtCharts) 설계·코드 제안 준비 완료(SESSION_LOG 2026-09-13), 사용자 작성 대기
 ```
 
 **8순위는 위 1~7과 독립된 별개 트랙이다** — APM 백엔드(1~7)는 완료 상태로 더 손댈 것이 없고, 여기에 Qt(신규)·MFC(기존 Viewer 보강)를 얹는 프론트엔드 작업을 새로 시작하는 것. 계획 전문은 `Docs/QT_MFC_PORTFOLIO_PLAN.md`.
@@ -640,7 +640,36 @@ Agent/Collector 변경 없음(Console 쪽만 닫히는 작업 — C++ 재빌드 
 
 **다음 세션 시작 시 확인할 것**: `APM_QtDashboard/`에 `MetricsTableModel.*`/`AlertsTableModel.*`가 생겼는지 확인. 사용자가 위 제안대로 직접 작성 → 빌드/실행 검증(§SESSION_LOG "검증" 4개 항목). 완료되면 이 표(36줄)와 이 절을 "0~4단계 완료"로 갱신 후 커밋+push.
 
-**4단계 직접 적용 완료(2026-09-13)** — 사용자가 "이 부분은 바로 적용해주고, 다음 QtChart 이하는 내가 직접 작성하며 학습하겠다"고 명시 요청(원칙 2 예외) → Claude가 4단계 코드를 직접 작성. 사용자가 작성 중이던 `MetricsTableMode.h/.cpp`(파일명 오타 포함)와 `AlertsTableModel.h/.cpp`(오타 다수)를 제안 원문대로 다시 작성, `MainWindow.h/.cpp`/`CMakeLists.txt`도 반영. 클린 빌드 + 헤드리스 실행 검증 완료(경고 없음), `QTableWidget` 완전 교체 확인(`grep`). **5단계(QtCharts)부터는 사용자가 직접 작성하며 학습 — Claude는 제안/설계·오타 수정 지원만.** 상세 내역·발견한 include 실수(`<QDateTime>` 누락)는 `Docs/SESSION_LOG.md` 2026-09-13 "4단계 — 직접 적용" 항목 참고.
+**4단계 직접 적용 완료(2026-09-13)** — 사용자가 "이 부분은 바로 적용해주고, 다음 QtChart 이하는 내가 직접 작성하며 학습하겠다"고 명시 요청(원칙 2 예외) → Claude가 4단계 코드를 직접 작성. 사용자가 작성 중이던 `MetricsTableMode.h/.cpp`(파일명 오타 포함)와 `AlertsTableModel.h/.cpp`(오타 다수)를 제안 원문대로 다시 작성, `MainWindow.h/.cpp`/`CMakeLists.txt`도 반영. 클린 빌드 + 헤드리스 실행 검증 완료(경고 없음), `QTableWidget` 완전 교체 확인(`grep`). 상세 내역·발견한 include 실수(`<QDateTime>` 누락)는 `Docs/SESSION_LOG.md` 2026-09-13 "4단계 — 직접 적용" 항목 참고.
+
+**5단계(QtCharts) — 방향 전환: 다시 제안 방식으로(2026-09-13, 이어지는 세션)** — 사용자가 "직접 작성하며 학습"을 "완성된 예제코드를 보고 학습"으로 재정의 → 공식 `qt6-charts-examples` apt 패키지(sudo 필요, 이 세션에선 설치 불가 — 사용자가 직접 `sudo apt-get install -y qt6-charts-examples` 실행 필요, 그중 `dynamicspline` 예제가 이번 요구사항과 가장 유사) 안내까지 했으나, 최종적으로 "이전처럼 SESSION_LOG에 예제 코드 포함해서 작성해달라"고 요청 → 2~4단계와 같은 제안 방식으로 복귀. `Docs/SESSION_LOG.md` 2026-09-13 "5단계 설계·코드 제안" 항목에 작성 완료(제안만, 소스 미작성). 핵심:
+- 신규 요소 **자동 새로고침 타이머**(`QTimer`, 5초 — `APM_Agent` 수집 주기와 일치시킴) 추가 — 기존 `OnRefreshClicked()`를 그대로 재사용(새 슬롯 안 만듦).
+- 신규 파일 `MetricsChartWidget.h/.cpp` — `QChart`+`QChartView`+`QLineSeries`(CPU/Mem) 2개. 버퍼 크기(`kMaxPoints=30`)를 테이블의 `LIMIT 20`과 별개로 결정(계획 §3-3 ④의 retention 정책 연결 요구사항 충족).
+- `MetricsWorker::MetricsReady` 시그널에 슬롯을 하나 더 연결(팬아웃) — 테이블은 "전체 교체", 차트는 "최신 1개 누적"으로 같은 시그널을 다르게 소비.
+- 수정 파일 `MainWindow.h/.cpp`, `CMakeLists.txt`(`Charts` 컴포넌트 추가).
+
+**다음 세션 시작 시 확인할 것**: `APM_QtDashboard/`에 `MetricsChartWidget.*`가 생겼는지 확인. 검증 5개 항목(§SESSION_LOG). 완료되면 이 표(36줄) "0~5단계 완료"로 갱신 후 커밋+push.
+
+### [열린 결정 사항] Qt 트랙의 데이터 소스 방향 재검토 — 상당히 구체화됨 (2026-09-13)
+
+사용자가 대화 중 "원래는 APM_Console 없이 각 장비가 로컬로 자기 성능지표를 보는 걸 원했다"고 언급 → 코드로 확인해보니 **그 요구사항은 이미 `APM_Viewer`(MFC)가 구현하고 있음**(`ApmViewerDlg.cpp`의 `DB_PATH`가 `APM_Agent/apm_metrics.db`를 직접 가리킴, `SqliteReader.cpp`가 Agent 로컬 스키마를 그대로 읽음). 반면 `APM_QtDashboard`는 0~5단계 전부 `APM_Console/webserver_apm.db`(중앙 집계 DB) 대상으로 설계됨.
+
+**대화로 요구사항을 구체화(AskUserQuestion 2회 + 확인 중)**, 최종 정리된 목표 아키텍처:
+1. **로컬 뷰(기본, 항상 동작)** — 그 장비의 `APM_Agent/apm_metrics.db`를 직접 읽어 지표 표시. Console 없이도 항상 동작해야 함.
+2. **임계치 동기화(1회성, 시작 시)** — Console에 접속 가능하면 `AlertThresholds` 값을 한 번 받아와 로컬에 캐싱 → Qt가 로컬 지표에 대해 **직접 임계치 초과 여부를 판단**할 수 있게 함(Agent 로컬 DB엔 알림 개념 자체가 없음).
+3. **Console 실시간 오버레이(선택, 지속 연결)** — SignalR로 연결돼 있는 동안만 `NewMetric`/`AlertOpened`/`AlertResolved` 이벤트를 추가로 표시. **과거 이력 불필요** — 연결된 순간부터만.
+4. **독립성** — 임계치 동기화 후에는 Console이 꺼지거나 끊겨도 로컬 뷰는 계속 정상 동작해야 함(런타임에 Console을 필수로 요구하지 않음).
+
+**`APM_Console` 코드를 직접 확인한 기술적 사실(중요, 이번 방향 결정의 근거)**:
+- `DashboardController`/`AlertsController`는 **HTML(Razor View)만 반환** — JSON API가 전혀 없음.
+- `MetricsHub : Hub`는 **완전히 빈 클래스** — 클라이언트가 부를 수 있는 메서드 없음, 접속 시 과거 데이터를 보내는 로직도 없음. 서버(`MetricsReceiverService.cs`)가 새 이벤트 발생 시에만 `"NewMetric"`(전체 `MetricRecord`)/`"AlertOpened"`/`"AlertResolved"`(전체 `AlertRecord`)를 브로드캐스트할 뿐.
+- 즉 **진짜 네트워크로 다른 장비에서 Console에 접속하면 과거 이력을 받아올 방법이 현재 코드에 없음** — 2~5단계가 만든 "SQLite 파일 직접 열기"는 애초에 Console과 같은 장비에 있을 때만 가능한 방법이었음(실제 배포 시나리오와 안 맞음).
+- **임계치(`AlertThresholds`)를 받아오려면 Console에 작은 JSON 엔드포인트(예: `GET /apm/alerts/thresholds.json`)를 신규 추가해야 함** — 기존 동작을 안 건드리는 순수 추가라 "코어 무수정" 원칙에서 크게 벗어나진 않지만, Console 쪽 코드를 처음으로 건드리는 지점.
+
+**남은 것**: 사용자에게 위 4개 항목 요약이 맞는지 확인 요청한 상태(응답 대기). 확정되면:
+1. `Docs/QT_MFC_PORTFOLIO_PLAN.md`부터 이 방향으로 재정리
+2. 0~5단계에서 만든 `MetricsRepository`/`MetricsWorker`/`MetricsTableModel`/`AlertsTableModel`/`MetricsChartWidget`을 "로컬 Agent 스키마 우선 + Console은 선택적 실시간 오버레이" 구조로 재설계(대대적 변경 예상 — 스키마 자체가 다름: snake_case vs PascalCase, epoch 정수 vs 문자열 타임스탬프, 로컬 DB엔 알림 테이블 자체가 없음)
+3. Console에 임계치 JSON 엔드포인트 신규 추가(작은 범위지만 Console 코드 최초 수정)
 
 **참고 문서 신규**: `Docs/CPP_KEYWORDS_NOTES.md` — 트랙 진행 중 사용자가 반복해서 헷갈린 C++ 키워드 정리(현재 `constexpr`, `explicit`). 새로 헷갈리는 게 나오면 이 파일에 추가.
 
