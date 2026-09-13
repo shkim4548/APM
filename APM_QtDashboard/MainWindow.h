@@ -7,10 +7,12 @@
 
 class QLabel;
 class QPushButton;
-class QTableWidget;
+class QTableView;
 class MetricsWorker;
+class MetricsTableModel;
+class AlertsTableModel;
 
-// 검증용 최소 창 : QPushButton::clicked 신호를 이 클래스의 슬롯에 연결
+// step 4 : 데이터(모델)와 표시(뷰)를 분리한다. QTableWidget → QTableView + Model.
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -36,9 +38,10 @@ private:
     QThread _workerThread;
     MetricsWorker* _worker = nullptr;
 
-    //MetricsRepository _repository = nullptr;
-    QTableWidget* _metricsTable = nullptr;
-    QTableWidget* _alertsTable = nullptr;
+    MetricsTableModel* _metricsModel = nullptr;
+    AlertsTableModel* _alertsModel = nullptr;
+    QTableView* _metricsView = nullptr;
+    QTableView* _alertsView = nullptr;
     QPushButton* _refreshButton = nullptr;
     QLabel* _statusLabel = nullptr;
 };

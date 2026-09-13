@@ -21,6 +21,10 @@ add_executable(APM_QtDashboard
     MetricsRepository.h
     MetricsWorker.cpp
     MetricsWorker.h
+    MetricsTableModel.cpp
+    MetricsTableModel.h
+    AlertsTableModel.cpp
+    AlertsTableModel.h
 )
 
 target_link_libraries(APM_QtDashboard PRIVATE Qt6::Widgets Qt6::Sql)

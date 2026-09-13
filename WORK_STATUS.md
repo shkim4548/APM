@@ -33,7 +33,7 @@
 5순위 : 백분위/집계 통계                                ✅ 코드 적용 + 빌드/테스트 검증 완료
 6순위 : OpenTelemetry — 구현 보류, 면접용 답변 정리만  ⬜ 미착수
 7순위 : 원격 명령 실행 기능                            ⏸️ 보류(사유 아래 참고), 착수 여부 미정
-8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-10) — 0~3단계(빈 창 / Signal·Slot / SQLite 초기 로드 / QThread 워커 분리) 빌드+헤드리스 실행 검증 완료, 4단계(Model/View) 착수 전
+8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-13) — 0~4단계(빈 창/Signal·Slot/SQLite/QThread/Model·View) 빌드+헤드리스 검증 완료, 5단계(QtCharts)부터 사용자가 직접 작성하며 학습
 ```
 
 **8순위는 위 1~7과 독립된 별개 트랙이다** — APM 백엔드(1~7)는 완료 상태로 더 손댈 것이 없고, 여기에 Qt(신규)·MFC(기존 Viewer 보강)를 얹는 프론트엔드 작업을 새로 시작하는 것. 계획 전문은 `Docs/QT_MFC_PORTFOLIO_PLAN.md`.
@@ -631,7 +631,20 @@ Agent/Collector 변경 없음(Console 쪽만 닫히는 작업 — C++ 재빌드 
 
 **다음**: §6 4단계(Model/View — `QAbstractTableModel`로 `QTableWidget` 대체). 이 단계 완료 시 나온 Qt 개념(스레드 친화성, 큐 연결, 메타타입)을 `Docs/QT_CONCEPTS_NOTES.md`(신규)에 정리할 것.
 
+### 4단계(Model/View) 설계·코드 제안 준비 완료 (2026-09-11)
+
+**진행 내용**: 사용자가 "해야할 변경사항이 안 적혀있다"고 지적 → 4단계 설계·코드 제안이 아직 작성 안 돼 있었음을 확인, `Docs/SESSION_LOG.md` 2026-09-11 항목에 작성(제안만, 소스 미작성 — 원칙 2). 핵심 설계:
+- `QStandardItemModel`이 아니라 `QAbstractTableModel` 직접 상속 — 셀마다 아이템 객체를 안 만들고 `data()`가 그때그때 값을 계산해 돌려줌(계획 §3-3 "수백 개 항목" 근거와 직결).
+- 갱신은 `beginResetModel()`/`endResetModel()`(전체 교체) — 정밀 갱신(`beginInsertRows` 등)은 나중에 실시간 스트림(7단계)이 붙으면 고려.
+- 신규 파일 `MetricsTableModel.h/.cpp`, `AlertsTableModel.h/.cpp`(`MetricTypeToString`도 `MainWindow.cpp`에서 여기로 이동). 수정 파일 `MainWindow.h/.cpp`(`QTableWidget`→`QTableView`+모델, `Populate*` 함수가 20줄 반복문 → 모델 위임 한 줄로 축소, 3단계 때 주석 처리해뒀던 `_repository` 잔재 완전 삭제)/`CMakeLists.txt`.
+
+**다음 세션 시작 시 확인할 것**: `APM_QtDashboard/`에 `MetricsTableModel.*`/`AlertsTableModel.*`가 생겼는지 확인. 사용자가 위 제안대로 직접 작성 → 빌드/실행 검증(§SESSION_LOG "검증" 4개 항목). 완료되면 이 표(36줄)와 이 절을 "0~4단계 완료"로 갱신 후 커밋+push.
+
+**4단계 직접 적용 완료(2026-09-13)** — 사용자가 "이 부분은 바로 적용해주고, 다음 QtChart 이하는 내가 직접 작성하며 학습하겠다"고 명시 요청(원칙 2 예외) → Claude가 4단계 코드를 직접 작성. 사용자가 작성 중이던 `MetricsTableMode.h/.cpp`(파일명 오타 포함)와 `AlertsTableModel.h/.cpp`(오타 다수)를 제안 원문대로 다시 작성, `MainWindow.h/.cpp`/`CMakeLists.txt`도 반영. 클린 빌드 + 헤드리스 실행 검증 완료(경고 없음), `QTableWidget` 완전 교체 확인(`grep`). **5단계(QtCharts)부터는 사용자가 직접 작성하며 학습 — Claude는 제안/설계·오타 수정 지원만.** 상세 내역·발견한 include 실수(`<QDateTime>` 누락)는 `Docs/SESSION_LOG.md` 2026-09-13 "4단계 — 직접 적용" 항목 참고.
+
 **참고 문서 신규**: `Docs/CPP_KEYWORDS_NOTES.md` — 트랙 진행 중 사용자가 반복해서 헷갈린 C++ 키워드 정리(현재 `constexpr`, `explicit`). 새로 헷갈리는 게 나오면 이 파일에 추가.
+
+**잡일**: 저장소 루트에 `now_session.md`(사용자가 3단계 SESSION_LOG 항목을 옮겨 적어둔 스크래치 파일로 추정, 미커밋 상태)가 남아있음 — 필요 없으면 삭제, 계속 쓸 거면 `.gitignore` 추가 고려.
 
 ### [예정 작업] Qt/C++ 학습 내용 문서화 (2026-09-10 사용자 요청, 트랙 진행하면서 채움)
 

@@ -9444,3 +9444,583 @@ Q_DECLARE_METATYPE(Foo)   // → error: expected constructor... (QMetaType 없�
 
 **커밋**: `WORK_STATUS.md`/`Docs/SESSION_LOG.md`/`Docs/CPP_KEYWORDS_NOTES.md`(신규) + `APM_QtDashboard/` 7개 파일. `now_session.md`(루트, 사용자 작업 스크래치로 추정)는 커밋 대상에서 제외. 이어서 `origin/main`+`origin/master` push.
 
+## 2026-09-11 — Qt/MFC 트랙 4단계 설계·코드 제안: Model/View (QAbstractTableModel로 QTableWidget 대체)
+
+### 배경
+
+계획 §3-3 ③: "데이터가 늘어나도 위젯에 직접 값을 밀어넣지 않고 모델이 관리한다. 산업 SW는 표시할 항목이 수백 개가 되는 경우가 흔해서 이 구조를 쓴다." 지금(2~3단계) `PopulateMetricsTable`/`PopulateAlertTable`은 매번 `QTableWidgetItem`을 새로 만들어 `setItem()`으로 직접 꽂아 넣는다 — 행마다 아이템 객체가 따로 생기고, "데이터"와 "화면 표시"가 뷰(`QTableWidget`) 안에 뒤섞여 있다.
+
+4단계는 이걸 분리한다: **데이터는 모델(`QAbstractTableModel`)이 들고 있고, 뷰(`QTableView`)는 그 모델에게 "이 행 이 열 값 뭐야" 하고 물어보기만 한다.** 뷰가 여러 개(예: 같은 지표를 테이블로도, 나중에 차트로도 보여주기 — 5단계)여도 데이터는 한 군데(모델)에만 있으면 된다.
+
+### 설계 결정 1 — `QStandardItemModel`이 아니라 `QAbstractTableModel` 직접 상속
+
+Qt는 미리 만들어진 `QStandardItemModel`(각 셀이 `QStandardItem` 객체)도 제공하지만, 이건 결국 `QTableWidgetItem`과 비슷하게 **셀 하나하나가 객체**라 데이터가 많아지면 무겁다. `QAbstractTableModel`을 직접 상속하면 내부 데이터는 그냥 `QVector<MetricsSample>` 하나뿐이고, `data()` 함수가 "몇 번째 행/열이 필요하면 그 자리에서 계산해서 알려준다" — 셀 객체가 아예 없다. 계획 §3-3의 "수백 개 항목" 근거와 정확히 맞는 선택이고, 면접에서 "왜 QStandardItemModel 대신 직접 상속했나"에 답할 수 있는 지점이다.
+
+### 설계 결정 2 — 갱신은 `beginResetModel()`/`endResetModel()` (부분 갱신 아님)
+
+모델이 새 데이터를 받으면 뷰에 "데이터가 통째로 바뀌었다"고 알려야 한다. Qt가 제공하는 방법은 두 가지 층위다:
+
+| 방법 | 언제 쓰나 |
+| --- | --- |
+| `beginResetModel()` / `endResetModel()` | 데이터를 통째로 갈아끼울 때. 간단하지만 뷰의 선택 상태·스크롤 위치가 초기화됨 |
+| `beginInsertRows()`/`beginRemoveRows()` + `dataChanged()` | 행 단위로 정밀하게 갱신. 스크롤/선택 유지되지만 구현이 더 복잡함(옛/새 데이터 diff 필요) |
+
+지금은 "새로고침 = 최신 20개로 전체 교체"라는 단순한 갱신 모델이라 **첫 번째(reset)를 쓴다.** 나중에 데이터가 실시간으로 계속 쌓이는 형태(7단계 SignalR 구독)가 되면 정밀 갱신으로 바꾸는 걸 고려할 수 있다는 점만 기록해둔다.
+
+### 제안 — MetricsTableModel.h (신규)
+
+```cpp
+#pragma once
+#include <QAbstractTableModel>
+#include <QVector>
+
+#include "MetricsRepository.h"
+
+// step 4 : QTableWidget의 setItem() 대신 데이터(모델)와 표시(뷰)를 분리한다.
+// 이 모델은 QVector<MetricsSample>만 들고 있고, QTableView가 data()/headerData()로
+// 필요한 값을 그때그때 물어본다 - 셀마다 위젯 아이템 객체를 만들지 않는다.
+class MetricsTableModel : public QAbstractTableModel
+{
+    Q_OBJECT
+public:
+    explicit MetricsTableModel(QObject* parent = nullptr);
+
+    int rowCount(const QModelIndex& parent = QModelIndex()) const override;
+    int columnCount(const QModelIndex& parent = QModelIndex()) const override;
+    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+    QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
+
+public slots:
+    void SetSamples(const QVector<MetricsSample>& samples);
+
+private:
+    QVector<MetricsSample> _samples;
+};
+```
+
+### 제안 — MetricsTableModel.cpp (신규)
+
+```cpp
+#include "MetricsTableModel.h"
+
+namespace
+{
+constexpr int kColumnCount = 6;
+}
+
+MetricsTableModel::MetricsTableModel(QObject* parent)
+    : QAbstractTableModel(parent)
+{
+}
+
+int MetricsTableModel::rowCount(const QModelIndex& parent) const
+{
+    if (parent.isValid())
+        return 0;
+    return _samples.size();
+}
+
+int MetricsTableModel::columnCount(const QModelIndex& parent) const
+{
+    if (parent.isValid())
+        return 0;
+    return kColumnCount;
+}
+
+QVariant MetricsTableModel::data(const QModelIndex& index, int role) const
+{
+    if (!index.isValid() || role != Qt::DisplayRole)
+        return QVariant();
+
+    const MetricsSample& s = _samples.at(index.row());
+    const double memPercent = s.memTotalBytes > 0
+        ? s.memUsedBytes * 100.0 / s.memTotalBytes
+        : 0.0;
+    const double diskPercent = s.diskTotalBytes > 0
+        ? s.diskUsedBytes * 100.0 / s.diskTotalBytes
+        : 0.0;
+
+    switch (index.column())
+    {
+    case 0: return QString::number(s.id);
+    case 1: return s.ts;
+    case 2: return QString::number(s.cpuUsagePercent, 'f', 1);
+    case 3: return QString::number(memPercent, 'f', 1);
+    case 4: return QString::number(diskPercent, 'f', 1);
+    case 5: return QString("%1 / %2").arg(s.netRxBytesPerSec).arg(s.netTxBytesPerSec);
+    default: return QVariant();
+    }
+}
+
+QVariant MetricsTableModel::headerData(int section, Qt::Orientation orientation, int role) const
+{
+    if (role != Qt::DisplayRole || orientation != Qt::Horizontal)
+        return QVariant();
+
+    static const QStringList kHeaders = {"Id", "Ts", "CPU %", "Mem %", "Disk %", "Net Rx/Tx (B/s)"};
+    if (section < 0 || section >= kHeaders.size())
+        return QVariant();
+    return kHeaders.at(section);
+}
+
+void MetricsTableModel::SetSamples(const QVector<MetricsSample>& samples)
+{
+    beginResetModel();
+    _samples = samples;
+    endResetModel();
+}
+```
+
+### 제안 — AlertsTableModel.h (신규)
+
+```cpp
+#pragma once
+#include <QAbstractTableModel>
+#include <QVector>
+
+#include "MetricsRepository.h"
+
+// MetricsTableModel과 같은 이유 - AlertRecords 조회 결과 전용 모델.
+class AlertsTableModel : public QAbstractTableModel
+{
+    Q_OBJECT
+public:
+    explicit AlertsTableModel(QObject* parent = nullptr);
+
+    int rowCount(const QModelIndex& parent = QModelIndex()) const override;
+    int columnCount(const QModelIndex& parent = QModelIndex()) const override;
+    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+    QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
+
+public slots:
+    void SetAlerts(const QVector<AlertSample>& alerts);
+
+private:
+    QVector<AlertSample> _alerts;
+};
+```
+
+### 제안 — AlertsTableModel.cpp (신규)
+
+```cpp
+#include "AlertsTableModel.h"
+
+namespace
+{
+constexpr int kColumnCount = 5;
+
+// MainWindow.cpp에 있던 것과 같은 함수 - 모델로 옮겨온다.
+// AlertRecords.MetricType 값 순서는 APM_Console의 AlertMetricType enum과 반드시
+// 일치해야 한다(AlertThreshold.cs) - 두 프로젝트 사이의 암묵적 데이터 계약.
+QString MetricTypeToString(int metricType)
+{
+    switch (metricType)
+    {
+    case 0: return "CPU";
+    case 1: return "Memory";
+    case 2: return "Disk";
+    case 3: return "TCP RTT";
+    default: return QString("Unknown(%1)").arg(metricType);
+    }
+}
+}
+
+AlertsTableModel::AlertsTableModel(QObject* parent)
+    : QAbstractTableModel(parent)
+{
+}
+
+int AlertsTableModel::rowCount(const QModelIndex& parent) const
+{
+    if (parent.isValid())
+        return 0;
+    return _alerts.size();
+}
+
+int AlertsTableModel::columnCount(const QModelIndex& parent) const
+{
+    if (parent.isValid())
+        return 0;
+    return kColumnCount;
+}
+
+QVariant AlertsTableModel::data(const QModelIndex& index, int role) const
+{
+    if (!index.isValid() || role != Qt::DisplayRole)
+        return QVariant();
+
+    const AlertSample& a = _alerts.at(index.row());
+    switch (index.column())
+    {
+    case 0: return QString::number(a.id);
+    case 1: return MetricTypeToString(a.metricType);
+    case 2: return QString::number(a.thresholdValue, 'f', 1);
+    case 3: return QString::number(a.triggerValue, 'f', 1);
+    case 4: return a.openedAt;
+    default: return QVariant();
+    }
+}
+
+QVariant AlertsTableModel::headerData(int section, Qt::Orientation orientation, int role) const
+{
+    if (role != Qt::DisplayRole || orientation != Qt::Horizontal)
+        return QVariant();
+
+    static const QStringList kHeaders = {"Id", "Metric", "Threshold", "Trigger", "Opened At"};
+    if (section < 0 || section >= kHeaders.size())
+        return QVariant();
+    return kHeaders.at(section);
+}
+
+void AlertsTableModel::SetAlerts(const QVector<AlertSample>& alerts)
+{
+    beginResetModel();
+    _alerts = alerts;
+    endResetModel();
+}
+```
+
+**변경 사유(신규 파일 2개 공통)**: `rowCount`/`columnCount`/`data`/`headerData`는 `QAbstractTableModel`이 `QTableView`와 통신하기 위해 반드시 오버라이드해야 하는 최소 4종 세트다. `data()`가 `role`을 검사하는 이유는 Qt의 모델이 "같은 셀이라도 화면 표시용 값(`Qt::DisplayRole`)과 정렬용 값, 툴팁, 배경색 등 여러 역할(role)을 따로 요청받을 수 있다"는 구조라서다 — 지금은 `Qt::DisplayRole`만 채워서 "화면에 보이는 값"만 정의한다. `MetricTypeToString`은 `MainWindow.cpp`(익명 네임스페이스)에서 `AlertsTableModel.cpp`로 옮긴다 — 이제 이 문자열 변환은 "알림을 어떻게 보여줄지"의 일부라 뷰가 아니라 모델(정확히는 모델이 표현하는 데이터 가공)의 책임이 맞다.
+
+### 제안 — MainWindow.h (수정)
+
+**수정 전** (파일 전문):
+```cpp
+#pragma once
+#include <QMainWindow>
+#include <QVector>
+#include <QThread>
+
+#include "MetricsRepository.h"
+
+class QLabel;
+class QPushButton;
+class QTableWidget;
+class MetricsWorker;
+
+// 검증용 최소 창 : QPushButton::clicked 신호를 이 클래스의 슬롯에 연결
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+public:
+    explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
+
+signals:
+    // 워커 스레드의 Refresh() 슬롯에 큐 연결된다. emit 후 즉시 반환한다.
+    void RefreshRequested();
+
+private slots:
+    void OnRefreshClicked();
+    void OnWorkerInitialized(bool ok);
+    void OnRefreshFailed(const QString& reason);
+    void PopulateMetricsTable(const QVector<MetricsSample>& samples);
+    void PopulateAlertTable(const QVector<AlertSample>& alerts);
+
+private:
+    void SetStatus(const QString& text);
+
+private:
+    QThread _workerThread;
+    MetricsWorker* _worker = nullptr;
+
+    //MetricsRepository _repository = nullptr;
+    QTableWidget* _metricsTable = nullptr;
+    QTableWidget* _alertsTable = nullptr;
+    QPushButton* _refreshButton = nullptr;
+    QLabel* _statusLabel = nullptr;
+};
+```
+
+**수정 후**:
+```cpp
+#pragma once
+#include <QMainWindow>
+#include <QVector>
+#include <QThread>
+
+#include "MetricsRepository.h"
+
+class QLabel;
+class QPushButton;
+class QTableView;
+class MetricsWorker;
+class MetricsTableModel;
+class AlertsTableModel;
+
+// step 4 : 데이터(모델)와 표시(뷰)를 분리한다. QTableWidget → QTableView + Model.
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+public:
+    explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
+
+signals:
+    // 워커 스레드의 Refresh() 슬롯에 큐 연결된다. emit 후 즉시 반환한다.
+    void RefreshRequested();
+
+private slots:
+    void OnRefreshClicked();
+    void OnWorkerInitialized(bool ok);
+    void OnRefreshFailed(const QString& reason);
+    void PopulateMetricsTable(const QVector<MetricsSample>& samples);
+    void PopulateAlertTable(const QVector<AlertSample>& alerts);
+
+private:
+    void SetStatus(const QString& text);
+
+private:
+    QThread _workerThread;
+    MetricsWorker* _worker = nullptr;
+
+    MetricsTableModel* _metricsModel = nullptr;
+    AlertsTableModel* _alertsModel = nullptr;
+    QTableView* _metricsView = nullptr;
+    QTableView* _alertsView = nullptr;
+    QPushButton* _refreshButton = nullptr;
+    QLabel* _statusLabel = nullptr;
+};
+```
+
+**변경 사유**: `QTableWidget* _metricsTable/_alertsTable` → `QTableView* _metricsView/_alertsView` + `MetricsTableModel*`/`AlertsTableModel*`로 교체. `QTableWidget`은 "뷰+데이터"가 한 클래스에 합쳐진 편의 클래스라 이번 단계 취지(분리)와 안 맞아 순수 뷰인 `QTableView`로 바꾼다. `class QTableWidget;` 대신 `class QTableView;`, 모델 2개 전방 선언 추가. 3단계에서 이미 주석 처리해뒀던 `_repository` 줄은 이번에 완전히 삭제(더 이상 필요 없는 잔재).
+
+### 제안 — MainWindow.cpp (수정, 발췌 — 바뀌는 부분만)
+
+전체 파일을 다시 싣기엔 3단계와 겹치는 부분(워커 배선, 생성자/소멸자, `OnRefreshClicked`/`OnWorkerInitialized`/`OnRefreshFailed`/`SetStatus`)이 많아 **바뀌는 두 지점만** 전문으로 보인다. 나머지는 3단계 코드 그대로 유지.
+
+**수정 전** (헤더 include + 익명 네임스페이스, 파일 상단):
+```cpp
+#include "MainWindow.h"
+
+#include <QAbstractItemView>
+#include <QDateTime>
+#include <QHeaderView>
+#include <QLabel>
+#include <QPushButton>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QVBoxLayout>
+#include <QWidget>
+
+#include "MetricsWorker.h"
+
+namespace
+{
+// APM_Console의 appsettings.json Apm:ConnectionString과 같은 파일을 가리켜야 한다.
+// 이 체크아웃 기준 절대경로를 하드코딩 - Console 쪽도 지금 절대경로 하드코딩
+// 상태라 이식성 문제가 새로 생기는 건 아니다. 배포판을 만들 때(§6 8단계)
+// 커맨드라인 인자나 설정 파일로 뺄 것.
+const QString kConsoleDbPath = "/home/shkim/dev/APM/APM_Console/webserver_apm.db";
+
+// AlertRecords.MetricType 값 순서는 APM_Console의 AlertMetricType enum과 반드시
+// 일치해야 한다(AlertThreshold.cs) - 두 프로젝트 사이의 암묵적 데이터 계약.
+QString MetricTypeToString(int metricType)
+{
+    switch (metricType)
+    {
+    case 0: return "CPU";
+    case 1: return "Memory";
+    case 2: return "Disk";
+    case 3: return "TCP RTT";
+    default: return QString("Unknown(%1)").arg(metricType);
+    }
+}
+}
+```
+
+**수정 후**:
+```cpp
+#include "MainWindow.h"
+
+#include <QHeaderView>
+#include <QLabel>
+#include <QPushButton>
+#include <QTableView>
+#include <QVBoxLayout>
+#include <QWidget>
+
+#include "AlertsTableModel.h"
+#include "MetricsTableModel.h"
+#include "MetricsWorker.h"
+
+namespace
+{
+// APM_Console의 appsettings.json Apm:ConnectionString과 같은 파일을 가리켜야 한다.
+// 이 체크아웃 기준 절대경로를 하드코딩 - Console 쪽도 지금 절대경로 하드코딩
+// 상태라 이식성 문제가 새로 생기는 건 아니다. 배포판을 만들 때(§6 8단계)
+// 커맨드라인 인자나 설정 파일로 뺄 것.
+const QString kConsoleDbPath = "/home/shkim/dev/APM/APM_Console/webserver_apm.db";
+}
+```
+
+**변경 사유**: `QAbstractItemView`/`QTableWidget`/`QTableWidgetItem` include 제거(더 안 씀), `QTableView` 추가. `MetricTypeToString`은 `AlertsTableModel.cpp`로 옮겼으므로 여기서 제거. `#include "AlertsTableModel.h"`/`"MetricsTableModel.h"` 추가.
+
+**수정 전** (생성자 안 UI 구성 부분 + Populate 함수 2개):
+```cpp
+    _refreshButton = new QPushButton("새로고침", central);
+    _statusLabel = new QLabel("초기화 중...", central);
+
+    _metricsTable = new QTableWidget(central);
+    _metricsTable->setColumnCount(6);
+    _metricsTable->setHorizontalHeaderLabels(
+        {"Id", "Ts", "CPU %", "Mem %", "Disk %", "Net Rx/Tx (B/s)"});
+    _metricsTable->horizontalHeader()->setStretchLastSection(true);
+    _metricsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    _alertsTable = new QTableWidget(central);
+    _alertsTable->setColumnCount(5);
+    _alertsTable->setHorizontalHeaderLabels(
+        {"Id", "Metric", "Threshold", "Trigger", "Opened At"});
+    _alertsTable->horizontalHeader()->setStretchLastSection(true);
+    _alertsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    layout->addWidget(_refreshButton);
+    layout->addWidget(_statusLabel);
+    layout->addWidget(_metricsTable);
+    layout->addWidget(_alertsTable);
+    setCentralWidget(central);
+```
+```cpp
+void MainWindow::PopulateMetricsTable(const QVector<MetricsSample>& samples)
+{
+    _metricsTable->setRowCount(samples.size());
+    for (int row = 0; row < samples.size(); ++row)
+    {
+        const MetricsSample& s = samples[row];
+        const double memPercent = s.memTotalBytes > 0
+            ? s.memUsedBytes * 100.0 / s.memTotalBytes
+            : 0.0;
+        const double diskPercent = s.diskTotalBytes > 0
+            ? s.diskUsedBytes * 100.0 / s.diskTotalBytes
+            : 0.0;
+
+        _metricsTable->setItem(row, 0, new QTableWidgetItem(QString::number(s.id)));
+        _metricsTable->setItem(row, 1, new QTableWidgetItem(s.ts));
+        _metricsTable->setItem(row, 2, new QTableWidgetItem(QString::number(s.cpuUsagePercent, 'f', 1)));
+        _metricsTable->setItem(row, 3, new QTableWidgetItem(QString::number(memPercent, 'f', 1)));
+        _metricsTable->setItem(row, 4, new QTableWidgetItem(QString::number(diskPercent, 'f', 1)));
+        _metricsTable->setItem(row, 5, new QTableWidgetItem(
+            QString("%1 / %2").arg(s.netRxBytesPerSec).arg(s.netTxBytesPerSec)));
+    }
+    SetStatus(QString("갱신 완료 %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
+}
+
+void MainWindow::PopulateAlertTable(const QVector<AlertSample>& alerts)
+{
+    _alertsTable->setRowCount(alerts.size());
+    for (int row = 0; row < alerts.size(); ++row)
+    {
+        const AlertSample& a = alerts[row];
+        _alertsTable->setItem(row, 0, new QTableWidgetItem(QString::number(a.id)));
+        _alertsTable->setItem(row, 1, new QTableWidgetItem(MetricTypeToString(a.metricType)));
+        _alertsTable->setItem(row, 2, new QTableWidgetItem(QString::number(a.thresholdValue, 'f', 1)));
+        _alertsTable->setItem(row, 3, new QTableWidgetItem(QString::number(a.triggerValue, 'f', 1)));
+        _alertsTable->setItem(row, 4, new QTableWidgetItem(a.openedAt));
+    }
+}
+```
+
+**수정 후**:
+```cpp
+    _refreshButton = new QPushButton("새로고침", central);
+    _statusLabel = new QLabel("초기화 중...", central);
+
+    _metricsModel = new MetricsTableModel(this);
+    _metricsView = new QTableView(central);
+    _metricsView->setModel(_metricsModel);
+    _metricsView->horizontalHeader()->setStretchLastSection(true);
+    _metricsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    _alertsModel = new AlertsTableModel(this);
+    _alertsView = new QTableView(central);
+    _alertsView->setModel(_alertsModel);
+    _alertsView->horizontalHeader()->setStretchLastSection(true);
+    _alertsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    layout->addWidget(_refreshButton);
+    layout->addWidget(_statusLabel);
+    layout->addWidget(_metricsView);
+    layout->addWidget(_alertsView);
+    setCentralWidget(central);
+```
+```cpp
+void MainWindow::PopulateMetricsTable(const QVector<MetricsSample>& samples)
+{
+    _metricsModel->SetSamples(samples);
+    SetStatus(QString("갱신 완료 %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
+}
+
+void MainWindow::PopulateAlertTable(const QVector<AlertSample>& alerts)
+{
+    _alertsModel->SetAlerts(alerts);
+}
+```
+
+**변경 사유**: `QTableWidget`을 만들고 헤더/편집금지를 직접 설정하던 자리가 `QTableView` + `setModel()`로 바뀐다 — 헤더 라벨(`setHorizontalHeaderLabels`)은 이제 모델의 `headerData()`가 대신 답한다. `Populate*` 함수는 20줄 넘던 반복문이 **모델에 위임하는 한 줄**로 줄어든다 — "뷰/컨트롤러 코드에서 데이터 조립 로직이 사라졌다"가 이번 단계의 핵심 증거. `QTableView`는 `setEditTriggers`를 그대로 가지고 있어(`QAbstractItemView`의 멤버) 편집 금지 설정은 동일하게 유지된다. `_metricsModel`/`_alertsModel`의 부모를 `this`(MainWindow)로 둬서 `MainWindow` 소멸 시 자동 정리되게 함(Qt의 부모-자식 메모리 관리 — 1단계 때 배운 것과 연결).
+
+### 제안 — CMakeLists.txt (수정)
+
+**수정 전**:
+```cmake
+add_executable(APM_QtDashboard
+    main.cpp
+    MainWindow.cpp
+    MainWindow.h
+    MetricsRepository.cpp
+    MetricsRepository.h
+    MetricsWorker.cpp
+    MetricsWorker.h
+)
+```
+
+**수정 후**:
+```cmake
+add_executable(APM_QtDashboard
+    main.cpp
+    MainWindow.cpp
+    MainWindow.h
+    MetricsRepository.cpp
+    MetricsRepository.h
+    MetricsWorker.cpp
+    MetricsWorker.h
+    MetricsTableModel.cpp
+    MetricsTableModel.h
+    AlertsTableModel.cpp
+    AlertsTableModel.h
+)
+```
+
+**변경 사유**: 신규 파일 4개 추가. 둘 다 `Q_OBJECT`가 있으므로(슬롯 때문에) AUTOMOC 대상에 들어가야 한다. `QTableView`/`QAbstractTableModel`은 `Qt6::Widgets`/`Qt6::Core`에 이미 포함돼 있어 `find_package` 컴포넌트 추가는 불필요.
+
+### 검증 (미검증 — 사용자가 직접 작성/빌드 후 확인)
+
+1. 클린 빌드 성공 여부(`MetricsTableModel`/`AlertsTableModel` moc 포함).
+2. 화면상 표시가 3단계와 동일하게 보이는지(헤더 라벨, 값 정렬 등 — 겉보기엔 차이가 없어야 정상. Model/View 전환은 "내부 구조"의 변화이지 "겉보기"의 변화가 아님).
+3. 새로고침을 눌렀을 때 테이블이 갱신되는지(모델의 `beginResetModel`/`endResetModel` 경로 확인).
+4. `_metricsTable`/`_alertsTable`/`QTableWidgetItem`을 코드에서 grep해서 하나도 안 남았는지(완전히 교체됐는지 확인).
+
+### 결정 사항
+
+문서 제안만 — `APM_QtDashboard/`의 실제 소스는 사용자가 직접 작성(원칙 2, [[feedback_claude_md_rule2_scope]]). 작성 중 나오는 오타/컴파일 에러는 요청 시 수정 지원. 완료되면 `WORK_STATUS.md` 갱신 후 커밋 + push.
+
+### 4단계 — 직접 적용 (2026-09-13, 사용자 명시적 요청)
+
+사용자: "이 부분은 바로 적용해주고 다음 QtChart 이하는 내가 직접 작성하며 학습하겠다" — 원칙 2 예외(명시적 "적용해줘"). 위 제안 내용 그대로 Claude가 직접 작성/수정.
+
+**적용한 것**:
+- 사용자가 작성 중이던 `MetricsTableMode.h/.cpp`(파일명에 l 누락, 내부에 `QModeIndex`/`orientataion`/닫는 `};` 누락/`SetSample` 등 오타 다수)를 삭제하고, 제안 원문대로 `MetricsTableModel.h/.cpp` 신규 작성.
+- `AlertsTableModel.h/.cpp`(사용자가 일부 작성했으나 `QAbstractModel`/`QtL:DisplayRole` 등 오타 다수) — 제안 원문대로 덮어씀.
+- `MainWindow.h` — `QTableWidget`→`QTableView`+모델 2개 전방 선언/멤버 교체(제안 그대로).
+- `MainWindow.cpp` — include 교체, 생성자의 테이블 생성부를 뷰+모델로 교체, `PopulateMetricsTable`/`PopulateAlertTable`을 모델 위임 한 줄로 축소, 창 제목 `"step 3 (QThread worker)"` → `"step 4 (Model/View)"`로 갱신(제안엔 없었지만 이전 단계들과의 일관성을 위해 추가).
+- `CMakeLists.txt` — 신규 파일 4개 추가.
+
+**작업 중 발견한 내 실수**: include 블록을 통째로 교체하면서 `<QDateTime>`을 실수로 빠뜨림 → `error: incomplete type 'QDateTime' used in nested name specifier`. 빌드 에러로 바로 발견해서 그 자리에서 추가.
+
+**검증(직접)**:
+- `rm -rf build && cmake .. && cmake --build .` 클린 빌드 성공(6개 소스 + `MetricsTableModel`/`AlertsTableModel` moc 포함).
+- `QT_QPA_PLATFORM=offscreen` 헤드리스 실행 → stderr 경고 없음(3단계 때와 동일 기준).
+- `grep -rn "QTableWidget\|_metricsTable\|_alertsTable"` → 주석 2줄(설명용, "QTableWidget → QTableView"라는 문구) 외 실제 사용 없음 — 완전 교체 확인.
+
+**평가**: 4단계 완료.
+
