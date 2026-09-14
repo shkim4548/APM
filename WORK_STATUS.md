@@ -32,11 +32,11 @@
 4순위 : 함수/트랜잭션 레벨 계측                         ✅ 코드 적용 + protoc 재생성 + 빌드/테스트 검증 완료
 5순위 : 백분위/집계 통계                                ✅ 코드 적용 + 빌드/테스트 검증 완료
 6순위 : OpenTelemetry — 구현 보류, 면접용 답변 정리만  ⬜ 미착수
-7순위 : 원격 명령 실행 기능                            ⏸️ 보류(사유 아래 참고), 착수 여부 미정
-8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-13) — 0~4단계 완료, 5단계(QtCharts) 설계·코드 제안 준비 완료(SESSION_LOG 2026-09-13), 사용자 작성 대기
+7순위 : 원격 명령 실행 기능                            🔄 좁은 범위(시작/중지/재연결/로그레벨 고정 명령셋)로 재검토 확정(2026-09-14) — 8순위 아키텍처 개정에 의해 재개, 설계 미착수
+8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-14) — 아키텍처 대전환 확정("Agent 전용 로컬 대시보드+제어판"), `APM_Agent` Phase A(로컬 알림 판단+로컬 IPC 제어) 코드 적용+빌드+실행 검증 완료. 다음: Qt 2′~7′단계 재작업
 ```
 
-**8순위는 위 1~7과 독립된 별개 트랙이다** — APM 백엔드(1~7)는 완료 상태로 더 손댈 것이 없고, 여기에 Qt(신규)·MFC(기존 Viewer 보강)를 얹는 프론트엔드 작업을 새로 시작하는 것. 계획 전문은 `Docs/QT_MFC_PORTFOLIO_PLAN.md`.
+**8순위는 원래 위 1~7과 독립된 별개 트랙으로 시작했으나, 2026-09-14 아키텍처 개정으로 더 이상 독립이 아니다** — Qt 대시보드가 "그 장비의 Agent를 로컬로 보여주고 제어"하는 쪽으로 요구사항이 구체화되면서, `APM_Agent`/`Collector`/`Console`(1~7, 종전엔 "완료, 더 손댈 것 없음")에도 신규 작업(로컬 알림 판단, 로컬 IPC, 명령 라우팅 등)이 필요해졌고 이게 7순위(원격 명령 실행, 종전 보류)를 좁은 범위로 재개시켰다. 계획 전문은 `Docs/QT_MFC_PORTFOLIO_PLAN.md`(2026-09-14 대폭 개정).
 
 ---
 
@@ -650,26 +650,62 @@ Agent/Collector 변경 없음(Console 쪽만 닫히는 작업 — C++ 재빌드 
 
 **다음 세션 시작 시 확인할 것**: `APM_QtDashboard/`에 `MetricsChartWidget.*`가 생겼는지 확인. 검증 5개 항목(§SESSION_LOG). 완료되면 이 표(36줄) "0~5단계 완료"로 갱신 후 커밋+push.
 
-### [열린 결정 사항] Qt 트랙의 데이터 소스 방향 재검토 — 상당히 구체화됨 (2026-09-13)
+### [확정] Qt 트랙 아키텍처 대전환 — Console 클라이언트 → Agent 전용 로컬 대시보드+제어판 (2026-09-13/14)
 
-사용자가 대화 중 "원래는 APM_Console 없이 각 장비가 로컬로 자기 성능지표를 보는 걸 원했다"고 언급 → 코드로 확인해보니 **그 요구사항은 이미 `APM_Viewer`(MFC)가 구현하고 있음**(`ApmViewerDlg.cpp`의 `DB_PATH`가 `APM_Agent/apm_metrics.db`를 직접 가리킴, `SqliteReader.cpp`가 Agent 로컬 스키마를 그대로 읽음). 반면 `APM_QtDashboard`는 0~5단계 전부 `APM_Console/webserver_apm.db`(중앙 집계 DB) 대상으로 설계됨.
+사용자가 "원래는 APM_Console 없이 각 장비가 로컬로 자기 성능지표를 보는 걸 원했다"고 언급 → 대화로 요구사항을 구체화(AskUserQuestion 4회)하며 아래로 최종 확정. **이 절이 그 이전의 탐색적 메모를 대체한다.**
 
-**대화로 요구사항을 구체화(AskUserQuestion 2회 + 확인 중)**, 최종 정리된 목표 아키텍처:
-1. **로컬 뷰(기본, 항상 동작)** — 그 장비의 `APM_Agent/apm_metrics.db`를 직접 읽어 지표 표시. Console 없이도 항상 동작해야 함.
-2. **임계치 동기화(1회성, 시작 시)** — Console에 접속 가능하면 `AlertThresholds` 값을 한 번 받아와 로컬에 캐싱 → Qt가 로컬 지표에 대해 **직접 임계치 초과 여부를 판단**할 수 있게 함(Agent 로컬 DB엔 알림 개념 자체가 없음).
-3. **Console 실시간 오버레이(선택, 지속 연결)** — SignalR로 연결돼 있는 동안만 `NewMetric`/`AlertOpened`/`AlertResolved` 이벤트를 추가로 표시. **과거 이력 불필요** — 연결된 순간부터만.
-4. **독립성** — 임계치 동기화 후에는 Console이 꺼지거나 끊겨도 로컬 뷰는 계속 정상 동작해야 함(런타임에 Console을 필수로 요구하지 않음).
+**확정된 최종 아키텍처**:
+```
+Console (중앙, "원격 대시보드")
+   │  임계치 설정 + 변경 시 통지 (Console → Collector → Agent, 신규)
+   ▼
+Agent (각 장비) — 지표 수집(기존) + 로컬 알림 판단(신규) + 로컬 알림 저장(신규) + 로컬 제어 명령 처리(신규)
+   │  로컬 IPC (Qt와 Agent가 같은 장비)
+   ▼
+Qt Dashboard ("그 Agent 전용" 로컬 대시보드+제어판)
+```
+- **Qt는 Console을 전혀 모른다** — Console↔Agent 통신(임계치 통지 등)은 전부 Agent가 알아서 처리, Qt와 무관. (기각된 대안: Qt가 Console에 SignalR/HTTP로 직접 붙는 것 — 채택 안 함)
+- **Qt가 보는 것**: 그 장비 Agent의 로컬 DB(`apm_metrics.db`) — 지표 + (신규) 로컬 알림 상태.
+- **Qt가 하는 것 — "Agent 제어"**: 로컬 IPC로 그 Agent에 명령 전송. 확정된 명령 세트 — **시작/중지, 강제 재연결(Collector/Console), 로그 레벨 조정**(필요시 확장).
+- **사용자의 추가 기대**: 이 "Agent 제어" 인프라(명령 세트 + Agent 쪽 핸들러)가 Qt의 로컬 IPC뿐 아니라, **나중에 Console이 원격으로 같은 명령을 Agent에 내릴 수 있도록 재사용되길 기대**함 — Console 쪽엔 지금 이런 원격 제어 기능이 전혀 없음(`AlertsController.UpdateThresholds`가 임계치 DB 값만 바꿀 뿐, Agent에 통지/명령을 보내는 경로 자체가 없음). 즉 명령 채널을 "로컬(Qt→Agent, 지금 필요) / 원격(Console→Agent, 나중)" 두 경로로 같은 명령 정의를 재사용하도록 설계하는 것이 목표.
 
-**`APM_Console` 코드를 직접 확인한 기술적 사실(중요, 이번 방향 결정의 근거)**:
-- `DashboardController`/`AlertsController`는 **HTML(Razor View)만 반환** — JSON API가 전혀 없음.
-- `MetricsHub : Hub`는 **완전히 빈 클래스** — 클라이언트가 부를 수 있는 메서드 없음, 접속 시 과거 데이터를 보내는 로직도 없음. 서버(`MetricsReceiverService.cs`)가 새 이벤트 발생 시에만 `"NewMetric"`(전체 `MetricRecord`)/`"AlertOpened"`/`"AlertResolved"`(전체 `AlertRecord`)를 브로드캐스트할 뿐.
-- 즉 **진짜 네트워크로 다른 장비에서 Console에 접속하면 과거 이력을 받아올 방법이 현재 코드에 없음** — 2~5단계가 만든 "SQLite 파일 직접 열기"는 애초에 Console과 같은 장비에 있을 때만 가능한 방법이었음(실제 배포 시나리오와 안 맞음).
-- **임계치(`AlertThresholds`)를 받아오려면 Console에 작은 JSON 엔드포인트(예: `GET /apm/alerts/thresholds.json`)를 신규 추가해야 함** — 기존 동작을 안 건드리는 순수 추가라 "코어 무수정" 원칙에서 크게 벗어나진 않지만, Console 쪽 코드를 처음으로 건드리는 지점.
+**중요 — 이건 사실상 로드맵 7순위("원격 명령 실행")를 좁은 범위로 재개하는 것**: 7순위는 "임의 원격 명령 실행이 공급망 공격 벡터"라는 이유로 보류됐었다(위 "7순위 — 원격 명령 실행 ⏸️ 보류" 절 참고). 이번 요구는 **임의 실행이 아니라 미리 정해진 안전한 명령 집합**(시작/중지/재연결/로그레벨)이라 성격이 다르지만, "Console→Agent로 뭔가를 push하는 채널을 새로 연다"는 점에서 그 우려와 완전히 무관하지는 않음 — 의식하고 진행할 것.
 
-**남은 것**: 사용자에게 위 4개 항목 요약이 맞는지 확인 요청한 상태(응답 대기). 확정되면:
-1. `Docs/QT_MFC_PORTFOLIO_PLAN.md`부터 이 방향으로 재정리
-2. 0~5단계에서 만든 `MetricsRepository`/`MetricsWorker`/`MetricsTableModel`/`AlertsTableModel`/`MetricsChartWidget`을 "로컬 Agent 스키마 우선 + Console은 선택적 실시간 오버레이" 구조로 재설계(대대적 변경 예상 — 스키마 자체가 다름: snake_case vs PascalCase, epoch 정수 vs 문자열 타임스탬프, 로컬 DB엔 알림 테이블 자체가 없음)
-3. Console에 임계치 JSON 엔드포인트 신규 추가(작은 범위지만 Console 코드 최초 수정)
+**원칙 1("기존 코어 무수정")과의 충돌 — 의도적으로 좁힘**: 이 아키텍처는 `APM_Agent`(로컬 알림 판단+저장, 로컬 IPC 서버 — 전부 신규)뿐 아니라 `Collector`(세션 레지스트리, 명령 라우팅 — 위 "아키텍처 제약"에 이미 "원격 명령 실행 착수 시 채워야 함"으로 예견돼 있던 부분)와 `Console`(임계치 변경 시 Collector로 통지를 트리거하는 로직 추가)까지 건드려야 한다. **"8순위는 1~7과 완전히 독립된 트랙"이라는 지금까지의 전제가 깨짐** — 8순위(Qt/MFC) 작업이 7순위(원격 명령 실행)를 좁은 범위로 재개시키는 트리거가 됨.
+
+**기존 0~5단계 코드(Console DB 대상)의 처리**: `MetricsRepository`/`MetricsWorker`/`MetricsTableModel`/`AlertsTableModel`/`MetricsChartWidget`(전부 `APM_Console/webserver_apm.db` 스키마 대상)은 **이 최종 아키텍처에서 쓰이지 않는다**. 학습용으로 완성된 상태(빌드/헤드리스 실행 검증까지 완료)로 커밋에 남겨두고, 실제 폐기·재활용(Agent 로컬 스키마로 스키마만 바꿔 재사용 등) 여부는 미정 — 백엔드 설계가 구체화된 뒤 결정.
+
+**미정 항목 논의 완료(2026-09-14) → Phase A/B로 분리 확정**. `ApmSession::Start()`가 이미 양방향 수신 루프를 갖추고 있음(Agent가 핸들러를 안 등록해서 "미사용"이었을 뿐)과 `AlertThresholds`가 장비별이 아니라 전역 값이라는 점(Console→Agent 통지는 특정 Agent 라우팅이 아니라 "연결된 전체 브로드캐스트"로 충분)을 코드로 재확인 → 5개 중 2개는 지금 안 풀어도 된다는 게 드러남:
+- **확정(①③⑤)**: Qt↔Agent IPC = `QLocalSocket`/`QLocalServer`(Qt)↔Unix domain socket(Agent, Asio `local::stream_protocol`), Linux/WSL 우선. Agent 로컬 알림 스키마 = `local_alerts` 신규 테이블(스네이크케이스+epoch, 기존 `metrics` 관례 따름). 명령 세트 v1 = 시작/중지/강제 재연결/로그레벨 4개.
+- **Phase B로 이연(②④)**: Console↔Collector↔Agent 통지 프로토콜, Collector 세션 레지스트리(브로드캐스트용 연결 리스트 정도로 충분할 전망 — 최초 우려보다 범위 작음). **사용자 확인: "차후 확장으로 Console 임계치를 받는 기능도 추가하고 싶다"** — 폐기 아니고 확정된 미래 작업.
+
+**Phase A(지금 진행, Console/Collector 무수정)**: Agent가 하드코딩 기본 임계치(Console 시드값과 동일)로 로컬 알림 판단 + 로컬 IPC로 Qt 제어 명령 수신. **Phase B(나중, 확정)**: Console이 실제 임계치 변경을 Collector 경유로 전체 Agent에 브로드캐스트 → 하드코딩 값 대체.
+
+상세는 `Docs/QT_MFC_PORTFOLIO_PLAN.md` §8/§9(2026-09-14 재개정) 참고.
+
+**추가 정정(같은 날, 대화로 발견) — "Agent 로컬 DB"의 실체 및 알림 판단 위치**: `apm_metrics.db`는 실제로는 Agent가 아니라 **Collector**가 만드는 파일(`Collector/main.cpp`). 이 저장소의 실제 구조는 Agent(장비마다 여러 개)→Collector(중앙 1개)→Console(중앙 1개)라 "각 장비 로컬"이 되려면 **Collector도 장비마다 1개씩 띄우는 배치**가 필요 — 다행히 Collector 코드 변경은 불필요(에이전트 식별 로직 자체가 없어서 1:1 배치에 아무 문제 없음, `COLLECTOR_HOST=127.0.0.1` 기본값과도 일치). 그리고 **알림 판단은 Collector가 아니라 Agent가 해야 함**(사용자 지적) — Collector가 하면 역할 침해+ Agent↔Collector 연결 불량 시 알림까지 죽는 문제. 그래서 **Agent도 신규 로컬 DB가 필요**(`agent_alerts.db` 가칭, `local_alerts`만 — 지표는 Collector DB에 이미 있음). 최종 구조:
+```
+Qt ── SQLite 읽기 ──→ Collector의 apm_metrics.db (지표, 무수정)
+Qt ── SQLite 읽기 ──→ Agent의 신규 agent_alerts.db (local_alerts)
+Qt ── 로컬 IPC(QLocalSocket) ──→ Agent (제어 4종)
+```
+
+**"Collector가 알림 판단하는 건 Agent 역할 침해" 지적 반영 + "한 번에 다 할까" 재검토(같은 날)** — Collector 쪽에 알림 판단을 붙이자는 중간안을 사용자가 기각(정당한 지적 — 책임 경계 문제 + Agent↔Collector 연결 불량 시 알림도 죽는 문제). 확정: **Agent가 스스로 판단하고 자기 소유의 신규 로컬 DB(`agent_alerts.db`)에 기록**, Collector는 계속 완전 무수정. "합칠 이유 없다"는 사용자 반박도 맞음 — Collector는 Qt와 통신할 일이 아예 없어 프로세스 병합 불필요.
+
+**`APM_Agent` Phase A 전체 코드 설계 완료(2026-09-14)** — `Docs/SESSION_LOG.md` 2026-09-14 "`APM_Agent` Phase A 설계·코드 제안" 항목에 전문 작성(제안만, 소스 미작성 — 원칙 2). 신규 파일: `Agent/ThresholdSet.h/.cpp`, `Agent/LogLevel.h/.cpp`, `Agent/LocalAlertEvaluator.h/.cpp`(Console의 `AlertEvaluator.Evaluate()` C++ 이식), `Storage/AgentAlertStore.h/.cpp`(`SqliteMetricStore.cpp`와 동일 패턴), `Agent/AgentControlServer.h/.cpp`(Unix domain socket + 줄바꿈 구분 JSON, `nlohmann/json` 재사용). 수정 파일: `Common/ApmSession.h/.cpp`(`Close()` 추가), `Common/ResilientSender.h/.cpp`(`Pause()`/`Resume()`/`ForceReconnect()` 추가), `Agent/main.cpp`(전부 배선), `Storage/CMakeLists.txt`+루트 `CMakeLists.txt`(Agent가 처음으로 `APM_Storage`/SQLite3/third_party 링크 — `APM_STORAGE_BACKEND=TimescaleDB`를 골라도 이제 SQLite3 필수가 되는 부작용 명시).
+
+**`APM_Agent` Phase A 직접 적용 완료(2026-09-14, 이어지는 세션)** — 사용자가 "기존과 크게 다르지 않다, 직접 적용해줘"로 명시 요청(원칙 2 예외) → Claude가 위 SESSION_LOG 제안 그대로 전부 작성:
+- 신규: `Agent/ThresholdSet.h/.cpp`, `Agent/LogLevel.h/.cpp`, `Agent/LocalAlertEvaluator.h/.cpp`, `Storage/AgentAlertStore.h/.cpp`, `Agent/AgentControlServer.h/.cpp`
+- 수정: `Common/ApmSession.h/.cpp`(`Close()`), `Common/ResilientSender.h/.cpp`(`Pause()`/`Resume()`/`ForceReconnect()`), `Agent/main.cpp`(배선), `Storage/CMakeLists.txt`+루트 `CMakeLists.txt`(SQLite3/APM_Storage/third_party 링크)
+
+**검증(직접, 이 세션에서 실행까지 확인)**:
+- 클린 빌드 성공(`Agent`/`Collector`/`LoadTester` 전부, SQLite3 자동 탐지됨).
+- `Agent`만 단독 실행(Collector 없이) → `agent_alerts.db` 생성 확인(WAL 모드, `local_alerts` 스키마 정상), "connect failed: Connection refused"가 반복되는 와중에도 크래시 없이 계속 동작 — **Phase A 핵심 요구사항("Collector 연결 불량 시에도 로컬 판단은 살아있어야 한다") 실증**.
+- 로컬 IPC 소켓(`/tmp/apm_agent.sock`) 생성 확인, `start`/`stop`/`reconnect`/`set_log_level`/미지원 명령 5가지 전부 Python `socket` 클라이언트로 직접 테스트 — 전부 기대한 JSON 응답과 로그(`paused`/`resumed`/`force reconnect`) 정상 출력.
+- Collector를 실제로 띄운 상태에서 `reconnect` 명령 테스트 — 정상 연결 중이던 세션이 실제로 끊기고(`ApmSession::Close()` → `NotifyDisconnected` → `OnSessionDisconnected` → 재연결 스케줄) 기존 재연결 경로를 그대로 타는 것 확인.
+- **미검증(낮은 우선순위, 선택)**: 실제 CPU 90% 이상 부하를 걸어 알림 open/resolve 흐름 실측(`stress` 등 필요), `APM_STORAGE_BACKEND=TimescaleDB` 빌드 변형.
+
+**다음 할 일**: Qt 2′~7′단계 재작업(Collector DB+Agent DB 2개 대상으로 교체) — `Docs/QT_MFC_PORTFOLIO_PLAN.md` §9 참고. 커밋은 사용자 요청 시 진행.
 
 **참고 문서 신규**: `Docs/CPP_KEYWORDS_NOTES.md` — 트랙 진행 중 사용자가 반복해서 헷갈린 C++ 키워드 정리(현재 `constexpr`, `explicit`). 새로 헷갈리는 게 나오면 이 파일에 추가.
 

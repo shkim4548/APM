@@ -5,11 +5,18 @@
 #include "KeyLoader.h"
 #include "AesGcmPayload.h"
 #include "Protocol/Metric.pb.h"
+#include "ThresholdSet.h"
+#include "LocalAlertEvaluator.h"
+#include "AgentControlServer.h"
+#include "Storage/AgentAlertStore.h"
 
 namespace
 {
 	constexpr const char* COLLECTOR_HOST = "127.0.0.1";
 	constexpr unsigned short COLLECTOR_PORT = 9000;
+	// Phase A : Qt가 붙는 로컬 제어 소켓 경로. 장비당 Agent 하나라는 전제라 고정 경로로 충분.
+	constexpr const char* CONTROL_SOCKET_PATH = "/tmp/apm_agent.sock";
+	constexpr const char* ALERT_DB_PATH = "agent_alerts.db";
 }
 
 int main()
@@ -37,8 +44,14 @@ int main()
 				return std::make_unique<AesGcmPayload>(agentCollectorKey); 
 			});
 
+		// Phase A : 로컬 알림 판단. Collector에 apm_metrics.db가 이미 있으니 지표는 중복
+		// 저장하지 않고, 이 Agent 자신의 알림 이력만 별도 파일에 남긴다.
+		ThresholdSet thresholds;
+		AgentAlertStore alertStore(ALERT_DB_PATH);
+		LocalAlertEvaluator alertEvaluator(thresholds, alertStore);
+
 		MetricScheduler scheduler(ioContext, std::chrono::seconds(5),
-			[&sender](const SystemMetrics& metrics)
+			[&sender, &alertEvaluator](const SystemMetrics& metrics)
 			{
 				apm::Metric pkt;
 				pkt.set_cpu_usage_percent(metrics.cpuUsagePercent);
@@ -56,9 +69,15 @@ int main()
 				pkt.set_tcp_total_retrans(tcpInfo.totalRetrans);
 				pkt.set_tcp_snd_cwnd(tcpInfo.sndCwnd);
 
+				// Collector 전송 "전에" 로컬 판단 먼저 - Agent<->Collector 연결이 끊긴
+				// 상태에서도 로컬 알림은 항상 최신 상태를 유지하도록.
+				alertEvaluator.OnNewMetric(pkt);
 				sender.Enqueue(pkt);
 			});
 		scheduler.Start();
+
+		AgentControlServer controlServer(ioContext, CONTROL_SOCKET_PATH, scheduler, sender);
+		controlServer.Start();
 
 		ioContext.run();
 	}

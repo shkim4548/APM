@@ -204,3 +204,9 @@ TcpConnectionInfo ApmSession::GetConnectionInfo()
 
 	return info;
 }
+
+void ApmSession::Close()
+{
+	asio::error_code ec;
+	_sslStream.lowest_layer().close(ec);
+}

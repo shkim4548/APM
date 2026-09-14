@@ -81,7 +81,40 @@ void ResilientSender::OnSessionDisconnected()
 	_session = nullptr;
 	if (_onConnectionStateChanged)
 		_onConnectionStateChanged(false);
-	ScheduleReconnect();
+	if (!_paused)
+		ScheduleReconnect();
+}
+
+void ResilientSender::Pause()
+{
+	if (_paused)
+		return;
+
+	std::cout << "[ResilientSender] paused (제어 명령: 중지)" << std::endl;
+	_paused = true;
+	_reconnectTimer.cancel();
+	if (_session)
+		_session->Close();   // -> OnSessionDisconnected가 불리지만 _paused라 재연결은 안 걸림
+}
+
+void ResilientSender::Resume()
+{
+	if (!_paused)
+		return;
+
+	std::cout << "[ResilientSender] resumed (제어 명령: 시작)" << std::endl;
+	_paused = false;
+	Connect();
+}
+
+void ResilientSender::ForceReconnect()
+{
+	std::cout << "[ResilientSender] force reconnect (제어 명령: 강제 재연결)" << std::endl;
+	_reconnectTimer.cancel();
+	if (_session)
+		_session->Close();   // -> OnSessionDisconnected -> ScheduleReconnect (대기 없이 바로 이어짐)
+	else
+		Connect();            // 이미 끊긴 채 재연결 타이머 대기 중이었다면 지금 바로 시도
 }
 
 void ResilientSender::EnqueueRaw(uint16 id, String payload, SendCallback onComplete)

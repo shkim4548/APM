@@ -35,9 +35,18 @@
 
 > **2026-09-05 수정**: 기존 "크게 만들지 않는다" 원칙은 제외한다(사용자 판단) — 규모가 커지는 것 자체는 문제 아니다. 지금 단계에서 중요한 건 **합격할 만큼의 내용과 이론적 지식을 쌓는 것**이다. 즉 "면접에서 말할 판단 3~4개만 만들고 멈춘다"는 스코프 제한은 버리고, 대신 실제로 구현 범위를 넓히면서 그 밑에 깔린 이론(Qt 이벤트 루프/메타오브젝트 시스템, signal/slot 내부 동작, MVC 패턴, WebSocket/SignalR 프로토콜, MFC 메시지 펌프 등)까지 설명 가능한 수준으로 이해해두는 쪽에 우선순위를 둔다. §6 공수 견적의 "여기서 끊어도 된다"는 문구도 이 판단에 따라 걷어냈다.
 
-### 원칙 1 — 기존 코어를 건드리지 않는다
+### 원칙 1 — 기존 코어를 건드리지 않는다 (2026-09-14 개정: 의도적으로 좁힘)
 
-MFC Viewer 때와 같은 원칙. APM Agent/Collector/Console 코어 무수정, 별도 실행 파일, 데이터는 읽기 전용. 이 원칙 자체가 면접에서 말할 수 있는 판단이 된다.
+원래는 MFC Viewer 때와 같은 원칙 그대로 — APM Agent/Collector/Console 코어 무수정, 별도 실행 파일, 데이터는 읽기 전용이었다.
+
+**그런데 §3-2에서 확정된 "Agent 전용 로컬 대시보드+제어판" 방향은 이 원칙을 있는 그대로 지킬 수 없다** — Qt가 그 장비의 Agent를 실제로 *제어*(시작/중지/재연결/로그레벨)하려면 Agent 쪽에 그 명령을 받아 처리하는 코드가 새로 필요하고, Agent가 로컬로 알림을 판단하려면 Console이 정한 임계치를 받아오는 통로도 새로 필요하다. 즉 "읽기 전용"이 아니라 "제어 가능"이 요구사항 자체에 들어있다.
+
+**그래서 원칙을 이렇게 좁혀서 유지한다**: 코어를 "안 건드린다"가 아니라 **"의도치 않은 부작용 없이, 명시적으로 정의된 좁은 인터페이스로만 건드린다"**로 바꾼다 — 구체적으로:
+- Agent/Collector/Console에 추가하는 것은 전부 **미리 정해진 고정 명령 집합**(시작/중지/강제 재연결/로그레벨 조정 등)이지, 임의 코드 실행이나 범용 RPC가 아니다.
+- 기존 동작(지표 수집·전송·저장, 알림 판단, 웹 대시보드 렌더링)은 그대로 두고 **추가**만 한다 — 기존 로직을 변경하는 지점은 최소화한다.
+- 이 좁힘 자체가 `WORK_STATUS.md` 7순위("원격 명령 실행")를 예전에 보류시켰던 이유(임의 원격 명령 실행 = 공급망 공격 벡터)에 대한 직접적인 답이다 — "그때는 범위가 너무 넓어서 보류했고, 이번엔 고정된 안전한 명령 집합으로 좁혀서 재개한다"고 설명 가능한 판단으로 만든다.
+
+이 원칙 변경 자체(왜 무수정 원칙을 깼는가, 어떻게 리스크를 좁혔는가)가 면접에서 "원칙을 무조건 지키는 게 아니라 요구사항에 맞춰 재검토했다"는 근거로 쓸 수 있는 이야기가 된다.
 
 ### 원칙 2 — 실패 경로를 반드시 처리한다
 
@@ -49,59 +58,46 @@ MFC Viewer에서 "DB 없으면 재시도 대기중"을 넣은 것이 좋은 평�
 
 ## 3. Qt 대시보드 — 설계
 
-### 3-1. 무엇을 만드는가
+### 3-1. 무엇을 만드는가 (2026-09-14 개정)
 
-**APM Agent가 수집한 지표를 실시간 표시하는 관제 대시보드.** MFC Viewer의 Qt 버전이되, 산업 관제 SW에서 실제로 요구하는 요소를 담는다.
+> **옛 버전(2026-09-05~09-13, 0~5단계 구현됨)**: "APM Agent가 수집한 지표를 Console을 거쳐 실시간 표시하는 중앙 관제 대시보드." 코드까지 다 만들었으나(§6 옛 표 참고, `Docs/SESSION_LOG.md`에 전문 보존), 실제 요구사항과 다르다는 게 드러나 아래로 대체.
+
+**그 장비에 설치된 Agent 하나만을 위한 로컬 대시보드 + 제어판.** MFC Viewer가 이미 이 방향(로컬 SQLite 직접 읽기, `APM_Viewer/APM_Viewer/ApmViewerDlg.cpp`)이었다 — Qt 버전은 여기에 **제어**까지 더한다. Console은 별개의 "원격 대시보드"이고, 이 문서가 다루는 건 그 대칭점인 "로컬 대시보드"다.
 
 | 화면 요소 | 왜 필요한가 |
 | --- | --- |
-| 실시간 지표 테이블 | Model/View 아키텍처 시연 |
+| 실시간 지표 테이블 | Model/View 아키텍처 시연. 데이터 소스는 그 장비의 `apm_metrics.db` |
 | 시계열 차트 (CPU·메모리) | QtCharts. 계측·관제 SW의 기본 |
-| 임계값 초과 알림 표시 | 상태 색상 변화. HMI의 핵심 요구 |
-| 연결 상태 인디케이터 | 실패 경로 처리 |
+| 임계값 초과 알림 표시 | Agent가 Console에서 받은 임계치로 **로컬 판단**한 결과를 표시(Qt가 직접 판단하는 게 아니라 Agent가 판단한 걸 보여줌) |
+| Agent↔Console 연결 상태 인디케이터 | 실패 경로 처리 — "지금 Console과 연결이 끊긴 상태"임을 로컬 뷰에서도 알 수 있어야 함 |
+| **제어판(신규)** | 시작/중지, 강제 재연결, 로그 레벨 조정 — GUI에서 그 장비의 Agent를 직접 조작 |
 
-### 3-2. 데이터 연결 방식 — 코드 확인 결과 재정리 (2026-09-05)
+### 3-2. 데이터/제어 연결 방식 (2026-09-14 전면 재작성 — 3번째 개정)
 
-최초 초안은 "A안(SQLite 폴링) vs B안(Collector TCP 직접 수신)" 양자택일로 적혀 있었으나,
-`Collector/main.cpp`와 `APM_Console`의 컨트롤러/SignalR 허브 코드를 실제로 다시 읽어보니
-이 구도 자체가 부정확했다. 실제로는 3가지 경로가 있고, 그중 가장 저렴한 조합이 초안에는
-아예 없었다.
+**결론부터: Qt는 Console을 전혀 모른다.** Qt가 상대하는 건 오직 **그 장비에 같이 떠 있는 Agent**뿐이다. Console↔Agent 사이의 통신(임계치 설정/통지)은 둘이 알아서 처리하고, Qt는 그 존재 자체를 몰라도 된다.
 
-**확인된 사실**:
-- **Collector**가 여는 리스너는 Agent 전용 프로토콜(`PacketHeader{size,id}` 프레이밍 +
-  `AesGcmPayload` 암호화 + protobuf `Metric.proto`) 하나뿐이다. 조회용 평문 포트는 없다.
-- **APM_Console**의 `DashboardController`/`AlertsController`는 `View(recent)`로 Razor
-  HTML을 반환할 뿐이라 JSON을 주는 REST API가 없다.
-- 반면 **`/apm/hub/metrics`(SignalR 허브)**는 표준 SignalR JSON 프로토콜(`negotiate` →
-  WebSocket 업그레이드, camelCase JSON, `"NewMetric"`/`"AlertOpened"`/`"AlertResolved"`
-  이벤트)로 동작한다. 이건 브라우저 전용 메커니즘이 아니라 문서화된 프로토콜이라, Qt에서
-  `QWebSocket`으로 같은 handshake+JSON 포맷만 구현하면 **Console 코드를 한 줄도 안 건드리고**
-  웹 대시보드와 동등한 실시간 이벤트를 받을 수 있다.
+```
+Console (중앙)
+   │  임계치 설정 + 변경 시 통지  (신규 — Console → Collector → Agent)
+   ▼
+Agent (각 장비)
+   │  지표 수집(기존) + 로컬 알림 판단(신규) + 로컬 알림 저장(신규) + 로컬 제어 명령 처리(신규)
+   │
+   │  로컬 IPC (Qt와 Agent가 같은 장비 — 메커니즘 미정, §8 참고)
+   ▼
+Qt Dashboard — "이 Agent 전용" 로컬 대시보드 + 제어판
+```
 
-| 경로 | 구현 비용 | 코어 수정 필요 여부 | 비고 |
-| --- | --- | --- | --- |
-| Collector에 직접 TCP(구 B안) | 높음 — AES-GCM+protobuf 프로토콜 스택 재구현 | 없음(리스너 자체는 그대로) | 사실상 "Agent 흉내"를 만드는 것과 같아 원래 견적(3~4일)에 안 맞음 |
-| SQLite 폴링(구 A안) | 낮음 — MFC Viewer와 동일 패턴 | 없음 | "새 이야깃거리가 없다"던 원래 평가는 재고 필요 — 아래 참고 |
-| **Console SignalR 구독(신규 발견)** | 중간 — `QWebSocket`으로 SignalR JSON 프로토콜만 구현, 암호화 스택 불필요 | 없음(기존 허브 그대로 사용) | 웹이 쓰는 실시간 채널을 네이티브 클라이언트가 함께 구독 |
+**Qt 쪽에서 하는 일 — 전부 로컬**:
+- Agent의 로컬 `apm_metrics.db`를 직접 읽어 지표 표시(MFC Viewer와 같은 방식 — 이미 검증된 패턴).
+- (신규) Agent 로컬 DB에 새로 생길 알림 테이블을 읽어 알림 상태 표시.
+- (신규) 로컬 IPC로 Agent에 제어 명령(시작/중지/강제 재연결/로그레벨) 전송.
 
-**SQLite 폴링을 "새 이야깃거리 없음"으로 깎아내렸던 부분도 정정**: Collector는 이미
-WAL 모드(`journal_mode=WAL`+`synchronous=NORMAL`)로 전환되어 있다. Qt 뷰어가 쓰기와
-동시에 이 DB를 읽어도 안전하다는 걸 실제로 증명하는 두 번째 동시 리더가 되는 것이므로,
-백엔드 스케일 작업(WAL 도입 라운드)과 자연스럽게 이어지는 이야기가 된다 — MFC Viewer와
-"똑같은 방식"이 아니라 "그 방식이 WAL 덕분에 여러 클라이언트로 안전하게 확장된다는 걸
-보여주는 두 번째 사례"로 재구성 가능.
+**이전 버전(옛 §3-2, "SQLite+SignalR 하이브리드")은 왜 폐기됐나**: Console의 `DashboardController`/`AlertsController`는 HTML만 반환하고 JSON API가 없으며, `MetricsHub`(SignalR)는 완전히 빈 브로드캐스트 전용 허브라 과거 이력을 못 준다(연결 이후 이벤트만). 게다가 "SQLite 파일을 직접 열기"는 Console과 **같은 장비**에 있을 때만 되는 방법이라, 애초에 실제 배포 시나리오(Agent 장비 ≠ Console 서버)와 안 맞았다. 이 문제를 어차피 풀어야 했는데, 사용자와의 대화에서 **"Qt가 Console에 직접 붙을 필요 자체가 없다"**는 훨씬 단순한 답이 나왔다 — Agent가 중개자 역할을 다 하기 때문.
 
-**SignalR 허브만으로는 과거 데이터를 못 채운다**: 허브는 "이후 이벤트"만 push하고,
-최초 화면(예: 최근 20건)은 서버가 HTML로 구워 내려줄 뿐 JSON이 아니다. 따라서 SignalR
-경로를 쓰더라도 **시작 시 과거 데이터는 SQLite 직접 조회로 채우고, 이후 갱신만 SignalR로
-받는 하이브리드**가 되어야 한다.
+**Agent 제어 명령 세트(확정)**: 시작/중지, 강제 재연결(Collector/Console), 로그 레벨 조정. 이 명령 정의는 **로컬(Qt→Agent)과 원격(Console→Agent, 나중) 두 채널에서 재사용**하도록 설계한다 — Console 쪽엔 지금 이런 원격 제어 기능이 전혀 없어서, 이번 작업이 그 공백도 같이 메운다.
 
-**권장안**: **SQLite(초기 적재) + SignalR 구독(실시간 갱신)** 하이브리드. 셋 중 구현
-비용이 가장 낮으면서, 셋 중 가장 신선한 이야깃거리(웹 대시보드와 같은 실시간 채널을
-네이티브 C++ 클라이언트가 함께 구독)를 준다. "왜 Collector에 직접 안 붙었는가"라는
-질문에도 "코드부터 확인했더니 거긴 Agent 전용 암호화 프로토콜이라 조회 채널이 아니었고,
-Console이 이미 읽기 전용 실시간 채널(SignalR)을 열어두고 있어서 그걸 썼다"고 구체적으로
-답할 수 있다.
+**대가**: 이 방향은 §2 원칙 1을 그대로 지킬 수 없다(위 원칙 1 개정 참고) — Agent/Collector/Console 모두에 신규 코드가 필요하다. 상세 기술 부채와 미정 사항은 §8 참고.
 
 ### 3-3. 반드시 담을 기술 요소 4개
 
@@ -113,7 +109,7 @@ Qt의 정체성. 콜백 대신 느슨하게 결합된 이벤트 전달. "왜 콜
 
 **② QThread — UI 스레드를 블로킹하지 않는다** ⭐ 가장 중요
 
-네트워크 수신(SignalR/WebSocket)이나 DB 조회를 UI 스레드에서 하면 화면이 멈춘다. 워커 스레드에서 처리하고 signal로 결과만 UI에 넘긴다.
+로컬 DB 조회나 로컬 IPC 호출(Agent 응답 대기)을 UI 스레드에서 하면 화면이 멈춘다. 워커 스레드에서 처리하고 signal로 결과만 UI에 넘긴다. (2026-09-14: "네트워크 수신"이 아니라 "로컬 DB/IPC"로 대상이 바뀌었지만 구조적 이유는 동일 — 응답이 언제 올지 모르는 작업은 전부 UI 스레드 밖에서.)
 
 > **이 항목이 APM Agent의 fdatasync 사건과 정확히 같은 문제다.** 저장 작업이 네트워크 스레드를 블로킹했던 것 = 블로킹 작업이 UI 스레드를 멈추는 것. 층위만 다르고 구조가 같다. **면접에서 이 연결을 말할 수 있으면 강하다.**
 
@@ -124,6 +120,10 @@ Qt의 정체성. 콜백 대신 느슨하게 결합된 이벤트 전달. "왜 콜
 **④ QtCharts 실시간 갱신**
 
 시계열 데이터를 일정 주기로 갱신하며 오래된 점을 버린다. 갱신 주기와 데이터 보관 개수를 어떻게 정했는지가 질문거리가 된다 — 백엔드의 retention 정책(Metrics 30일/AlertRecord 180일) 설계와 같은 사고방식("오래된 데이터를 언제·왜 버리는가")을 프론트 버퍼 크기 결정에도 그대로 적용했다고 연결하면 좋다.
+
+**⑤ 로컬 IPC로 제어 (2026-09-14 신규)**
+
+관제 SW는 "보여주기"만이 아니라 "조작하기"까지 요구되는 경우가 흔하다(HMI의 핵심). Qt가 로컬 IPC(메커니즘 미정, §8)로 Agent에 명령을 보내고 결과를 받는 구조를 만든다 — 이때도 ②(QThread)가 그대로 적용된다: IPC 호출도 응답을 기다려야 하니 UI 스레드에서 하면 안 된다.
 
 ### 3-4. Qt Widgets vs QML — Widgets 선택
 
@@ -197,19 +197,34 @@ Qt를 만들고 나면 자연스럽게 생기는 이야깃거리다.
 
 ## 6. 공수 견적
 
-| 단계 | 내용 | 시간 | 선행 정본 문서 |
-| --- | --- | --- | --- |
-| 0 | Qt 설치, Qt Creator로 빈 프로젝트 빌드 확인 | 1~2시간 | — |
-| 1 | 다이얼로그 + 버튼 하나. Signal/Slot 동작 확인 | 2시간 | [Signals & Slots](https://doc.qt.io/qt-6/signalsandslots.html), [The Meta-Object System](https://doc.qt.io/qt-6/metaobjects.html) |
-| 2 | SQLite로 초기 데이터 표시(§3-2 하이브리드의 절반) | 3~4시간 | [Qt SQL (개요/모듈)](https://doc.qt.io/qt-6/sql-programming.html) |
-| 3 | QThread 워커 분리 | 3시간 | [Threading Basics](https://doc.qt.io/qt-6/thread-basics.html), [QThread](https://doc.qt.io/qt-6/qthread.html) |
-| 4 | QAbstractTableModel + TableView | 4시간 | [Model/View Programming](https://doc.qt.io/qt-6/model-view-programming.html) |
-| 5 | QtCharts 실시간 갱신 | 3시간 | [Qt Charts Overview](https://doc.qt.io/qt-6/qtcharts-index.html) |
-| 6 | 임계값 색상, 연결 끊김 처리 | 2시간 | [The Event System](https://doc.qt.io/qt-6/eventsandfilters.html)(상태 변화 처리 배경 이론) |
-| 7 | `QWebSocket`으로 SignalR 구독 연결(§3-2 하이브리드의 나머지 절반) | 4~6시간 — SignalR JSON 프로토콜(negotiate+handshake)을 직접 구현해야 해서 처음 도전 시 가장 불확실성 큰 단계 | [Qt WebSockets Overview](https://doc.qt.io/qt-6/qtwebsockets-index.html), [ASP.NET Core SignalR Transport Protocols](https://github.com/dotnet/aspnetcore/blob/main/src/SignalR/docs/specs/TransportProtocols.md), [SignalR Hub Protocol](https://github.com/dotnet/aspnetcore/blob/main/src/SignalR/docs/specs/HubProtocol.md) |
-| 8 | 배포판 구성(동적 링크 확인) — LGPL 답변을 실제로 뒷받침하려면 최소 1회 필요 | 2시간 | [Qt Licensing](https://doc.qt.io/qt-6/licensing.html), [Deploying Qt Applications](https://doc.qt.io/qt-6/deployment.html) |
+### 옛 표 (2026-09-05~13, Console 클라이언트 방향 — 0~5단계 실제 구현 완료, 최종 아키텍처엔 미채택)
 
-**총 4~5일은 최소 바닥선**(0~8단계 전부 완료 기준)이지 목표 상한이 아니다 — §2 수정에 따라 "여기서 끊어도 된다"는 스코프 제한을 걷어냈으므로, 시간이 허락하면 각 단계를 마친 뒤 그 밑에 깔린 이론(예: 5단계 QtCharts를 붙였으면 Qt의 이벤트 루프가 화면 갱신 타이밍을 어떻게 스케줄링하는지, 7단계 SignalR을 붙였으면 negotiate 핸드셰이크의 각 필드가 왜 필요한지)까지 설명 가능한 수준으로 파고든 뒤 다음 단계로 넘어간다. 단계마다 동작 확인하고 스크린샷을 남긴다.
+| 단계 | 내용 | 상태 |
+| --- | --- | --- |
+| 0 | Qt 설치, 빈 프로젝트 빌드 확인 | ✅ 완료 |
+| 1 | 다이얼로그 + 버튼. Signal/Slot 확인 | ✅ 완료 |
+| 2 | SQLite(Console DB)로 초기 데이터 표시 | ✅ 완료 |
+| 3 | QThread 워커 분리 | ✅ 완료 |
+| 4 | QAbstractTableModel + TableView | ✅ 완료 |
+| 5 | QtCharts 실시간 갱신 | ✅ 완료 |
+| 6~8(옛) | 상태/이벤트, `QWebSocket`으로 SignalR 구독, 배포판 | 미착수 — 2026-09-14 방향 전환으로 폐기 |
+
+코드 전문은 `Docs/SESSION_LOG.md`(2026-09-07~13 항목들)에 보존. 1~5단계에서 배운 Qt 개념(signal/slot, QThread+moveToThread, Q_DECLARE_METATYPE, Model/View, QChart)은 새 방향에서도 그대로 재사용 가능 — 바뀌는 건 "무엇을 조회하는가"(Console DB → Agent 로컬 DB)와 "여기에 제어가 추가된다"는 점.
+
+### 새 표 (2026-09-14 확정, Agent 전용 로컬 대시보드+제어판 방향)
+
+| 단계 | 내용 | 비고 |
+| --- | --- | --- |
+| 0~1 | (완료 그대로 유지) 빈 프로젝트 + Signal/Slot | 재작업 불필요 |
+| 2′ | SQLite로 초기 데이터 표시 — **대상을 Console DB에서 Agent 로컬 DB(`apm_metrics.db`)로 교체** | 스키마 재설계(snake_case, epoch 타임스탬프). `MetricsRepository` 재작성 |
+| 3′ | QThread 워커 분리 | 로직은 거의 그대로, 대상 DB만 바뀜 |
+| 4′ | QAbstractTableModel + TableView | 그대로 재사용 가능(모델 인터페이스는 스키마에 안 묶임) |
+| 5′ | QtCharts 실시간 갱신 | 그대로 재사용 가능 |
+| 6′ | Agent 로컬 알림 판단 결과 표시 + Agent↔Console 연결 상태 인디케이터 | Agent 쪽에 알림 판단/저장 로직 신규 필요(백엔드 작업, Qt 밖) |
+| 7′ | 로컬 IPC로 Agent 제어(시작/중지/재연결/로그레벨) | IPC 메커니즘 미정(§8). Qt 쪽엔 이 자체가 신규 학습 요소 |
+| 8 | 배포판 구성(동적 링크 확인) | 옛 계획과 동일하게 유지 |
+
+**공수 시간은 아직 추정하지 않는다** — 2′/6′/7′ 모두 `APM_Agent`(그리고 6′/7′은 `Collector`/`Console`까지) 쪽 신규 백엔드 설계가 먼저 확정돼야 정확한 견적이 나온다(§8 "아직 미정인 것" 참고). 이 표는 "무엇을 다시 해야 하는가"의 목록이지 시간 견적표가 아니다.
 
 > 유일하게 유지하는 체크포인트: **환경 문제(빌드/설치)로 하루 넘게 못 넘어가면 일단 원인만 기록하고 다음 단계로 이동, 나중에 재시도**. 이건 스코프를 줄이자는 게 아니라 인프라 문제에 발이 묶이는 걸 막기 위한 것 — 구현 범위 자체는 계속 넓혀간다.
 
@@ -226,9 +241,9 @@ Qt를 만들고 나면 자연스럽게 생기는 이야깃거리다.
        "APM Agent — 수집부터 관제 화면까지"
 
 [중앙] 아키텍처 다이어그램 하나
-       Agent(C++) → 암호화 → Collector → SQLite
-                                   ↓
-                    Qt 대시보드(SQLite+SignalR) / MFC 뷰어(SQLite) / 웹 대시보드(SignalR)
+       Agent(C++) → 암호화 → Collector → SQLite(중앙) → Console(웹, SignalR)
+         │
+         └→ 로컬 SQLite → Qt 대시보드(로컬+제어) / MFC 뷰어(로컬)
 
 [하단] 핵심 수치 4개
        300 동시접속 · 단위테스트 27건 · 4개 플랫폼 · 버그 10건
@@ -242,16 +257,51 @@ Qt를 만들고 나면 자연스럽게 생기는 이야깃거리다.
 
 ## 8. 남은 실행 준비 (구 "확인 필요" 항목 정리)
 
-- [x] **APM Collector가 외부 조회용 포트를 여는 구조인지** — 확인 완료(2026-09-05). 아니오, 열지 않음. Agent 전용 암호화 프로토콜 리스너 하나뿐. 대신 Console이 읽기 전용 실시간 채널(SignalR `/apm/hub/metrics`)을 이미 열어두고 있음. 근거: `CODE_ARCHITECTURE.md` §13.
-- [x] **Qt 코드가 이 저장소 어디에 들어갈지** — 결정(2026-09-06): `GW2_CrossPlatformCore`/`APM_Agent`/`APM_Console`과 나란히 신규 최상위 디렉토리 `APM_QtDashboard/`로 둔다. 기존 저장소 관례(도메인별 최상위 디렉토리 + 각자 `HOW_TO_RUN.md`)를 그대로 따름 — 별도 협의 없이 이 구조로 착수.
-- [ ] **테스트 대상 최소 범위** — 이 저장소 전체가 테스트 문화(유닛테스트 27건, 부하테스트, strace 실측)를 서사로 쓰고 있으므로 Qt 파트만 테스트가 전혀 없으면 균형이 깨진다. `QAbstractTableModel`의 데이터 갱신/임계값 판정처럼 위젯과 분리 가능한 로직은 최소 유닛테스트 대상으로 잡아둘 것. (착수 후 §6 4단계 전후로 결정해도 늦지 않음 — 코딩 시작을 막는 항목 아님)
-- [x] Qt 버전 선택 — 결정(2026-09-06): **Qt 6**. 타겟 회사가 Qt 5를 쓸 수도 있으나 학습 목적으로는 6이 낫다는 원래 판단 그대로 채택.
-- [ ] 자이크론·이에이트 공고에 Qt Widgets/QML 중 명시가 있는지 재확인. (착수를 막는 항목 아님 — §3-4에서 이미 Widgets로 결정했고, 공고 확인은 병행 가능)
+**해결된 옛 항목**:
+- [x] APM Collector가 외부 조회용 포트를 여는 구조인지 — 확인 완료(2026-09-05, 근거 `CODE_ARCHITECTURE.md` §13). *(옛 §3-2 방향의 근거였으나 그 방향 자체가 폐기됨 — 결론만 참고용으로 남김)*
+- [x] Qt 코드 위치 — `APM_QtDashboard/`(2026-09-06 확정, 유지).
+- [x] Qt 버전 — Qt 6(2026-09-06 확정, 유지).
+- [ ] 테스트 대상 최소 범위, 공고 Qt Widgets/QML 명시 확인 — 여전히 비차단, 미정.
 
-## 9. 진행 순서
+**2026-09-14 논의 후 확정 — Phase A(지금)/Phase B(나중)로 분리**:
 
-1. **Qt 설치 및 0~2단계** — "Qt를 다뤄봤다"를 사실로 만드는 게 최우선
-2. **8절 미확정 항목 중 저장소 위치·테스트 범위 결정**
-3. **3~8단계(SignalR 구독 + 배포판 구성 포함) 전부 완료** — 각 단계를 마칠 때마다 §2에서 정한 대로 그 밑 이론까지 설명 가능한 수준으로 정리하고 넘어간다
-4. **인쇄용 1장 제작**
-5. **경력기술서에 Qt 항목 추가**
+기존 코드를 다시 확인해보니(`ApmSession::Start(ReadyCallback, DisconnectedCallback, PacketCallback)`가 이미 양방향 수신 루프를 갖추고 있음 — Agent가 그냥 아무 핸들러도 안 등록해서 "미사용"이었을 뿐, 새로 만들 필요는 없음. 또한 `AlertThresholds`는 장비별이 아니라 **전역** 값이라 Console→Agent 통지는 "특정 Agent 하나를 골라 라우팅"이 아니라 **연결된 전체 Agent에 브로드캐스트**하면 됨) 5개 항목 중 2개는 지금 당장 안 풀어도 된다는 게 드러남:
+
+- [x] **① Qt↔Agent 로컬 IPC** — `QLocalSocket`/`QLocalServer`(Qt) ↔ Unix domain socket(Agent, Asio `local::stream_protocol`) 확정. Linux/WSL 우선, Windows 네임드파이프는 스트레치 목표로 미룸.
+- [x] **③ Agent 로컬 알림 스키마** — `local_alerts` 신규 테이블, 스네이크케이스+epoch(기존 `metrics` 테이블 관례를 따름, Console의 PascalCase+문자열타임스탬프는 안 베낌). `closed_at IS NULL` = 열린 알림(Console과 같은 의미론).
+- [x] **⑤ 명령 세트** — 시작/중지/강제 재연결/로그 레벨 4개로 v1 확정. 확장(임계치 로컬 오버라이드 등)은 백로그.
+- [ ] **② Console↔Collector↔Agent 명령/통지 프로토콜** — **Phase B로 이연**. 사용자 확인(2026-09-14): "차후 확장으로 Console 임계치를 받는 기능도 추가하고 싶다" — 폐기 아니고 나중에 반드시 할 일로 남김.
+- [ ] **④ Collector 세션 레지스트리** — **Phase B로 이연**. 위 발견대로 "전체 브로드캐스트용 연결 리스트" 정도로 충분할 전망이라 최초 우려보다 범위가 작음. Phase B 착수 시 설계.
+
+**Phase A (지금 진행)** — Console/Collector 완전 무수정. Agent가 **하드코딩된 기본 임계치**(Console 시드값과 동일: Cpu@90/Memory@90/Disk@90/TcpRttUs@200000)로 로컬 알림을 스스로 판단 + 로컬 IPC로 Qt의 제어 명령 수신. Qt는 Agent 로컬 DB(지표+`local_alerts`)를 보여주고 제어 UI를 제공.
+
+**Phase B (나중, 확정된 확장 목표)** — Console이 실제 임계치 변경을 Collector 경유로 전체 Agent에 브로드캐스트 → Agent의 하드코딩 값을 대체. 이때 ②④ 설계.
+
+**"한 번에 다 하는 게 낫지 않나" 분석(2026-09-14, 사용자 문제 제기)**: 시간이 부족한 상황이라 Phase A/B를 나누는 대신 한 번에 끝내는 게 더 빠를 수 있다는 문제 제기 → 결합도 분석 결과 **분리해도 재작업이 거의 없어 분리 유지가 유리**하다고 결론(사용자 확인, 그대로 진행):
+- 로컬 알림 판단 로직·로컬 IPC는 임계치가 하드코딩인지 네트워크 수신인지와 무관하게 동일한 코드 — 겹치는 지점은 "임계치 값을 담는 곳" 하나뿐.
+- 그래서 **`ThresholdSet`(임계치 보관 객체)을 처음부터 `Update(...)` 메서드가 있는 형태로 설계**해둔다 — Phase A는 하드코딩 값으로 1회 초기화, Phase B는 나중에 네트워크 메시지 핸들러가 같은 `Update()`를 부르기만 하면 됨. 판단 로직/IPC는 재작성 없음.
+- 반대로 지금 Phase B(`.proto` 추가+Collector 세션 관리+Console 통지 호출)까지 같이 하면 Agent+Collector+Console 3개 프로세스 통합 검증이 필요해지는데, 이 저장소는 과거에 다중 프로세스 통합 지점에서 버그가 가장 많이 나왔던 이력이 있음(WAL 도입, 300-agent 부하테스트 라운드 등) — 지금처럼 시간이 부족할 때 그 복잡도를 끌어들이는 게 오히려 위험.
+- **결론: Phase A/B 분리 유지, `ThresholdSet`에 확장 시임만 미리 반영.**
+
+**2026-09-14 추가 정정 — "Agent 로컬 DB"의 실체 및 알림 판단 위치**:
+
+코드를 더 파다가 위 서술 중 부정확한 부분을 발견해 정정한다:
+- **`apm_metrics.db`는 Agent가 아니라 Collector가 만드는 파일이다**(`Collector/main.cpp`의 `STORAGE_CONNECTION_INFO`). Agent 프로세스 자체는 지금 로컬 저장 기능이 전혀 없다 — 지표를 수집해서 Collector로 전송만 한다.
+- 이 저장소의 실제 검증된 구조는 **Agent(장비마다 여러 개) → Collector(중앙 1개) → Console(중앙 1개)** 다(300-agent 부하테스트가 이 구조를 전제로 함). "각 장비 로컬"이 성립하려면 **Collector도 장비마다 1개씩** 띄워야 한다.
+- 다행히 **이건 배치(deployment) 방식 변경일 뿐 Collector 코드 변경이 필요 없다** — Collector는 애초에 "여러 Agent를 구분"하는 로직 자체가 없어서(에이전트 식별자 컬럼 자체가 없음) 장비 하나에 Agent+Collector 한 쌍만 떠도 아무 문제 없이 그대로 동작한다. `Agent/main.cpp`가 `COLLECTOR_HOST = "127.0.0.1"`로 이미 로컬을 기본값 삼고 있는 것도 이 배치와 맞아떨어진다.
+- **알림 판단은 Collector가 아니라 Agent가 해야 한다**(사용자 지적, 2026-09-14) — Collector가 하면 "Collector의 역할(중계/집계)이 Agent의 역할(자기 상태 판단)을 침해"하게 되고, 실무적으로도 Agent↔Collector 연결이 불안정한 상황에서 알림까지 같이 죽어버리는 문제가 생긴다(§3-2에서 이미 강조한 "연결 불량 시에도 로컬은 동작해야 한다" 원칙과 동일 이유). **Agent가 지표를 수집한 그 자리에서(Collector 전송 전) 직접 판단**한다.
+- 따라서 **Agent도 자기 소유의 신규 로컬 DB가 필요**하다 — `apm_metrics.db`(Collector 소유, 지표)와는 별개 파일(가칭 `agent_alerts.db`, `local_alerts` 테이블만). Qt는 두 파일을 각각 읽는다: 지표는 Collector DB, 알림은 Agent DB. 제어(IPC)는 Agent만 상대(Collector는 Qt와 통신할 일이 아예 없음).
+
+```
+Qt ── SQLite 파일 읽기 ──→ Collector의 apm_metrics.db (원시 지표, 완전 무수정)
+Qt ── SQLite 파일 읽기 ──→ Agent의 신규 agent_alerts.db (local_alerts)
+Qt ── 로컬 IPC(QLocalSocket) ──→ Agent (제어: 시작/중지/재연결/로그레벨)
+```
+
+## 9. 진행 순서 (2026-09-14 재개정 — Phase A/B 분리 반영)
+
+1. **`APM_Agent`에 Phase A 기능 설계 및 구현** — 로컬 알림 판단+`local_alerts` 저장(하드코딩 임계치), `QLocalSocket` 대응 로컬 IPC 서버(4개 명령 처리)
+2. **Qt 2′~5′단계 재작업** — 대상 DB를 Console→Agent 로컬로 교체(기존 Model/View/Chart 코드는 최대한 재사용)
+3. **Qt 6′~7′단계** — `local_alerts` 표시 + Agent 제어 UI(`QLocalSocket` 클라이언트)
+4. **8단계(배포판) + 인쇄용 1장 + 경력기술서 갱신**
+5. **(Phase B, 나중)** Console이 임계치 변경 시 Collector 경유로 Agent에 브로드캐스트 — ②④ 설계 후 착수

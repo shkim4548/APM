@@ -43,9 +43,14 @@ target_link_libraries(Collector PRIVATE APM_Common APM_Storage)
 
 add_executable(Agent
     Agent/main.cpp
+    Agent/ThresholdSet.cpp
+    Agent/LocalAlertEvaluator.cpp
+    Agent/AgentControlServer.cpp
+    Agent/LogLevel.cpp
     pch.cpp
 )
-target_link_libraries(Agent PRIVATE APM_Common)
+target_include_directories(Agent PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+target_link_libraries(Agent PRIVATE APM_Common APM_Storage)
 
 add_executable(LoadTester
     LoadTester/main.cpp

@@ -71,6 +71,12 @@ public:
 	// 실패(getsockopt 오류) 시 전부 0인 기본값 반환 - 호출자가 예외 처리를 안 해도 되게.
 	TcpConnectionInfo GetConnectionInfo();
 
+	// 세션을 강제로 끊는다(정상적인 상대방 종료 신호 없이) - "강제 재연결" 명령용
+	// (2026-09-14, Phase A). 실제 onDisconnected 통지는 끊긴 소켓에서 진행 중이던
+	// async_read가 에러로 돌아오면서 평소와 동일한 경로(NotifyDisconnected)로 발생한다 -
+	// 이 함수 자체는 콜백을 직접 부르지 않는다.
+	void Close();
+
 private:
 	void DoHandshake();
 	void RegisterRecv();

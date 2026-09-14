@@ -58,6 +58,16 @@ public:
 	// 현재 연결의 TCP 품질 조회. 연결 안 된 상태면 전부 0인 기본값.
 	TcpConnectionInfo GetConnectionInfo() const;
 
+	// step Phase A : Agent 제어 명령("시작/중지") 대응.
+	// Pause(): 지금 연결을 끊고, 재연결 시도 자체를 멈춘다(Resume() 전까지 조용히 대기).
+	// Resume(): 멈춰 있던 상태에서 다시 연결을 시도한다.
+	void Pause();
+	void Resume();
+
+	// step Phase A : "강제 재연결" 명령 대응. 지금 연결을 끊고 즉시 재연결 절차를 새로
+	// 시작한다(재연결 대기 타이머가 돌고 있었다면 그것도 취소하고 바로 시도).
+	void ForceReconnect();
+
 private:
 	void EnqueueRaw(uint16 id, String payload, SendCallback onComplete = nullptr);
 	void Connect();
@@ -79,4 +89,5 @@ private:
 	asio::steady_timer _reconnectTimer;
 	bool _connected = false;
 	bool _sending = false;
+	bool _paused = false;
 };

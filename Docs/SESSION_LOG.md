@@ -10556,3 +10556,971 @@ target_link_libraries(APM_QtDashboard PRIVATE Qt6::Widgets Qt6::Sql Qt6::Charts)
 
 문서 제안만 — `APM_QtDashboard/`의 실제 소스는 사용자가 직접 작성(원칙 2, [[feedback_claude_md_rule2_scope]]). 작성 중 나오는 오타/컴파일 에러는 요청 시 수정 지원. 완료되면 `WORK_STATUS.md` 갱신 후 커밋 + push.
 
+
+
+## 2026-09-14 — Qt/MFC 트랙 아키텍처 대전환에 따른 `APM_Agent` Phase A 설계·코드 제안
+
+### 배경
+
+여러 차례 대화로 확정된 최종 방향(`WORK_STATUS.md`/`Docs/QT_MFC_PORTFOLIO_PLAN.md` §3-2/§8/§9 참고): Qt는 Console을 모르고 그 장비의 로컬 모니터링 스택(Agent+Collector)만 상대한다. 그 과정에서 발견/정정된 사실들:
+- `apm_metrics.db`는 **Collector**가 만드는 파일(Agent 아님). "각 장비 로컬"이 되려면 **Collector도 장비마다 1개씩** 떠야 하는데, Collector 코드는 무수정(에이전트 식별 로직 자체가 없어서 1:1 배치에 문제 없음, `COLLECTOR_HOST=127.0.0.1` 기본값과도 일치).
+- **알림 판단은 Collector가 아니라 Agent가 해야 한다**(사용자 지적) — Collector가 하면 역할 침해 + Agent↔Collector 연결 불량 시 알림까지 죽는 문제. Agent가 지표를 수집한 그 자리에서(Collector 전송 전) 직접 판단.
+- 그래서 Agent도 신규 로컬 DB가 필요(`agent_alerts.db`, `local_alerts`만 — 지표는 Collector DB에 이미 있어 중복 저장 안 함).
+- Phase A(지금) = Console/Collector 무수정, Agent가 하드코딩 임계치로 판단 + 로컬 IPC로 제어. Phase B(나중, 확정된 확장) = Console이 실제 임계치를 Collector 경유로 통지.
+- "시작/중지"는 지표 수집과 Collector 전송 **둘 다**를 멈추는 것으로 확정(사용자 확인).
+
+### 코드 확인으로 얻은 설계 근거
+
+- `ApmSession::Start(ReadyCallback, DisconnectedCallback, PacketCallback)`가 이미 양방향 수신 루프를 갖춤 — Phase B에서 재사용 가능(이번엔 안 씀).
+- `MetricScheduler`에 이미 `Start()`/`Stop()`이 있음 — "시작/중지" 명령의 절반은 이미 준비돼 있음.
+- `ResilientSender`는 생성자에서 자동으로 `Connect()`하고 내부적으로 알아서 재연결하지만, **바깥에서 멈추거나 강제 재연결시킬 공개 메서드가 없음** — 이번에 추가 필요.
+- `Agent/CMakeLists`(루트 `CMakeLists.txt`의 `add_executable(Agent ...)`)는 지금 `APM_Common`만 링크하고 `APM_Storage`(SQLite)는 링크하지 않음 — `AgentAlertStore` 추가로 이번에 처음 링크하게 됨.
+- `third_party/nlohmann/json.hpp`가 이미 벤더링돼 있고 `Collector`가 이미 씀(`CollectorConfig.cpp`) — `AgentControlServer`의 IPC 명령 프로토콜(줄바꿈 구분 JSON)에 그대로 재사용.
+- `AlertEvaluator.Evaluate()`(Console, C#)의 정확한 판정 로직 확인: `currentValue >= threshold`가 breach, 상태 전이(Opened/Resolved)만 알림 — Zabbix/Nagios 관례. `LocalAlertEvaluator`가 이 로직을 C++로 그대로 이식.
+
+### 제안 — ThresholdSet.h / .cpp (신규, `APM_Agent/Agent/`)
+
+```cpp
+#pragma once
+#include "pch.h"
+
+// step Phase A : Agent가 스스로 알림을 판단하기 위한 임계치 보관소.
+// 지금은 하드코딩 값으로 1회 초기화만 하고 Update()는 아무도 안 부른다(Phase B 시임 —
+// Console→Agent 통지 구현 시 그 핸들러가 이 메서드를 호출하도록 연결하면 됨).
+// Console의 AlertMetricType과 값 의미를 그대로 맞춤(0=Cpu, 1=Memory, 2=Disk, 3=TcpRttUs).
+enum class AlertMetricType : int
+{
+    CpuPercent = 0,
+    MemoryPercent = 1,
+    DiskPercent = 2,
+    TcpRttUs = 3,
+};
+
+class ThresholdSet
+{
+public:
+    ThresholdSet();
+
+    double Get(AlertMetricType type) const;
+
+    // Phase B 시임 - 지금은 어디서도 호출하지 않는다.
+    void Update(AlertMetricType type, double value);
+
+private:
+    mutable std::mutex _mutex;
+    std::array<double, 4> _values;
+};
+```
+
+```cpp
+#include "pch.h"
+#include "ThresholdSet.h"
+
+namespace
+{
+// APM_Console의 AlertThresholds 시드값과 동일(ApmDbContext.cs 초기 데이터) -
+// Phase B에서 실제 값을 받기 전까지 같은 기준으로 동작하도록 맞춤.
+constexpr double kDefaultCpuPercent = 90.0;
+constexpr double kDefaultMemoryPercent = 90.0;
+constexpr double kDefaultDiskPercent = 90.0;
+constexpr double kDefaultTcpRttUs = 200000.0;
+}
+
+ThresholdSet::ThresholdSet()
+    : _values{ kDefaultCpuPercent, kDefaultMemoryPercent, kDefaultDiskPercent, kDefaultTcpRttUs }
+{
+}
+
+double ThresholdSet::Get(AlertMetricType type) const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _values[static_cast<size_t>(type)];
+}
+
+void ThresholdSet::Update(AlertMetricType type, double value)
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    _values[static_cast<size_t>(type)] = value;
+}
+```
+
+**변경 사유**: 값 보관과 판단 로직을 분리 — `ThresholdSet`은 순전히 "지금 임계치가 뭔지 물어보면 답하는" 역할만 한다. `mutex`를 지금부터 넣어두는 이유는 Phase B에서 "네트워크 스레드가 Update(), 메트릭 콜백이 Get()"을 서로 다른 시점에 부르게 될 걸 대비함 — Phase A에선 사실 단일 스레드(io_context 하나)라 경합이 없지만, 나중에 실제로 필요해질 때 이 클래스를 안 건드려도 되게 미리 넣어둠.
+
+### 제안 — LogLevel.h / .cpp (신규, `APM_Agent/Agent/`)
+
+```cpp
+#pragma once
+#include <atomic>
+
+// step Phase A : "로그 레벨 조정" 명령의 최소 구현. 전역 레벨 하나만 두고,
+// 지금은 LocalAlertEvaluator의 로그 한 곳에만 적용해 동작을 증명한다.
+// 기존 코드 전체(std::cout/cerr 직접 호출)를 이 체계로 옮기는 건 범위 밖 -
+// 모든 로그 호출부를 다 고쳐야 해서 Phase A 취지(빠르게 검증)에 안 맞음.
+enum class LogLevel : int { Error = 0, Warning = 1, Info = 2, Debug = 3 };
+
+void SetLogLevel(int level);
+LogLevel GetLogLevel();
+```
+
+```cpp
+#include "pch.h"
+#include "LogLevel.h"
+
+namespace
+{
+std::atomic<int> g_logLevel{ static_cast<int>(LogLevel::Info) };
+}
+
+void SetLogLevel(int level)
+{
+    g_logLevel.store(level);
+}
+
+LogLevel GetLogLevel()
+{
+    return static_cast<LogLevel>(g_logLevel.load());
+}
+```
+
+**변경 사유**: "로그 레벨 조정"을 명령으로 받으려면 최소한 그 값을 저장할 곳이 있어야 하는데, 이 코드베이스엔 로그 레벨 개념 자체가 없다(전부 `std::cout`/`std::cerr` 직접 호출). 전체 리팩터링은 시간 대비 이득이 낮아 범위 밖으로 명시하고, "명령이 실제로 뭔가를 바꾼다"는 것만 한 곳(`LocalAlertEvaluator`)에 증명 삼아 연결한다.
+
+### 제안 — Storage/AgentAlertStore.h / .cpp (신규, `APM_Agent/Storage/`)
+
+```cpp
+#pragma once
+#include "pch.h"
+#include <sqlite3.h>
+#include <optional>
+#include "../Agent/ThresholdSet.h"
+
+// step Phase A : Agent 전용 알림 이력 저장소. apm_metrics.db(Collector 소유, 지표)와는
+// 완전히 별개의 파일이다 - Agent는 Collector의 DB에 절대 손대지 않는다(프로세스 경계 존중,
+// 2026-09-14 사용자 지적: "Collector가 알림판단까지 하는건 Agent의 역할을 침해하는 것").
+struct LocalAlertRecord
+{
+    long long id = 0;
+    int metricType = 0;
+    double thresholdValue = 0.0;
+    double triggerValue = 0.0;
+    long long openedAt = 0;     // epoch seconds
+};
+
+class AgentAlertStore
+{
+public:
+    explicit AgentAlertStore(const String& dbPath);
+    ~AgentAlertStore();
+
+    // 열림 상태의 알림이 있으면 그 레코드를, 없으면 nullopt를 반환.
+    std::optional<LocalAlertRecord> FindOpen(AlertMetricType type) const;
+    // 새 알림을 연다.
+    void Open(AlertMetricType type, double thresholdValue, double triggerValue);
+    // id로 지정된 알림을 닫는다(resolved_value 기록).
+    void Resolve(long long id, double resolvedValue);
+
+private:
+    sqlite3* _db = nullptr;
+    sqlite3_stmt* _findOpenStmt = nullptr;
+    sqlite3_stmt* _openStmt = nullptr;
+    sqlite3_stmt* _resolveStmt = nullptr;
+};
+```
+
+```cpp
+#include "pch.h"
+#include "AgentAlertStore.h"
+
+namespace
+{
+constexpr const char* CREATE_TABLE_SQL =
+    "CREATE TABLE IF NOT EXISTS local_alerts ("
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "  metric_type INTEGER NOT NULL,"
+    "  threshold_value REAL,"
+    "  trigger_value REAL,"
+    "  opened_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),"
+    "  resolved_value REAL,"
+    "  closed_at INTEGER"
+    ");";
+
+constexpr const char* FIND_OPEN_SQL =
+    "SELECT id, metric_type, threshold_value, trigger_value, opened_at "
+    "FROM local_alerts WHERE metric_type = ? AND closed_at IS NULL "
+    "ORDER BY id DESC LIMIT 1;";
+
+constexpr const char* OPEN_SQL =
+    "INSERT INTO local_alerts (metric_type, threshold_value, trigger_value) VALUES (?, ?, ?);";
+
+constexpr const char* RESOLVE_SQL =
+    "UPDATE local_alerts SET resolved_value = ?, closed_at = strftime('%s','now') WHERE id = ?;";
+
+// SqliteMetricStore.cpp와 동일한 헬퍼 - PRAGMA 적용 결과 확인용.
+int CapturePragmaResult(void* out, int columnCount, char** columnValues, char**)
+{
+    if (out && columnCount > 0 && columnValues[0])
+        *static_cast<String*>(out) = columnValues[0];
+    return 0;
+}
+}
+
+AgentAlertStore::AgentAlertStore(const String& dbPath)
+{
+    if (::sqlite3_open(dbPath.c_str(), &_db) != SQLITE_OK)
+        throw std::runtime_error("AgentAlertStore - open failed: " + String(::sqlite3_errmsg(_db)));
+
+    // SqliteMetricStore와 같은 이유(fdatasync 병목 회피) - Qt가 동시에 읽어도 안전해야 함.
+    String journalMode;
+    ::sqlite3_exec(_db, "PRAGMA journal_mode = WAL;", CapturePragmaResult, &journalMode, nullptr);
+    if (journalMode != "wal")
+        std::cerr << "[AgentAlertStore] WAL 모드 전환 실패 - 현재 journal_mode=" << journalMode << std::endl;
+    ::sqlite3_exec(_db, "PRAGMA synchronous = NORMAL;", nullptr, nullptr, nullptr);
+
+    char* errMsg = nullptr;
+    if (::sqlite3_exec(_db, CREATE_TABLE_SQL, nullptr, nullptr, &errMsg) != SQLITE_OK)
+    {
+        String err = errMsg ? errMsg : "unknown";
+        ::sqlite3_free(errMsg);
+        throw std::runtime_error("AgentAlertStore - CREATE TABLE failed: " + err);
+    }
+
+    if (::sqlite3_prepare_v2(_db, FIND_OPEN_SQL, -1, &_findOpenStmt, nullptr) != SQLITE_OK
+        || ::sqlite3_prepare_v2(_db, OPEN_SQL, -1, &_openStmt, nullptr) != SQLITE_OK
+        || ::sqlite3_prepare_v2(_db, RESOLVE_SQL, -1, &_resolveStmt, nullptr) != SQLITE_OK)
+    {
+        throw std::runtime_error("AgentAlertStore - prepare failed: " + String(::sqlite3_errmsg(_db)));
+    }
+}
+
+AgentAlertStore::~AgentAlertStore()
+{
+    if (_findOpenStmt) ::sqlite3_finalize(_findOpenStmt);
+    if (_openStmt) ::sqlite3_finalize(_openStmt);
+    if (_resolveStmt) ::sqlite3_finalize(_resolveStmt);
+    if (_db) ::sqlite3_close(_db);
+}
+
+std::optional<LocalAlertRecord> AgentAlertStore::FindOpen(AlertMetricType type) const
+{
+    ::sqlite3_reset(_findOpenStmt);
+    ::sqlite3_bind_int(_findOpenStmt, 1, static_cast<int>(type));
+
+    if (::sqlite3_step(_findOpenStmt) != SQLITE_ROW)
+        return std::nullopt;
+
+    LocalAlertRecord record;
+    record.id = ::sqlite3_column_int64(_findOpenStmt, 0);
+    record.metricType = ::sqlite3_column_int(_findOpenStmt, 1);
+    record.thresholdValue = ::sqlite3_column_double(_findOpenStmt, 2);
+    record.triggerValue = ::sqlite3_column_double(_findOpenStmt, 3);
+    record.openedAt = ::sqlite3_column_int64(_findOpenStmt, 4);
+    return record;
+}
+
+void AgentAlertStore::Open(AlertMetricType type, double thresholdValue, double triggerValue)
+{
+    ::sqlite3_reset(_openStmt);
+    ::sqlite3_bind_int(_openStmt, 1, static_cast<int>(type));
+    ::sqlite3_bind_double(_openStmt, 2, thresholdValue);
+    ::sqlite3_bind_double(_openStmt, 3, triggerValue);
+
+    if (::sqlite3_step(_openStmt) != SQLITE_DONE)
+        std::cerr << "[AgentAlertStore] open insert failed: " << ::sqlite3_errmsg(_db) << std::endl;
+}
+
+void AgentAlertStore::Resolve(long long id, double resolvedValue)
+{
+    ::sqlite3_reset(_resolveStmt);
+    ::sqlite3_bind_double(_resolveStmt, 1, resolvedValue);
+    ::sqlite3_bind_int64(_resolveStmt, 2, id);
+
+    if (::sqlite3_step(_resolveStmt) != SQLITE_DONE)
+        std::cerr << "[AgentAlertStore] resolve failed: " << ::sqlite3_errmsg(_db) << std::endl;
+}
+```
+
+**변경 사유**: `SqliteMetricStore.cpp`와 거의 동일한 패턴(raw `sqlite3` C API, WAL+synchronous=NORMAL, prepared statement 재사용)을 그대로 따름 — 이 코드베이스의 기존 관례 재사용, 새 스타일 도입 안 함. `closed_at IS NULL` = 열린 알림이라는 의미론도 Console의 `AlertRecords`와 동일하게 맞춤(단, 컬럼명은 스네이크케이스로 Agent 관례를 따름 — `Docs/QT_MFC_PORTFOLIO_PLAN.md` §8 결정 그대로).
+
+### 제안 — LocalAlertEvaluator.h / .cpp (신규, `APM_Agent/Agent/`)
+
+```cpp
+#pragma once
+#include "pch.h"
+#include "ThresholdSet.h"
+#include "../Storage/AgentAlertStore.h"
+#include "../Protocol/Metric.pb.h"
+
+// step Phase A : Console의 AlertEvaluator.Evaluate()(C#, AlertEvaluator.cs)를 C++로 그대로 이식.
+// Agent가 Collector로 보내기 전, 수집한 그 자리에서 스스로 판단한다 - Agent<->Collector
+// 연결이 끊겨도 로컬 알림은 계속 동작해야 하기 때문(2026-09-14 설계 결정).
+enum class AlertTransition { None, Opened, Resolved };
+
+// 순수 함수 - DB/상태 없음, 유닛테스트 대상(GoogleTest, tests/ 관례 그대로).
+// currentValue >= threshold가 breach, 상태 전이(Opened/Resolved)일 때만 알림
+// (Zabbix/Nagios/Alertmanager 관례 - Console의 AlertEvaluator.Evaluate()와 동일 판정).
+AlertTransition EvaluateTransition(double currentValue, double threshold, bool currentlyOpen);
+
+class LocalAlertEvaluator
+{
+public:
+    LocalAlertEvaluator(const ThresholdSet& thresholds, AgentAlertStore& store);
+
+    // MetricScheduler 콜백에서, Collector 전송 전에 호출한다.
+    void OnNewMetric(const apm::Metric& metric);
+
+private:
+    void EvaluateOne(AlertMetricType type, double currentValue);
+
+private:
+    const ThresholdSet& _thresholds;
+    AgentAlertStore& _store;
+};
+```
+
+```cpp
+#include "pch.h"
+#include "LocalAlertEvaluator.h"
+#include "LogLevel.h"
+
+AlertTransition EvaluateTransition(double currentValue, double threshold, bool currentlyOpen)
+{
+    bool isBreaching = currentValue >= threshold;
+
+    if (isBreaching && !currentlyOpen)
+        return AlertTransition::Opened;
+
+    if (!isBreaching && currentlyOpen)
+        return AlertTransition::Resolved;
+
+    return AlertTransition::None;
+}
+
+LocalAlertEvaluator::LocalAlertEvaluator(const ThresholdSet& thresholds, AgentAlertStore& store)
+    : _thresholds(thresholds), _store(store)
+{
+}
+
+void LocalAlertEvaluator::OnNewMetric(const apm::Metric& metric)
+{
+    const double memPercent = metric.mem_total_bytes() > 0
+        ? metric.mem_used_bytes() * 100.0 / metric.mem_total_bytes()
+        : 0.0;
+    const double diskPercent = metric.disk_total_bytes() > 0
+        ? metric.disk_used_bytes() * 100.0 / metric.disk_total_bytes()
+        : 0.0;
+
+    EvaluateOne(AlertMetricType::CpuPercent, metric.cpu_usage_percent());
+    EvaluateOne(AlertMetricType::MemoryPercent, memPercent);
+    EvaluateOne(AlertMetricType::DiskPercent, diskPercent);
+    EvaluateOne(AlertMetricType::TcpRttUs, static_cast<double>(metric.tcp_rtt_us()));
+}
+
+void LocalAlertEvaluator::EvaluateOne(AlertMetricType type, double currentValue)
+{
+    double threshold = _thresholds.Get(type);
+    std::optional<LocalAlertRecord> openAlert = _store.FindOpen(type);
+
+    AlertTransition transition = EvaluateTransition(currentValue, threshold, openAlert.has_value());
+
+    if (transition == AlertTransition::Opened)
+    {
+        _store.Open(type, threshold, currentValue);
+        if (GetLogLevel() >= LogLevel::Info)
+            std::cout << "[LocalAlertEvaluator] 알림 발생: type=" << static_cast<int>(type)
+                << " value=" << currentValue << " (임계치 " << threshold << ")" << std::endl;
+    }
+    else if (transition == AlertTransition::Resolved && openAlert.has_value())
+    {
+        _store.Resolve(openAlert->id, currentValue);
+        if (GetLogLevel() >= LogLevel::Info)
+            std::cout << "[LocalAlertEvaluator] 알림 해제: type=" << static_cast<int>(type)
+                << " value=" << currentValue << std::endl;
+    }
+}
+```
+
+**변경 사유**: Console의 순수 판정 함수(`AlertEvaluator.Evaluate`, DB I/O 없음, 테스트 대상)와 같은 설계를 C++에 그대로 이식 — 같은 문제는 같은 형태로 푼다는 일관성. `EvaluateTransition`을 클래스 밖 자유 함수로 뺀 것도 Console과 동일한 이유(순수 로직만 따로 떼어 테스트하기 쉽게). 로그 2곳에 `GetLogLevel()` 체크를 넣어 "로그 레벨 조정" 명령이 실제로 뭔가를 바꾼다는 걸 증명(위 LogLevel.h 변경 사유 참고).
+
+### 제안 — ApmSession.h / .cpp (수정, `APM_Agent/Common/`)
+
+**수정 전** (public 메서드 목록 부분, `GetConnectionInfo()` 선언 뒤):
+```cpp
+	// 이 세션이 감싸고 있는 TCP 소켓의 현재 연결 품질을 커널에서 직접 조회.
+	// 실패(getsockopt 오류) 시 전부 0인 기본값 반환 - 호출자가 예외 처리를 안 해도 되게.
+	TcpConnectionInfo GetConnectionInfo();
+
+private:
+```
+
+**수정 후**:
+```cpp
+	// 이 세션이 감싸고 있는 TCP 소켓의 현재 연결 품질을 커널에서 직접 조회.
+	// 실패(getsockopt 오류) 시 전부 0인 기본값 반환 - 호출자가 예외 처리를 안 해도 되게.
+	TcpConnectionInfo GetConnectionInfo();
+
+	// 세션을 강제로 끊는다(정상적인 상대방 종료 신호 없이) - "강제 재연결" 명령용
+	// (2026-09-14, Phase A). 실제 onDisconnected 통지는 끊긴 소켓에서 진행 중이던
+	// async_read가 에러로 돌아오면서 평소와 동일한 경로(NotifyDisconnected)로 발생한다 -
+	// 이 함수 자체는 콜백을 직접 부르지 않는다.
+	void Close();
+
+private:
+```
+
+`ApmSession.cpp`에는 `GetConnectionInfo()` 구현 뒤에 아래 함수를 추가:
+```cpp
+void ApmSession::Close()
+{
+	asio::error_code ec;
+	_sslStream.lowest_layer().close(ec);
+}
+```
+
+**변경 사유**: `ResilientSender::ForceReconnect()`(아래)가 "지금 연결을 강제로 끊고 바로 재시도"하려면 세션을 닫는 방법이 필요한데, 지금 `ApmSession`엔 공개된 종료 메서드가 없었다. 소켓만 닫고 콜백은 직접 안 불러서, 기존 "연결 끊김 감지 → `NotifyDisconnected` → `onDisconnected` 콜백" 경로를 그대로 재사용(새 통지 경로를 따로 안 만듦).
+
+### 제안 — ResilientSender.h / .cpp (수정, `APM_Agent/Common/`)
+
+**수정 전** (public 섹션, `GetConnectionInfo()` 선언 뒤):
+```cpp
+	// 현재 연결의 TCP 품질 조회. 연결 안 된 상태면 전부 0인 기본값.
+	TcpConnectionInfo GetConnectionInfo() const;
+
+private:
+	void EnqueueRaw(uint16 id, String payload, SendCallback onComplete = nullptr);
+	void Connect();
+	void ScheduleReconnect();
+	void FlushNext();
+	void OnSessionDisconnected();
+
+private:
+	asio::io_context& _ioContext;
+	asio::ssl::context& _sslContext;
+	String _host;
+	unsigned short _port;
+	SealerFactory _sealerFactory;
+	size_t _maxQueueSize;
+	ConnectionStateCallback _onConnectionStateChanged;
+
+	std::deque<QueuedPacket> _queue;
+	std::shared_ptr<ApmSession> _session;
+	asio::steady_timer _reconnectTimer;
+	bool _connected = false;
+	bool _sending = false;
+};
+```
+
+**수정 후**:
+```cpp
+	// 현재 연결의 TCP 품질 조회. 연결 안 된 상태면 전부 0인 기본값.
+	TcpConnectionInfo GetConnectionInfo() const;
+
+	// step Phase A : Agent 제어 명령("시작/중지") 대응.
+	// Pause(): 지금 연결을 끊고, 재연결 시도 자체를 멈춘다(Resume() 전까지 조용히 대기).
+	// Resume(): 멈춰 있던 상태에서 다시 연결을 시도한다.
+	void Pause();
+	void Resume();
+
+	// step Phase A : "강제 재연결" 명령 대응. 지금 연결을 끊고 즉시 재연결 절차를 새로
+	// 시작한다(재연결 대기 타이머가 돌고 있었다면 그것도 취소하고 바로 시도).
+	void ForceReconnect();
+
+private:
+	void EnqueueRaw(uint16 id, String payload, SendCallback onComplete = nullptr);
+	void Connect();
+	void ScheduleReconnect();
+	void FlushNext();
+	void OnSessionDisconnected();
+
+private:
+	asio::io_context& _ioContext;
+	asio::ssl::context& _sslContext;
+	String _host;
+	unsigned short _port;
+	SealerFactory _sealerFactory;
+	size_t _maxQueueSize;
+	ConnectionStateCallback _onConnectionStateChanged;
+
+	std::deque<QueuedPacket> _queue;
+	std::shared_ptr<ApmSession> _session;
+	asio::steady_timer _reconnectTimer;
+	bool _connected = false;
+	bool _sending = false;
+	bool _paused = false;
+};
+```
+
+**수정 전** (`OnSessionDisconnected()` 함수 전문):
+```cpp
+void ResilientSender::OnSessionDisconnected()
+{
+	std::cerr << "[ResilientSender] disconnected, will retry" << std::endl;
+	_connected = false;
+	_sending = false;
+	_session = nullptr;
+	if (_onConnectionStateChanged)
+		_onConnectionStateChanged(false);
+	ScheduleReconnect();
+}
+```
+
+**수정 후** (같은 함수 + 신규 함수 3개 추가):
+```cpp
+void ResilientSender::OnSessionDisconnected()
+{
+	std::cerr << "[ResilientSender] disconnected, will retry" << std::endl;
+	_connected = false;
+	_sending = false;
+	_session = nullptr;
+	if (_onConnectionStateChanged)
+		_onConnectionStateChanged(false);
+	if (!_paused)
+		ScheduleReconnect();
+}
+
+void ResilientSender::Pause()
+{
+	if (_paused)
+		return;
+
+	std::cout << "[ResilientSender] paused (제어 명령: 중지)" << std::endl;
+	_paused = true;
+	_reconnectTimer.cancel();
+	if (_session)
+		_session->Close();   // -> OnSessionDisconnected가 불리지만 _paused라 재연결은 안 걸림
+}
+
+void ResilientSender::Resume()
+{
+	if (!_paused)
+		return;
+
+	std::cout << "[ResilientSender] resumed (제어 명령: 시작)" << std::endl;
+	_paused = false;
+	Connect();
+}
+
+void ResilientSender::ForceReconnect()
+{
+	std::cout << "[ResilientSender] force reconnect (제어 명령: 강제 재연결)" << std::endl;
+	_reconnectTimer.cancel();
+	if (_session)
+		_session->Close();   // -> OnSessionDisconnected -> ScheduleReconnect (대기 없이 바로 이어짐)
+	else
+		Connect();            // 이미 끊긴 채 재연결 타이머 대기 중이었다면 지금 바로 시도
+}
+```
+
+**변경 사유**: `_paused` 플래그 하나로 "멈춤"과 "정상 재연결 루프"를 구분 — `OnSessionDisconnected()`(연결이 끊길 때마다 항상 거치는 공통 경로)에 `if (!_paused)` 한 줄만 추가해서, `Pause()`가 세션을 닫으면 그 공통 경로를 타면서 자연히 재연결을 안 하게 된다(새로운 분기를 따로 안 만듦). `ForceReconnect()`도 같은 원리 — 직접 재연결 코드를 새로 쓰지 않고 기존 끊김→재연결 경로를 강제로 한 번 트리거하는 것뿐이다.
+
+### 제안 — AgentControlServer.h / .cpp (신규, `APM_Agent/Agent/`)
+
+```cpp
+#pragma once
+#include "pch.h"
+#include "MetricScheduler.h"
+#include "ResilientSender.h"
+
+// step Phase A : Qt가 로컬 소켓으로 보내는 제어 명령을 받아 처리한다.
+// 프로토콜: 줄바꿈으로 구분된 JSON 한 줄 = 명령 하나, 응답도 같은 형식 한 줄.
+//   {"cmd":"start"} / {"cmd":"stop"} / {"cmd":"reconnect"} / {"cmd":"set_log_level","level":3}
+//   -> {"ok":true} 또는 {"ok":false,"error":"..."}
+// Unix domain socket만 지원(Linux/WSL 우선 - Docs/QT_MFC_PORTFOLIO_PLAN.md §8,
+// Windows 네임드파이프는 스트레치 목표로 미착수).
+class AgentControlServer
+{
+public:
+    AgentControlServer(asio::io_context& ioContext, const String& socketPath,
+        MetricScheduler& scheduler, ResilientSender& sender);
+    ~AgentControlServer();
+
+    void Start();
+
+private:
+    void AcceptNext();
+    void HandleConnection(std::shared_ptr<asio::local::stream_protocol::socket> socket);
+    String Dispatch(const String& line);
+
+private:
+    asio::io_context& _ioContext;
+    String _socketPath;
+    MetricScheduler& _scheduler;
+    ResilientSender& _sender;
+    asio::local::stream_protocol::acceptor _acceptor;
+    bool _running = false;
+};
+```
+
+```cpp
+#include "pch.h"
+#include "AgentControlServer.h"
+#include "LogLevel.h"
+#include <nlohmann/json.hpp>
+
+// TODO(Windows 지원 시): ::unlink는 POSIX 전용 - 이 파일 전체가 지금은 Linux/WSL만
+// 대상으로 한다(§8). Windows 네임드파이프로 갈 땐 이 파일을 통째로 갈아끼워야 함.
+#include <unistd.h>
+
+using json = nlohmann::json;
+
+AgentControlServer::AgentControlServer(asio::io_context& ioContext, const String& socketPath,
+    MetricScheduler& scheduler, ResilientSender& sender)
+    : _ioContext(ioContext), _socketPath(socketPath), _scheduler(scheduler), _sender(sender)
+    , _acceptor(ioContext)
+{
+    // 이전 실행이 비정상 종료돼 소켓 파일이 남아있으면 bind가 "Address already in use"로
+    // 실패하므로 미리 지운다 - 흔한 Unix domain socket 관용구.
+    ::unlink(_socketPath.c_str());
+
+    asio::local::stream_protocol::endpoint endpoint(_socketPath);
+    _acceptor.open(endpoint.protocol());
+    _acceptor.bind(endpoint);
+    _acceptor.listen();
+}
+
+AgentControlServer::~AgentControlServer()
+{
+    ::unlink(_socketPath.c_str());
+}
+
+void AgentControlServer::Start()
+{
+    _running = true;
+    AcceptNext();
+}
+
+void AgentControlServer::AcceptNext()
+{
+    auto socket = std::make_shared<asio::local::stream_protocol::socket>(_ioContext);
+    _acceptor.async_accept(*socket,
+        [this, socket](const asio::error_code& ec)
+        {
+            if (!ec)
+                HandleConnection(socket);
+            if (_running)
+                AcceptNext();
+        });
+}
+
+void AgentControlServer::HandleConnection(std::shared_ptr<asio::local::stream_protocol::socket> socket)
+{
+    auto buffer = std::make_shared<asio::streambuf>();
+
+    asio::async_read_until(*socket, *buffer, '\n',
+        [this, socket, buffer](const asio::error_code& ec, size_t /*bytesTransferred*/)
+        {
+            if (ec)
+                return;
+
+            std::istream is(buffer.get());
+            String line;
+            std::getline(is, line);
+
+            String response = Dispatch(line) + "\n";
+            asio::async_write(*socket, asio::buffer(response),
+                [socket](const asio::error_code&, size_t) {});
+        });
+}
+
+String AgentControlServer::Dispatch(const String& line)
+{
+    try
+    {
+        json request = json::parse(line);
+        String cmd = request.at("cmd").get<String>();
+
+        if (cmd == "start")
+        {
+            _scheduler.Start();
+            _sender.Resume();
+        }
+        else if (cmd == "stop")
+        {
+            _scheduler.Stop();
+            _sender.Pause();
+        }
+        else if (cmd == "reconnect")
+        {
+            _sender.ForceReconnect();
+        }
+        else if (cmd == "set_log_level")
+        {
+            SetLogLevel(request.at("level").get<int>());
+        }
+        else
+        {
+            return json{ {"ok", false}, {"error", "unknown command: " + cmd} }.dump();
+        }
+
+        return json{ {"ok", true} }.dump();
+    }
+    catch (const std::exception& e)
+    {
+        return json{ {"ok", false}, {"error", String(e.what())} }.dump();
+    }
+}
+```
+
+**변경 사유**: 프로토콜을 protobuf가 아니라 **줄바꿈 구분 JSON**으로 고른 이유 — Agent↔Collector(원격, 여러 Agent, 성능 민감)와 달리 이건 **로컬 1:1, 사람이 붙여서 디버깅할 일도 많은** 제어 채널이라 가벼운 텍스트 프로토콜이 낫다고 판단(예: `echo '{"cmd":"start"}' | nc -U /tmp/apm_agent.sock`으로 테스트 가능 — protobuf였으면 이게 안 됨). `nlohmann::json`은 이미 벤더링/사용 중이라 새 의존성 추가 없음. 명령 핸들러가 `_scheduler`/`_sender`의 기존 공개 메서드만 부르고 새 상태를 안 만드는 것도 의도적 — 제어 서버는 순수 "명령을 받아서 이미 있는 컴포넌트를 부르는 얇은 계층"으로 남긴다.
+
+### 제안 — Agent/main.cpp (수정)
+
+**수정 전** (파일 전문 — `main()` 함수 본문):
+```cpp
+#include "pch.h"
+#include "ResilientSender.h"
+#include "ResourceCollector.h"
+#include "MetricScheduler.h"
+#include "KeyLoader.h"
+#include "AesGcmPayload.h"
+#include "Protocol/Metric.pb.h"
+
+namespace
+{
+	constexpr const char* COLLECTOR_HOST = "127.0.0.1";
+	constexpr unsigned short COLLECTOR_PORT = 9000;
+}
+
+int main()
+{
+#ifdef _WIN32
+	SetConsoleOutputCP(CP_UTF8);
+#endif
+	try
+	{
+		AesGcmCipher::Key agentCollectorKey = LoadKeyFromHexFile("certs/agent_collector_aes.key");
+
+		asio::io_context ioContext;
+
+		asio::ssl::context sslContext(asio::ssl::context::tls_client);
+		sslContext.set_verify_mode(asio::ssl::verify_none);
+
+		ResilientSender sender(ioContext, sslContext, COLLECTOR_HOST, COLLECTOR_PORT,
+			[agentCollectorKey]() 
+			{
+				return std::make_unique<AesGcmPayload>(agentCollectorKey); 
+			});
+
+		MetricScheduler scheduler(ioContext, std::chrono::seconds(5),
+			[&sender](const SystemMetrics& metrics)
+			{
+				apm::Metric pkt;
+				pkt.set_cpu_usage_percent(metrics.cpuUsagePercent);
+				pkt.set_mem_used_bytes(metrics.memUsedBytes);
+				pkt.set_mem_total_bytes(metrics.memTotalBytes);
+				pkt.set_disk_used_bytes(metrics.diskUsedBytes);
+				pkt.set_disk_total_bytes(metrics.diskTotalBytes);
+				pkt.set_net_rx_bytes_per_sec(metrics.netRxBytesPerSec);
+				pkt.set_net_tx_bytes_per_sec(metrics.netTxBytesPerSec);
+
+				TcpConnectionInfo tcpInfo = sender.GetConnectionInfo();
+				pkt.set_tcp_rtt_us(tcpInfo.rttMicros);
+				pkt.set_tcp_rtt_var_us(tcpInfo.rttVarMicros);
+				pkt.set_tcp_retransmits(tcpInfo.retransmits);
+				pkt.set_tcp_total_retrans(tcpInfo.totalRetrans);
+				pkt.set_tcp_snd_cwnd(tcpInfo.sndCwnd);
+
+				sender.Enqueue(pkt);
+			});
+		scheduler.Start();
+
+		ioContext.run();
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << "[Agent] fatal: " << e.what() << std::endl;
+		return 1;
+	}
+
+	return 0;
+}
+```
+
+**수정 후**:
+```cpp
+#include "pch.h"
+#include "ResilientSender.h"
+#include "ResourceCollector.h"
+#include "MetricScheduler.h"
+#include "KeyLoader.h"
+#include "AesGcmPayload.h"
+#include "Protocol/Metric.pb.h"
+#include "ThresholdSet.h"
+#include "LocalAlertEvaluator.h"
+#include "AgentControlServer.h"
+#include "Storage/AgentAlertStore.h"
+
+namespace
+{
+	constexpr const char* COLLECTOR_HOST = "127.0.0.1";
+	constexpr unsigned short COLLECTOR_PORT = 9000;
+	// Phase A : Qt가 붙는 로컬 제어 소켓 경로. 장비당 Agent 하나라는 전제라 고정 경로로 충분.
+	constexpr const char* CONTROL_SOCKET_PATH = "/tmp/apm_agent.sock";
+	constexpr const char* ALERT_DB_PATH = "agent_alerts.db";
+}
+
+int main()
+{
+#ifdef _WIN32
+	SetConsoleOutputCP(CP_UTF8);
+#endif
+	try
+	{
+		AesGcmCipher::Key agentCollectorKey = LoadKeyFromHexFile("certs/agent_collector_aes.key");
+
+		asio::io_context ioContext;
+
+		asio::ssl::context sslContext(asio::ssl::context::tls_client);
+		sslContext.set_verify_mode(asio::ssl::verify_none);
+
+		ResilientSender sender(ioContext, sslContext, COLLECTOR_HOST, COLLECTOR_PORT,
+			[agentCollectorKey]() 
+			{
+				return std::make_unique<AesGcmPayload>(agentCollectorKey); 
+			});
+
+		// Phase A : 로컬 알림 판단. Collector에 apm_metrics.db가 이미 있으니 지표는 중복
+		// 저장하지 않고, 이 Agent 자신의 알림 이력만 별도 파일에 남긴다.
+		ThresholdSet thresholds;
+		AgentAlertStore alertStore(ALERT_DB_PATH);
+		LocalAlertEvaluator alertEvaluator(thresholds, alertStore);
+
+		MetricScheduler scheduler(ioContext, std::chrono::seconds(5),
+			[&sender, &alertEvaluator](const SystemMetrics& metrics)
+			{
+				apm::Metric pkt;
+				pkt.set_cpu_usage_percent(metrics.cpuUsagePercent);
+				pkt.set_mem_used_bytes(metrics.memUsedBytes);
+				pkt.set_mem_total_bytes(metrics.memTotalBytes);
+				pkt.set_disk_used_bytes(metrics.diskUsedBytes);
+				pkt.set_disk_total_bytes(metrics.diskTotalBytes);
+				pkt.set_net_rx_bytes_per_sec(metrics.netRxBytesPerSec);
+				pkt.set_net_tx_bytes_per_sec(metrics.netTxBytesPerSec);
+
+				TcpConnectionInfo tcpInfo = sender.GetConnectionInfo();
+				pkt.set_tcp_rtt_us(tcpInfo.rttMicros);
+				pkt.set_tcp_rtt_var_us(tcpInfo.rttVarMicros);
+				pkt.set_tcp_retransmits(tcpInfo.retransmits);
+				pkt.set_tcp_total_retrans(tcpInfo.totalRetrans);
+				pkt.set_tcp_snd_cwnd(tcpInfo.sndCwnd);
+
+				// Collector 전송 "전에" 로컬 판단 먼저 - Agent<->Collector 연결이 끊긴
+				// 상태에서도 로컬 알림은 항상 최신 상태를 유지하도록.
+				alertEvaluator.OnNewMetric(pkt);
+				sender.Enqueue(pkt);
+			});
+		scheduler.Start();
+
+		AgentControlServer controlServer(ioContext, CONTROL_SOCKET_PATH, scheduler, sender);
+		controlServer.Start();
+
+		ioContext.run();
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << "[Agent] fatal: " << e.what() << std::endl;
+		return 1;
+	}
+
+	return 0;
+}
+```
+
+**변경 사유**: `alertEvaluator.OnNewMetric(pkt)`를 `sender.Enqueue(pkt)` **앞**에 둔 게 핵심 — 순서를 반대로 하면 "전송 실패해도 로컬 판단은 항상 됨"이라는 보장이 약해진다(둘 다 결국 로컬 함수 호출이라 지금 당장 순서가 실패에 영향을 주진 않지만, 의도를 코드 순서로도 드러내는 게 낫다고 판단). `AgentControlServer`는 `scheduler.Start()` 다음에 만들어서, 서버가 명령을 받기 시작하는 시점엔 이미 스케줄러가 정상 상태로 떠 있음을 보장.
+
+### 제안 — CMakeLists.txt 변경 (`APM_Agent/Storage/CMakeLists.txt`, `APM_Agent/CMakeLists.txt`)
+
+**수정 전** (`Storage/CMakeLists.txt` 전문):
+```cmake
+add_library(APM_Storage STATIC
+    MetricStoreFactory.cpp
+)
+
+target_include_directories(APM_Storage PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+target_link_libraries(APM_Storage PUBLIC GW2_CrossPlatformCore protobuf::libprotobuf)
+
+if(APM_STORAGE_BACKEND STREQUAL "SQLite")
+    find_package(SQLite3 REQUIRED)
+    target_sources(APM_Storage PRIVATE SqliteMetricStore.cpp)
+    target_link_libraries(APM_Storage PUBLIC SQLite::SQLite3)
+    target_compile_definitions(APM_Storage PUBLIC APM_STORAGE_SQLITE)
+elseif(APM_STORAGE_BACKEND STREQUAL "TimescaleDB")
+    target_sources(APM_Storage PRIVATE TimescaleMetricStore.cpp)
+    target_compile_definitions(APM_Storage PUBLIC APM_STORAGE_TIMESCALEDB)
+else()
+    message(FATAL_ERROR "Unknown APM_STORAGE_BACKEND: ${APM_STORAGE_BACKEND} (SQLite 또는 TimescaleDB)")
+endif()
+```
+
+**수정 후**:
+```cmake
+add_library(APM_Storage STATIC
+    MetricStoreFactory.cpp
+    AgentAlertStore.cpp
+)
+
+target_include_directories(APM_Storage PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+target_link_libraries(APM_Storage PUBLIC GW2_CrossPlatformCore protobuf::libprotobuf)
+
+# Agent의 로컬 알림 저장(AgentAlertStore)은 Console/Collector의 지표 저장 백엔드 선택과
+# 무관하게 항상 SQLite다(알림 몇 건 저장하려고 TimescaleDB까지 갈 이유가 없음) - 그래서
+# 이 find_package/링크는 아래 backend 분기 밖으로 뺐다. 2026-09-14 이전에는
+# APM_STORAGE_BACKEND=TimescaleDB를 고르면 SQLite3가 전혀 필요 없었는데, 이제는
+# 그 경우에도 SQLite3가 필수 의존성이 된다(AgentAlertStore 때문) - 의도된 변화.
+find_package(SQLite3 REQUIRED)
+target_link_libraries(APM_Storage PUBLIC SQLite::SQLite3)
+
+if(APM_STORAGE_BACKEND STREQUAL "SQLite")
+    target_sources(APM_Storage PRIVATE SqliteMetricStore.cpp)
+    target_compile_definitions(APM_Storage PUBLIC APM_STORAGE_SQLITE)
+elseif(APM_STORAGE_BACKEND STREQUAL "TimescaleDB")
+    target_sources(APM_Storage PRIVATE TimescaleMetricStore.cpp)
+    target_compile_definitions(APM_Storage PUBLIC APM_STORAGE_TIMESCALEDB)
+else()
+    message(FATAL_ERROR "Unknown APM_STORAGE_BACKEND: ${APM_STORAGE_BACKEND} (SQLite 또는 TimescaleDB)")
+endif()
+```
+
+**수정 전** (루트 `CMakeLists.txt`의 `Agent` 타겟 부분):
+```cmake
+add_executable(Agent
+    Agent/main.cpp
+    pch.cpp
+)
+target_link_libraries(Agent PRIVATE APM_Common)
+```
+
+**수정 후**:
+```cmake
+add_executable(Agent
+    Agent/main.cpp
+    Agent/ThresholdSet.cpp
+    Agent/LocalAlertEvaluator.cpp
+    Agent/AgentControlServer.cpp
+    Agent/LogLevel.cpp
+    pch.cpp
+)
+target_include_directories(Agent PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+target_link_libraries(Agent PRIVATE APM_Common APM_Storage)
+```
+
+**변경 사유**: `Agent`가 처음으로 `APM_Storage`(그리고 그걸 통해 SQLite3)를 링크하게 됨 — 지금까지 Agent는 저장 기능이 전혀 없어서 무관했다. `third_party` include 경로도 처음 추가(Collector만 갖고 있던 것) — `nlohmann/json.hpp` 쓰려고 필요. **주의: `APM_STORAGE_BACKEND=TimescaleDB`를 고른 빌드에서도 이제 SQLite3 개발 패키지가 있어야 빌드된다** — Agent 신규 기능 때문에 생긴 새로운 필수 의존성.
+
+### 검증 (미검증 — 사용자가 직접 작성/빌드 후 확인)
+
+1. 클린 빌드 성공(`Agent` 타겟이 새로 `APM_Storage`/SQLite3/third_party를 링크).
+2. `Agent` 실행 → `agent_alerts.db` 파일이 실제로 생성되는지, `local_alerts` 테이블이 있는지.
+3. CPU 사용률이 실제로 90% 이상 올라가는 상황을 인위로 만들어(예: `stress` 명령) 알림이 열리는지(`sqlite3 agent_alerts.db "SELECT * FROM local_alerts;"`), 다시 내려오면 `closed_at`이 채워지는지.
+4. `echo '{"cmd":"stop"}' | nc -U /tmp/apm_agent.sock`로 중지 명령 보내면 `MetricScheduler`가 멈추고 `ResilientSender`도 재연결을 멈추는지(로그로 확인). `{"cmd":"start"}`로 재개되는지.
+5. `{"cmd":"reconnect"}`를 정상 연결 상태에서 보냈을 때 실제로 한 번 끊겼다 다시 붙는지(Collector 로그에서 새 연결 확인).
+6. `{"cmd":"set_log_level","level":0}` 이후 알림 발생/해제 로그가 실제로 안 찍히는지(레벨 0=Error인데 그 로그들은 Info 레벨이므로).
+7. Collector를 아예 안 띄운 상태로 Agent만 실행 — 알림 판단(3번 항목)이 여전히 정상 동작하는지(Phase A의 핵심 요구사항 검증).
+8. `APM_STORAGE_BACKEND=TimescaleDB`로 구성해도 Agent가 정상 빌드되는지(SQLite3 필수화 확인).
+
+### 결정 사항
+
+문서 제안만 — `APM_Agent/`의 실제 소스는 사용자가 직접 작성(원칙 2, [[feedback_claude_md_rule2_scope]]). 작성 중 나오는 오타/컴파일 에러는 요청 시 수정 지원. 완료되면 `WORK_STATUS.md`/`Docs/QT_MFC_PORTFOLIO_PLAN.md` 갱신 후 커밋. 이어서 Qt 쪽 2′~7′단계(Collector DB+Agent DB 2개를 대상으로 재작업)로 넘어감.
