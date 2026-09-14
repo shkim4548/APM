@@ -6,26 +6,32 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QTableView>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
-#include "AlertsTableModel.h"
+#include "MetricsChartWidget.h"
 #include "MetricsTableModel.h"
 #include "MetricsWorker.h"
 
 namespace
 {
-// APM_Console의 appsettings.json Apm:ConnectionString과 같은 파일을 가리켜야 한다.
-// 이 체크아웃 기준 절대경로를 하드코딩 - Console 쪽도 지금 절대경로 하드코딩
-// 상태라 이식성 문제가 새로 생기는 건 아니다. 배포판을 만들 때(§6 8단계)
-// 커맨드라인 인자나 설정 파일로 뺄 것.
-const QString kConsoleDbPath = "/home/shkim/dev/APM/APM_Console/webserver_apm.db";
+// 2026-09-14 : APM_Console(중앙) 대신 Collector(그 장비 로컬)가 만드는 apm_metrics.db를
+// 본다 - Qt는 이제 Console을 전혀 모른다(WORK_STATUS.md/QT_MFC_PORTFOLIO_PLAN.md §3-2
+// 아키텍처 대전환 참고). Collector가 상대경로("apm_metrics.db")로 파일을 만들기 때문에
+// 실제 위치는 Collector를 어느 디렉터리에서 실행했는지에 달려있다 - 이 체크아웃에서는
+// APM_Agent/ 안에서 실행하는 관례(APM_Viewer의 기존 하드코딩과 동일)를 그대로 따름.
+const QString kCollectorDbPath = "/home/shkim/dev/APM/APM_Agent/apm_metrics.db";
+
+// Agent의 수집 주기(APM_Agent/Agent/main.cpp의 MetricScheduler)와 맞춘다 -
+// 더 뜸하면 새 데이터 반영이 늦고, 더 잦으면 같은 데이터를 헛되이 반복 조회한다.
+constexpr int kRefreshIntervalMs = 5000;
 }
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
-    setWindowTitle("APM Qt Dashboard - step 4 (Model/View)");
+    setWindowTitle("APM Qt Dashboard - step 2~5 (Collector 로컬 DB + QtCharts)");
 
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
@@ -33,28 +39,24 @@ MainWindow::MainWindow(QWidget* parent)
     _refreshButton = new QPushButton("새로고침", central);
     _statusLabel = new QLabel("초기화 중...", central);
 
+    _chartWidget = new MetricsChartWidget(central);
+
     _metricsModel = new MetricsTableModel(this);
     _metricsView = new QTableView(central);
     _metricsView->setModel(_metricsModel);
     _metricsView->horizontalHeader()->setStretchLastSection(true);
     _metricsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
-    _alertsModel = new AlertsTableModel(this);
-    _alertsView = new QTableView(central);
-    _alertsView->setModel(_alertsModel);
-    _alertsView->horizontalHeader()->setStretchLastSection(true);
-    _alertsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
-
     layout->addWidget(_refreshButton);
     layout->addWidget(_statusLabel);
+    layout->addWidget(_chartWidget);
     layout->addWidget(_metricsView);
-    layout->addWidget(_alertsView);
     setCentralWidget(central);
 
     connect(_refreshButton, &QPushButton::clicked, this, &MainWindow::OnRefreshClicked);
 
     // 워커를 만들고 워커 스레드로 옮긴다. 이 시점 이후 워커의 슬롯은 워커 스레드에서 실행된다.
-    _worker = new MetricsWorker(kConsoleDbPath);
+    _worker = new MetricsWorker(kCollectorDbPath);
     _worker->moveToThread(&_workerThread);
 
     // 스레드가 끝나면 워커를 그 스레드에서 안전하게 삭제한다.
@@ -66,8 +68,13 @@ MainWindow::MainWindow(QWidget* parent)
     // 워커 → UI (역시 Queued. 슬롯 본문은 UI 스레드에서 실행됨)
     connect(_worker, &MetricsWorker::Initialized, this, &MainWindow::OnWorkerInitialized);
     connect(_worker, &MetricsWorker::MetricsReady, this, &MainWindow::PopulateMetricsTable);
-    connect(_worker, &MetricsWorker::AlertsReady, this, &MainWindow::PopulateAlertTable);
+    // 시그널 팬아웃 - 같은 MetricsReady를 차트도 받아서, 최신 값 1개만 누적한다.
+    connect(_worker, &MetricsWorker::MetricsReady, _chartWidget, &MetricsChartWidget::AppendLatest);
     connect(_worker, &MetricsWorker::RefreshFailed, this, &MainWindow::OnRefreshFailed);
+
+    _refreshTimer = new QTimer(this);
+    _refreshTimer->setInterval(kRefreshIntervalMs);
+    connect(_refreshTimer, &QTimer::timeout, this, &MainWindow::OnRefreshClicked);
 
     _workerThread.start();
 
@@ -98,6 +105,7 @@ void MainWindow::OnWorkerInitialized(bool ok)
     }
     SetStatus("연결됨");
     emit RefreshRequested();
+    _refreshTimer->start();
 }
 
 void MainWindow::OnRefreshFailed(const QString& reason)
@@ -114,9 +122,4 @@ void MainWindow::PopulateMetricsTable(const QVector<MetricsSample>& samples)
 {
     _metricsModel->SetSamples(samples);
     SetStatus(QString("갱신 완료 %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
-}
-
-void MainWindow::PopulateAlertTable(const QVector<AlertSample>& alerts)
-{
-    _alertsModel->SetAlerts(alerts);
 }

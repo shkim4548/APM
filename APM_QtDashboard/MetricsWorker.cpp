@@ -26,5 +26,4 @@ void MetricsWorker::Refresh()
     }
 
     emit MetricsReady(_repository.FetchLatestMetrics(kFetchLimit));
-    emit AlertsReady(_repository.FetchOpenAlerts(kFetchLimit));
 }

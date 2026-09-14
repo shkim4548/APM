@@ -1,5 +1,6 @@
 #include "MetricsRepository.h"
 
+#include <QDateTime>
 #include <QDebug>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -7,7 +8,7 @@
 
 namespace
 {
-    constexpr const char* kConnectionName = "apm_console_ro";
+    constexpr const char* kConnectionName = "apm_collector_ro";
 }
 
 MetricsRepository::MetricsRepository(const QString& dbPath)
@@ -52,13 +53,16 @@ QVector<MetricsSample> MetricsRepository::FetchLatestMetrics(int limit) const
     QVector<MetricsSample> result;
 
     QSqlQuery query(QSqlDatabase::database(_connectionName));
-    // Ts는 .NET DataTimeOffset의 TEXT 직렬화라 소숫점 자리가 행마다 다르다.
-    // 따라서 문자열 정렬 기준으로 쓰면 같은 초 안에서 순서가 어긋날 수 있다.
-
+    // 2026-09-14 : Collector의 apm_metrics.db는 스네이크케이스 컬럼 + epoch 정수 ts라
+    // APM_Console 스키마(PascalCase, DateTimeOffset 문자열)와 다르다. ts 자체는 이제
+    // 진짜 정수라 ORDER BY ts DESC도 안전하지만, 이 저장소 전반의 관례(rowid/Id 같은
+    // 자동증가 정수로 삽입 순서 정렬 - Console 쪽 Ts 정렬 버그를 피하려던 것과 같은 이유)를
+    // 그대로 따라 rowid로 정렬한다. metrics 테이블엔 명시적 PK가 없어 SQLite의 암묵적
+    // rowid를 그대로 쓴다.
     query.prepare(
-        "SELECT Id, Ts, CpuUsagePercent, MemUsedBytes, MemTotalBytes, "
-        "DiskUsedBytes, DiskTotalBytes, NetRxBytesPerSec, NetTxBytesPerSec "
-        "FROM Metrics ORDER BY Id DESC LIMIT ?");
+        "SELECT rowid, ts, cpu_usage_percent, mem_used_bytes, mem_total_bytes, "
+        "disk_used_bytes, disk_total_bytes, net_rx_bytes_per_sec, net_tx_bytes_per_sec "
+        "FROM metrics ORDER BY rowid DESC LIMIT ?");
     query.addBindValue(limit);
 
     if(!query.exec())
@@ -73,7 +77,10 @@ QVector<MetricsSample> MetricsRepository::FetchLatestMetrics(int limit) const
     {
         MetricsSample sample;
         sample.id = query.value(0).toLongLong();
-        sample.ts = query.value(1).toString();
+        // ts는 epoch(초) 정수로 저장돼 있다 - 표시용 문자열로 여기서 변환해둔다
+        // (MetricsTableModel 등 하위 소비자는 여전히 QString ts를 그대로 받아 쓰면 됨).
+        qint64 epochSeconds = query.value(1).toLongLong();
+        sample.ts = QDateTime::fromSecsSinceEpoch(epochSeconds).toString("yyyy-MM-dd HH:mm:ss");
         sample.cpuUsagePercent = query.value(2).toDouble();
         sample.memUsedBytes = query.value(3).toLongLong();
         sample.memTotalBytes = query.value(4).toLongLong();
@@ -81,35 +88,6 @@ QVector<MetricsSample> MetricsRepository::FetchLatestMetrics(int limit) const
         sample.diskTotalBytes = query.value(6).toLongLong();
         sample.netRxBytesPerSec = query.value(7).toLongLong();
         sample.netTxBytesPerSec = query.value(8).toLongLong();
-        result.push_back(sample);
-    }
-    return result;
-}
-
-QVector<AlertSample> MetricsRepository::FetchOpenAlerts(int limit) const
-{
-    QVector<AlertSample> result;
-
-    QSqlQuery query(QSqlDatabase::database(_connectionName));
-    query.prepare(
-        "SELECT Id, MetricType, ThresholdValue, TriggerValue, OpenedAt "
-        "FROM AlertRecords WHERE ClosedAt IS NULL ORDER BY Id DESC LIMIT ?");
-    query.addBindValue(limit);
-
-    if(!query.exec())
-    {
-        qWarning() << "MetricsRepository::FetchOpenAlerts failed : " << query.lastError().text();
-        return result;
-    }
-
-    while(query.next())
-    {
-        AlertSample sample;
-        sample.id = query.value(0).toLongLong();
-        sample.metricType = query.value(1).toInt();
-        sample.thresholdValue = query.value(2).toDouble();
-        sample.triggerValue = query.value(3).toDouble();
-        sample.openedAt = query.value(4).toString();
         result.push_back(sample);
     }
     return result;

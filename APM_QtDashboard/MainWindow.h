@@ -8,11 +8,14 @@
 class QLabel;
 class QPushButton;
 class QTableView;
+class QTimer;
 class MetricsWorker;
 class MetricsTableModel;
-class AlertsTableModel;
+class MetricsChartWidget;
 
-// step 4 : 데이터(모델)와 표시(뷰)를 분리한다. QTableWidget → QTableView + Model.
+// step 2~5 (2026-09-14 재작업) : 대상 DB를 APM_Console(중앙)에서 Collector(그 장비
+// 로컬)로 교체 + QTimer 자동 갱신 + 실시간 차트(MetricsChartWidget) 추가.
+// 알림/Agent 제어(§6~7)는 별도로 검토 중이라 이번엔 손대지 않음.
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -29,7 +32,6 @@ private slots:
     void OnWorkerInitialized(bool ok);
     void OnRefreshFailed(const QString& reason);
     void PopulateMetricsTable(const QVector<MetricsSample>& samples);
-    void PopulateAlertTable(const QVector<AlertSample>& alerts);
 
 private:
     void SetStatus(const QString& text);
@@ -37,11 +39,11 @@ private:
 private:
     QThread _workerThread;
     MetricsWorker* _worker = nullptr;
+    QTimer* _refreshTimer = nullptr;
 
     MetricsTableModel* _metricsModel = nullptr;
-    AlertsTableModel* _alertsModel = nullptr;
     QTableView* _metricsView = nullptr;
-    QTableView* _alertsView = nullptr;
+    MetricsChartWidget* _chartWidget = nullptr;
     QPushButton* _refreshButton = nullptr;
     QLabel* _statusLabel = nullptr;
 };

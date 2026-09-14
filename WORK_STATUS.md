@@ -33,7 +33,7 @@
 5순위 : 백분위/집계 통계                                ✅ 코드 적용 + 빌드/테스트 검증 완료
 6순위 : OpenTelemetry — 구현 보류, 면접용 답변 정리만  ⬜ 미착수
 7순위 : 원격 명령 실행 기능                            🔄 좁은 범위(시작/중지/재연결/로그레벨 고정 명령셋)로 재검토 확정(2026-09-14) — 8순위 아키텍처 개정에 의해 재개, 설계 미착수
-8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-14) — 아키텍처 대전환 확정("Agent 전용 로컬 대시보드+제어판"), `APM_Agent` Phase A(로컬 알림 판단+로컬 IPC 제어) 코드 적용+빌드+실행 검증 완료. 다음: Qt 2′~7′단계 재작업
+8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-14) — `APM_Agent` Phase A 완료, Qt 2′~5′(Collector 로컬 DB+QtCharts) 적용+실측 검증 완료. 6′(알림+연결상태)은 사용자 검토 중, 7′(Agent 제어 UI) 착수 전
 ```
 
 **8순위는 원래 위 1~7과 독립된 별개 트랙으로 시작했으나, 2026-09-14 아키텍처 개정으로 더 이상 독립이 아니다** — Qt 대시보드가 "그 장비의 Agent를 로컬로 보여주고 제어"하는 쪽으로 요구사항이 구체화되면서, `APM_Agent`/`Collector`/`Console`(1~7, 종전엔 "완료, 더 손댈 것 없음")에도 신규 작업(로컬 알림 판단, 로컬 IPC, 명령 라우팅 등)이 필요해졌고 이게 7순위(원격 명령 실행, 종전 보류)를 좁은 범위로 재개시켰다. 계획 전문은 `Docs/QT_MFC_PORTFOLIO_PLAN.md`(2026-09-14 대폭 개정).
@@ -706,6 +706,21 @@ Qt ── 로컬 IPC(QLocalSocket) ──→ Agent (제어 4종)
 - **미검증(낮은 우선순위, 선택)**: 실제 CPU 90% 이상 부하를 걸어 알림 open/resolve 흐름 실측(`stress` 등 필요), `APM_STORAGE_BACKEND=TimescaleDB` 빌드 변형.
 
 **다음 할 일**: Qt 2′~7′단계 재작업(Collector DB+Agent DB 2개 대상으로 교체) — `Docs/QT_MFC_PORTFOLIO_PLAN.md` §9 참고. 커밋은 사용자 요청 시 진행.
+
+**Qt 2′~5′ 직접 적용 완료(2026-09-14, 이어지는 세션)** — 사용자 "2~5는 바로 적용해주고, 6은 검토해보겠다" 요청(원칙 2 예외) → Claude가 직접 작성:
+- `MetricsRepository.h/.cpp`: 쿼리 대상을 `APM_Console`의 `Metrics`(PascalCase, DateTimeOffset 문자열)에서 Collector의 `metrics`(스네이크케이스, epoch 정수)로 교체. `rowid DESC` 정렬(이 저장소의 "자동증가 정수로 정렬" 관례 유지), `ts`는 `QDateTime::fromSecsSinceEpoch`로 표시용 변환. `FetchOpenAlerts()`는 제거(Collector DB에 알림 테이블 없음) — `AlertSample` struct/`AlertsTableModel.*`는 §6에서 재사용 가능성이 높아 삭제하지 않고 그대로 보존(현재는 미사용).
+- `MetricsWorker.h/.cpp`: `AlertsReady` 시그널/조회 제거.
+- `MetricsChartWidget.h/.cpp` 신규 작성 — 2026-09-13에 제안만 해두고 실제로는 한 번도 적용 안 됐던 5단계(QtCharts)를 이번에 새 스키마 기준으로 바로 적용(CPU/Mem 시계열, `kMaxPoints=30`).
+- `MainWindow.h/.cpp`: `AlertsTableModel`/`_alertsView` 배선 제거, `QTimer` 자동 새로고침(5초, Agent 수집 주기와 동일) + 차트 위젯 추가. DB 경로 상수를 `kCollectorDbPath`(`APM_Agent/apm_metrics.db`)로 교체.
+- `CMakeLists.txt`: `Qt6::Charts` 컴포넌트 + `MetricsChartWidget.cpp/.h` 추가.
+
+**검증(직접, 실제 Agent+Collector를 띄워 실측)**:
+- 클린 빌드 성공.
+- `APM_Agent/build/Collector` + `Agent`를 실제로 실행해 `apm_metrics.db`에 실제 행 2건 생성 확인.
+- `QT_QPA_PLATFORM=offscreen` 헤드리스 실행 → 경고/에러 없음.
+- Python으로 Qt가 쓰는 것과 동일한 쿼리(`SELECT rowid, ts, ... FROM metrics ORDER BY rowid DESC LIMIT 20`)를 직접 실행해 실제 반환값(CPU%, 타임스탬프 등)이 정상적인 것 확인 — 스키마 매핑이 실제로 맞다는 것까지 실측.
+
+**남은 것(§6, 사용자가 직접 검토 중)**: Agent의 `agent_alerts.db`(`local_alerts`) 표시 + Agent↔Collector 연결 상태 인디케이터. `AlertSample`/`AlertsTableModel`는 이미 있으니 새 리포지토리(Agent DB 전용, `MetricsRepository`와는 별개 커넥션)만 있으면 됨.
 
 **참고 문서 신규**: `Docs/CPP_KEYWORDS_NOTES.md` — 트랙 진행 중 사용자가 반복해서 헷갈린 C++ 키워드 정리(현재 `constexpr`, `explicit`). 새로 헷갈리는 게 나오면 이 파일에 추가.
 

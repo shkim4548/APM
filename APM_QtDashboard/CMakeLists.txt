@@ -11,7 +11,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Sql)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Sql Charts)
 
 add_executable(APM_QtDashboard
     main.cpp
@@ -25,6 +25,8 @@ add_executable(APM_QtDashboard
     MetricsTableModel.h
     AlertsTableModel.cpp
     AlertsTableModel.h
+    MetricsChartWidget.cpp
+    MetricsChartWidget.h
 )
 
-target_link_libraries(APM_QtDashboard PRIVATE Qt6::Widgets Qt6::Sql)
+target_link_libraries(APM_QtDashboard PRIVATE Qt6::Widgets Qt6::Sql Qt6::Charts)
