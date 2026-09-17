@@ -329,6 +329,7 @@
     <a href="#screenshots">실행 화면</a>
     <a href="#decisions">설계 결정</a>
     <a href="#features">기능</a>
+    <a href="#qt-track">Qt 대시보드</a>
     <a href="#scale">스케일 테스트</a>
     <a href="#spotlight">버그 발견</a>
     <a href="#metrics">실측 지표</a>
@@ -832,6 +833,93 @@
   </div>
 </section>
 
+<!-- QT LOCAL DASHBOARD -->
+<section id="qt-track">
+  <div class="section-inner fade-in">
+    <div class="section-label">// A Second Control Plane</div>
+    <h2 class="section-title">Qt 로컬 대시보드 — Console 없이도 로컬은 살아있어야 한다</h2>
+    <p class="section-sub">기존 웹 대시보드(Console)와는 완전히 독립된 두 번째 관제 채널 — Agent만 상대하는 로컬 전용 Qt 앱을 장비마다 하나씩 붙인다.</p>
+
+    <div style="max-width:560px; margin:0 auto 2rem;">
+      <img src="screenshots/qt_dashboard.png" alt="Qt 로컬 대시보드 실행 화면" style="width:100%; border-radius:8px; border:1px solid var(--border); display:block;">
+      <div class="screenshot-caption" style="text-align:center;">
+        <span class="path">APM_QtDashboard</span>
+        <span class="desc">Collector+Agent+Qt를 실제로 함께 띄우고 촬영(2026-09-17) — 위부터 Agent 제어판(시작/중지/강제 재연결/로그레벨), 연결 상태, 실시간 차트, 지표 표, 알림 표.</span>
+      </div>
+    </div>
+
+    <div class="decision-grid">
+      <div class="decision-card">
+        <div class="decision-num">// 01</div>
+        <div class="decision-title">아키텍처 대전환 — Console 클라이언트에서 Agent 전용 로컬 대시보드로</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">Qt를 원래는 APM_Console 웹 API에 붙는 또 하나의 클라이언트로 설계했다. 그러면 Console이 죽으면 로컬 관제 화면까지 같이 죽는다 — 장비 로컬에서 도는 프로그램이 굳이 중앙 서버에 의존할 이유가 없었다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">Qt는 Console을 아예 모르게 하고, 그 장비의 Collector/Agent가 만드는 로컬 SQLite 파일을 직접 읽게 한다. Collector는 원래 중앙 1개로 설계됐지만 정작 "여러 Agent를 구분"하는 로직 자체가 없어서, 장비마다 1:1로 띄워도 코드 변경 없이 그대로 동작한다는 걸 코드를 다시 읽고 확인했다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">Console/Collector 코드는 완전 무수정, 배치 방식만 바꿔 장비마다 Agent+Collector 한 쌍이 뜨게 하고, Qt는 그 로컬 <code style="font-family:'Fira Code';color:var(--accent)">apm_metrics.db</code>를 직접 조회하도록 전환.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 02</div>
+        <div class="decision-title">알림 판단 위치 — Collector가 아니라 Agent</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">처음엔 "로컬 알림 판단" 로직을 Collector에 넣으려 했다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">Collector가 알림까지 판단하면 Collector의 역할(중계·집계)이 Agent의 역할(자기 상태 판단)을 침해하고, Agent↔Collector 연결이 끊긴 상황에서 알림 기능까지 같이 죽는 문제가 생긴다. Agent가 지표를 수집한 바로 그 자리에서, Collector 전송 전에 직접 판단하기로 했다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">Console의 상태 전이 알림 로직(Zabbix/Nagios 방식, OK→Alert→Resolved 전환 시에만 기록)을 그대로 포팅해 Agent 전용 로컬 DB(<code style="font-family:'Fira Code';color:var(--accent)">agent_alerts.db</code>)에 기록. Agent 다운/Collector 다운/Agent 미기동 3가지 장애 시나리오를 실제로 재현해 화면 캡처로 검증하는 과정에서 "Agent 미기동" 케이스의 상태 라벨이 멈춰버리는 버그도 하나 발견해 수정.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 03</div>
+        <div class="decision-title">차트 갱신 — 폴링 중복점 버그 → 발행-구독 재설계</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">수동 새로고침 버튼과 자동 폴링 타이머가 같은 트리거를 공유해서, 실제로 새 지표가 없어도 차트에 중복된 점이 찍히는 버그를 발견.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">"갱신 이벤트"와 "새 데이터 도착"을 분리 — Collector가 지표를 저장할 때마다 로컬 구독자에게 신호만 쏘고(페이로드 없이, Qt가 기존 SQL 경로로 재조회), 폴링 타이머는 30초 안전망으로 격하.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">Unix domain socket 기반 브로커 없는 단일 토픽 발행-구독을 직접 구현(Collector=발행자, Qt=구독자). 서로 다른 라이브러리(Asio ↔ Qt <code style="font-family:'Fira Code';color:var(--accent)">QLocalSocket</code>)가 같은 로컬 소켓 패밀리로 실제 상호운용되는 것까지 실행으로 확인, 차트 위젯엔 마지막으로 본 id를 비교하는 중복 방지 가드도 추가.</span>
+        </div>
+      </div>
+
+      <div class="decision-card">
+        <div class="decision-num">// 04</div>
+        <div class="decision-title">Agent 원격 제어 — 로컬 IPC</div>
+        <div class="decision-row">
+          <span class="decision-label">문제</span>
+          <span class="decision-text">대시보드가 "보여주기"만 하면 관제 SW로는 부족하다 — 시작/중지/강제 재연결/로그레벨 같은 조작이 필요했다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">판단</span>
+          <span class="decision-text">Unix domain socket + 줄바꿈 구분 JSON으로 왕복하는 프로토콜을 택하되, 서버가 연결 하나당 명령 하나만 처리하고 끝나는 단순한 구조로 설계 — Qt 쪽은 명령마다 새로 연결하는 걸로 맞췄다.</span>
+        </div>
+        <div class="decision-row">
+          <span class="decision-label">해결</span>
+          <span class="decision-text resolved">실제 3개 프로세스(Collector/Agent/Qt)를 띄우고 헤드리스 환경에서 버튼 슬롯을 직접 호출해 4개 명령 전부 검증 — Agent 로그에 재개·일시정지·강제 재연결이 실제로 찍히는 것, Agent가 안 떠 있을 때도 무응답 없이 "명령 실패"로 즉시 표시되는 실패 경로까지 확인.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- SCALE TESTING -->
 <section id="scale">
   <div class="section-inner fade-in">
@@ -1216,6 +1304,16 @@
           <li>SignalR 실시간 푸시</li>
           <li>AssemblyLoadContext 플러그인</li>
           <li>xUnit, Chart.js</li>
+        </ul>
+      </div>
+      <div class="skill-group">
+        <div class="skill-group-title">// 로컬 데스크톱 (Qt)</div>
+        <ul class="skill-list">
+          <li>Qt 6 (Widgets, Sql, Charts, Network)</li>
+          <li>QThread + moveToThread 워커 분리</li>
+          <li>QAbstractTableModel / Model-View</li>
+          <li>QLocalSocket ↔ Unix domain socket(Asio) 상호운용</li>
+          <li>브로커 없는 발행-구독 갱신 설계</li>
         </ul>
       </div>
     </div>

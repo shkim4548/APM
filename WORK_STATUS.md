@@ -789,7 +789,17 @@ Qt ── 로컬 IPC(QLocalSocket) ──→ Agent (제어 4종)
 
 **적용**: `#qt-track` 신규 섹션(아키텍처 대전환/알림 판단 위치/발행-구독 재설계/로컬 IPC 제어 — 4개 decision-card) + 실제 촬영 스크린샷(`Docs/screenshots/qt_dashboard.png`, Collector+Agent+Qt 실행 중 헤드리스 캡처, 임시 촬영 코드는 원복+재확인) + nav 앵커 + 기술 스택에 Qt 그룹 추가. 상세: `Docs/SESSION_LOG.md` 2026-09-17 "포트폴리오(html light) 갱신" 항목.
 
-**다음 할 일**: `portfolio_apm.html`(dark)/`portfolio_apm_light.pptx` 갱신, 커밋/push는 사용자 요청 시. 이로써 Qt/MFC 포트폴리오 트랙은 8단계(배포판) 없이 사실상 마무리 — 남은 건 포트폴리오 산출물 후속 반영뿐.
+**`portfolio_apm.html`(dark)도 반영 완료(2026-09-17, 같은 세션 이어서)** — 사용자 "html 우선 갱신해라". light에 넣은 신규 섹션(`#qt-track`)+nav 앵커+기술스택 Qt 그룹을 dark에도 동일하게 적용 — 새 섹션은 두 파일에서 `diff` 결과 완전히 동일함을 확인, `<section>` 태그 수(12/12)도 정상.
+
+**참고(오늘 작업과 무관하게 기존에 있던 격차)**: dark/light가 이미 내용상 어긋나 있었음 — light의 "버그 발견" 섹션에 dark엔 없는 동시성 버그 심층 분석이 이전에 추가돼 있었음(언제 어느 커밋에서 갈라졌는지 미상, 이번엔 조사/동기화 안 함 — 요청 범위 밖).
+
+**`portfolio_apm_light.pptx`도 반영 완료(2026-09-17, 같은 세션 이어서)** — 사용자 "pptx만 갱신하자". `anthropic-skills:pptx` 스킬로 기존 18슬라이드 덱을 unzip→XML 직접 편집→zip 방식으로 수정 — 신규 슬라이드 3장("Qt 로컬 대시보드 (1/2)/(2/2)" 텍스트 카드 + 실제 스크린샷 슬라이드)을 §Operational Features와 §Scale Testing 사이(html과 동일 위치)에 삽입, 전체 21장 페이지 번호 재정렬. `validate.py` 전부 통과 + LibreOffice 렌더링 21장 시각 확인 완료. 기술 스택 슬라이드의 Qt 그룹 추가는 우하단 페이지 번호와 겹칠 레이아웃 위험이 있어 이번엔 보류(html에는 있음 — pptx만 없음, 알아두기). 상세: `Docs/SESSION_LOG.md` 2026-09-17 "포트폴리오(pptx) 갱신" 항목.
+
+**기술 스택 슬라이드 Qt 그룹도 마저 반영 + 커밋/push 완료(2026-09-17, 같은 세션 이어서)** — 사용자 "갱신하고 커밋 푸시해줘". 우측 칼럼 여백에 "로컬 데스크톱 (Qt)" 그룹(태그 3개: Qt6/QThread/QLocalSocket)을 다른 그룹과 동일한 구조로 추가, 페이지 번호와 안 겹치게 박스 높이만 축소해서 배치 — `validate.py` 재통과+렌더링 재확인 완료.
+
+`portfolio_apm.html`(dark), `portfolio_apm_light.html`, `portfolio_apm_light.pptx`, `Docs/SESSION_LOG.md`, `WORK_STATUS.md` 전부 커밋+push 완료.
+
+**다음 할 일**: `김서현_APM_포트폴리오_v1.pptx`(구버전) 갱신은 여전히 범위 밖(다음 별도 요청 시 진행). 이로써 Qt/MFC 포트폴리오 트랙(8순위)은 8단계(배포판) 없이 사실상 완전 마무리.
 
 **참고 문서 신규**: `Docs/CPP_KEYWORDS_NOTES.md` — 트랙 진행 중 사용자가 반복해서 헷갈린 C++ 키워드 정리(현재 `constexpr`, `explicit`). 새로 헷갈리는 게 나오면 이 파일에 추가.
 
