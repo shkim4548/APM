@@ -11,6 +11,7 @@
 #include <QWidget>
 
 #include "MetricsChartWidget.h"
+#include "MetricsPushClient.h"
 #include "MetricsTableModel.h"
 #include "MetricsWorker.h"
 
@@ -23,9 +24,14 @@ namespace
 // APM_Agent/ 안에서 실행하는 관례(APM_Viewer의 기존 하드코딩과 동일)를 그대로 따름.
 const QString kCollectorDbPath = "/home/shkim/dev/APM/APM_Agent/apm_metrics.db";
 
-// Agent의 수집 주기(APM_Agent/Agent/main.cpp의 MetricScheduler)와 맞춘다 -
-// 더 뜸하면 새 데이터 반영이 늦고, 더 잦으면 같은 데이터를 헛되이 반복 조회한다.
-constexpr int kRefreshIntervalMs = 5000;
+// 2026-09-14 : Collector의 MetricsBroadcastServer 소켓 경로(Collector/main.cpp의
+// METRICS_PUBSUB_SOCKET_PATH와 반드시 같아야 함).
+const QString kCollectorPushSocketPath = "/tmp/apm_collector.sock";
+
+// 2026-09-14 : 이제 "주 트리거"가 아니라 "안전망" - 푸시 연결이 끊겨 있어도 이 주기마다는
+// 갱신되게 한다. 너무 짧으면 안전망의 존재 의미가 없고(푸시랑 다를 바 없어짐), 너무 길면
+// 푸시가 끊긴 동안 화면이 오래 정체된다 - 30초(수집 주기의 6배)로 절충.
+constexpr int kFallbackRefreshIntervalMs = 30000;
 }
 
 MainWindow::MainWindow(QWidget* parent)
@@ -73,8 +79,15 @@ MainWindow::MainWindow(QWidget* parent)
     connect(_worker, &MetricsWorker::RefreshFailed, this, &MainWindow::OnRefreshFailed);
 
     _refreshTimer = new QTimer(this);
-    _refreshTimer->setInterval(kRefreshIntervalMs);
+    _refreshTimer->setInterval(kFallbackRefreshIntervalMs);
     connect(_refreshTimer, &QTimer::timeout, this, &MainWindow::OnRefreshClicked);
+    _refreshTimer->start();
+
+    // 2026-09-14 : Collector 푸시 구독 - 새 지표 알림을 받으면 기존 트리거(OnRefreshClicked)를
+    // 그대로 재사용한다(새 갱신 로직을 안 만듦, 트리거 경로만 하나 더 생기는 것).
+    _pushClient = new MetricsPushClient(kCollectorPushSocketPath, this);
+    connect(_pushClient, &MetricsPushClient::NewMetricAvailable, this, &MainWindow::OnRefreshClicked);
+    _pushClient->Start();
 
     _workerThread.start();
 
@@ -105,7 +118,6 @@ void MainWindow::OnWorkerInitialized(bool ok)
     }
     SetStatus("연결됨");
     emit RefreshRequested();
-    _refreshTimer->start();
 }
 
 void MainWindow::OnRefreshFailed(const QString& reason)

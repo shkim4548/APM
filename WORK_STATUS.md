@@ -33,7 +33,7 @@
 5순위 : 백분위/집계 통계                                ✅ 코드 적용 + 빌드/테스트 검증 완료
 6순위 : OpenTelemetry — 구현 보류, 면접용 답변 정리만  ⬜ 미착수
 7순위 : 원격 명령 실행 기능                            🔄 좁은 범위(시작/중지/재연결/로그레벨 고정 명령셋)로 재검토 확정(2026-09-14) — 8순위 아키텍처 개정에 의해 재개, 설계 미착수
-8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-14) — `APM_Agent` Phase A 완료, Qt 2′~5′(Collector 로컬 DB+QtCharts) 적용+실측 검증 완료. 6′(알림+연결상태)은 사용자 검토 중, 7′(Agent 제어 UI) 착수 전
+8순위(신규 트랙) : Qt/MFC 포트폴리오 확장               🟡 진행 중(2026-09-17) — `APM_Agent` Phase A 완료, Qt 2′~5′ 완료, Collector→Qt 발행-구독(차트 갱신 트리거) 적용+실측 검증 완료. 6′(알림+연결상태)/7′(Agent 제어 UI)는 아직 미적용
 ```
 
 **8순위는 원래 위 1~7과 독립된 별개 트랙으로 시작했으나, 2026-09-14 아키텍처 개정으로 더 이상 독립이 아니다** — Qt 대시보드가 "그 장비의 Agent를 로컬로 보여주고 제어"하는 쪽으로 요구사항이 구체화되면서, `APM_Agent`/`Collector`/`Console`(1~7, 종전엔 "완료, 더 손댈 것 없음")에도 신규 작업(로컬 알림 판단, 로컬 IPC, 명령 라우팅 등)이 필요해졌고 이게 7순위(원격 명령 실행, 종전 보류)를 좁은 범위로 재개시켰다. 계획 전문은 `Docs/QT_MFC_PORTFOLIO_PLAN.md`(2026-09-14 대폭 개정).
@@ -721,6 +721,36 @@ Qt ── 로컬 IPC(QLocalSocket) ──→ Agent (제어 4종)
 - Python으로 Qt가 쓰는 것과 동일한 쿼리(`SELECT rowid, ts, ... FROM metrics ORDER BY rowid DESC LIMIT 20`)를 직접 실행해 실제 반환값(CPU%, 타임스탬프 등)이 정상적인 것 확인 — 스키마 매핑이 실제로 맞다는 것까지 실측.
 
 **남은 것(§6, 사용자가 직접 검토 중)**: Agent의 `agent_alerts.db`(`local_alerts`) 표시 + Agent↔Collector 연결 상태 인디케이터. `AlertSample`/`AlertsTableModel`는 이미 있으니 새 리포지토리(Agent DB 전용, `MetricsRepository`와는 별개 커넥션)만 있으면 됨.
+
+**6′ 구체 계획 승인 + 전체 코드 설계 완료(2026-09-14, 이어지는 세션)** — 사용자가 검토 자료 요청 → 계획 제안 → "이대로 진행하자, 적용은 내가 하겠다"로 확정. `Docs/SESSION_LOG.md` 2026-09-14 "6′ 설계·코드 제안" 항목에 전문 작성(제안만, 소스 미작성 — 원칙 2). 핵심 설계:
+- 연결 상태는 IPC 조회가 아니라 **Agent가 `agent_alerts.db`에 상태를 계속 덮어쓰고 Qt가 읽기만** 하는 방식(기존 "로컬 파일 읽기" 패턴 유지, 통신 방식을 늘리지 않음).
+- `agent_status` 테이블(1행 고정, `id INTEGER PRIMARY KEY CHECK (id = 1)`) — 매 수집 주기(5초)마다 갱신해서 **하트비트 겸용**. `updated_at`이 오래됐으면 "Agent 자체가 죽음", 최신인데 `connected=false`면 "Collector와만 끊김"으로 구분.
+- Agent: `AgentAlertStore::UpdateStatus(bool)` 추가, `ResilientSender::IsConnected()` getter 추가, `main.cpp`의 기존 5초 콜백에 한 줄만 추가(새 타이머/콜백 안 만듦).
+- Qt: `AgentAlertRepository`(신규, `agent_alerts.db` 전용 커넥션) — `MetricsRepository`와 완전히 별개 파일이라 합치지 않음. `MetricsWorker`는 새로 안 만들고 기존 워커가 지표+알림+상태를 같은 5초 주기로 같이 조회(워커 스레드 하나로 통일). `AlertsTableModel`(기존, 미사용 상태였음) 재배선. 상태 라벨 3단계 판정(연결됨/끊김-재시도중/응답없음, staleness 임계값 15초=주기 3배).
+
+**다음 할 일**: 사용자가 위 SESSION_LOG 제안대로 `APM_Agent`/`APM_QtDashboard` 직접 작성 → 빌드/검증(SESSION_LOG "검증" 7개 항목 — 특히 5번: Collector와 Agent가 서로 독립적으로 죽고 사는 상황에서 두 상태 표시가 각각 올바르게 반응하는지). 완료되면 이어서 §7(Agent 제어 UI, `QLocalSocket`).
+
+**차트 갱신을 폴링→발행-구독(Collector→Qt 푸시)으로 재설계 확정(2026-09-14, 이어지는 세션)** — `MetricsChartWidget`이 "새 데이터"가 아니라 "갱신 이벤트"마다 점을 찍는 문제(수동 새로고침 버튼과 자동 타이머가 같은 트리거를 써서, 실제 새 지표 없이도 중복 점이 찍힐 수 있음)를 사용자가 지적 → 논의 끝에 폴링을 발행-구독(pub/sub)으로 재설계하기로 확정(AskUserQuestion). `Docs/SESSION_LOG.md` 2026-09-14 "차트 갱신을 폴링→발행-구독" 항목에 전체 코드 작성(제안만, 소스 미작성 — 원칙 2). 핵심:
+- Collector(발행자)가 지표를 저장할 때마다 로컬 Unix domain socket으로 **페이로드 없는 핑**(`{"event":"new_metric"}`)만 구독자(Qt)에게 브로드캐스트. Qt는 신호를 받으면 기존 SQL 조회를 그대로 재사용 — 스키마를 두 군데(SQL+푸시 JSON) 유지보수하지 않기 위함.
+- 전송 계층은 Agent 제어 채널(Unix domain socket)과 동일 — **ICMP 아님**(사용자 질문에 답변, L7 애플리케이션 메시지임을 명확히 함).
+- `QTimer`는 주 트리거에서 안전망(30초)으로 격하. `MetricsChartWidget`엔 `_lastSeenId` 중복 방지도 같이 반영(수동 버튼이 여전히 있어 "이벤트=새 데이터" 100% 보장 안 되므로).
+- **이건 "Collector 코어 무수정" 원칙을 두 번째로 깨는 지점**(첫 번째는 Agent Phase A) — Collector에 `MetricsBroadcastServer` 신규 + `main.cpp` 수정 필요. Console은 여전히 무수정. Qt가 상대하는 채널이 3개(Agent 제어 IPC / Collector 지표 파일 읽기 / Collector 푸시 IPC)로 늘어남.
+- **직접 검증까지 완료**: `QLocalSocket`이 `Qt6::Widgets`만으로는 안 되고 `Qt6::Network` 컴포넌트가 별도로 필요하다는 걸 최소 재현 프로젝트로 직접 빌드해서 확인(2단계 `Sql` 컴포넌트 누락 실수를 이번엔 제안 단계에서 미리 방지).
+
+**다음 할 일**: 사용자가 이 제안 반영해서 `APM_Agent`(Collector)/`APM_QtDashboard` 직접 작성 → 빌드/검증(SESSION_LOG "검증" 6개 항목).
+
+**발행-구독 재설계 직접 적용 완료(2026-09-17, 3일 공백 후 이어지는 세션)** — 사용자 "남은 변경사항은 직접 해주고, 설명 브리핑을 기록에 추가해줘" 요청(원칙 2 예외). 디스크 재확인(원칙 7) 결과 사용자가 이미 일부를 직접 작성해뒀으나 미완성/버그 상태였음:
+- `Collector/MetricsBroadcastServer.h/.cpp`(사용자 작성분) — `asio::io_context`를 참조가 아니라 **값으로 선언**(복사 불가 타입이라 컴파일 자체가 안 됨, 설계 의도도 깨짐), `Notify()` 선언이 헤더에서 누락, `.cpp`에 오타 5건(`_socektPath`, 스코프 지정자 오타 2곳, `aiso::write`, `erase()`/`++it` 인자 누락). 전부 정정.
+- `Collector/main.cpp` — `#include`만 있고 실제 배선(인스턴스 생성/`Start()`/`Notify()` 호출) 전혀 없었음 → 3곳 추가.
+- `MetricsPushClient.cpp` — 생성자 껍데기만 있고 나머지 전부 미구현 → 전체 구현.
+- `MainWindow`는 6′ 이전(2′~5′) 상태였음을 재확인(6′는 여전히 미적용) — 이번 푸시 재설계는 6′ 건너뛰고 2′~5′ 위에 바로 적용.
+- 나머지(`MetricsChartWidget` `_lastSeenId` 중복 방지, Qt `CMakeLists.txt`에 `Network` 컴포넌트)도 전부 적용.
+
+**검증(직접, 실제 Collector+Agent+Qt 3개 프로세스 실행)**: 클린 빌드 전부 성공. 8초 실행 관찰 중 Collector 로그에 `[MetricsBroadcastServer] subscriber connected` 확인(Qt `QLocalSocket`이 Collector의 Asio Unix domain socket에 실제 접속 성공 — 서로 다른 라이브러리 간 로컬 소켓 상호운용 실증), 지표 2건 수신/저장 확인, Qt 헤드리스 실행 경고 없음.
+
+상세 발견 내역은 `Docs/SESSION_LOG.md` 2026-09-17 "발행-구독 재설계: 남은 변경사항 직접 적용 + 발견한 문제 브리핑" 항목 참고.
+
+**다음 할 일**: 커밋 여부는 사용자 요청 시. 이후 6′(알림+연결상태)/7′(Agent 제어 UI) 진행.
 
 **참고 문서 신규**: `Docs/CPP_KEYWORDS_NOTES.md` — 트랙 진행 중 사용자가 반복해서 헷갈린 C++ 키워드 정리(현재 `constexpr`, `explicit`). 새로 헷갈리는 게 나오면 이 파일에 추가.
 

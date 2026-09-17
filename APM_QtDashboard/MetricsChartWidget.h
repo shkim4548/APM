@@ -29,4 +29,5 @@ private:
     QValueAxis* _axisX;
     QValueAxis* _axisY;
     qint64 _nextX = 0;
+    qlonglong _lastSeenId = -1;   // 2026-09-14 : 중복 점 방지(아래 .cpp 참고)
 };

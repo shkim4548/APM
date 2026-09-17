@@ -12,6 +12,7 @@ class QTimer;
 class MetricsWorker;
 class MetricsTableModel;
 class MetricsChartWidget;
+class MetricsPushClient;
 
 // step 2~5 (2026-09-14 재작업) : 대상 DB를 APM_Console(중앙)에서 Collector(그 장비
 // 로컬)로 교체 + QTimer 자동 갱신 + 실시간 차트(MetricsChartWidget) 추가.
@@ -39,7 +40,8 @@ private:
 private:
     QThread _workerThread;
     MetricsWorker* _worker = nullptr;
-    QTimer* _refreshTimer = nullptr;
+    QTimer* _refreshTimer = nullptr;           // 이제 "안전망"(주 트리거는 _pushClient)
+    MetricsPushClient* _pushClient = nullptr;  // 2026-09-14 : Collector 푸시 구독, 주 트리거
 
     MetricsTableModel* _metricsModel = nullptr;
     QTableView* _metricsView = nullptr;

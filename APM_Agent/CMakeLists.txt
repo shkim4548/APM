@@ -36,10 +36,12 @@ add_subdirectory(Storage)
 add_executable(Collector
     Collector/main.cpp
     Collector/CollectorConfig.cpp
+    Collector/MetricsBroadcastServer.cpp
     pch.cpp
 )
 target_include_directories(Collector PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 target_link_libraries(Collector PRIVATE APM_Common APM_Storage)
+
 
 add_executable(Agent
     Agent/main.cpp

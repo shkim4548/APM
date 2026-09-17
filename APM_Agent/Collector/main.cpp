@@ -10,6 +10,7 @@
 #include "SpanRecorder.h"
 #include "Protocol/Metric.pb.h"
 #include "Storage/MetricStoreFactory.h"
+#include "MetricsBroadcastServer.h"
 #include <thread>
 
 // SqliteMetricStore::Store()의 fdatasync가 네트워크 스레드를 블로킹하는 문제(1-5 실측 발견) 개선용.
@@ -64,6 +65,12 @@ int main()
 
         asio::io_context ioContext;
 
+        // 2026-09-14(§6 후속) : 지표를 저장할 때마다 로컬 구독자(Qt)에게 핑을 쏜다.
+        // ioContext 선언 다음이어야 함(생성자가 참조를 받음).
+        constexpr const char* METRICS_PUBSUB_SOCKET_PATH = "/tmp/apm_collector.sock";
+        MetricsBroadcastServer broadcastServer(ioContext, METRICS_PUBSUB_SOCKET_PATH);
+        broadcastServer.Start();
+
         // Agent 접속을 받는 서버 역할 컨텍스트(기존)
         asio::ssl::context sslContext(asio::ssl::context::tls_server);
         sslContext.use_certificate_chain_file("certs/server.crt");
@@ -79,7 +86,7 @@ int main()
             [webServerKey]() { return std::make_unique<AesGcmPayload>(webServerKey); });
 
         PacketHandler::Register<apm::Metric>(
-            [storePtr, &metricStoreQueue, &pendingMetrics, &consoleLogQueue](const apm::Metric& pkt)
+            [storePtr, &metricStoreQueue, &pendingMetrics, &consoleLogQueue, &ioContext, &broadcastServer](const apm::Metric& pkt)
             {
                 // Collector 안에서 "트랜잭션"이라 부를 만한 지점 중 가장 자연스러운 곳 -
                 // Agent가 보낸 메트릭 패킷 하나를 받아 저장하는 구간(2026-07-26 4순위 데모 계측).
@@ -87,7 +94,15 @@ int main()
 
                 // store->Store(pkt) 직접 호출(동기, fdatasync 블로킹 포함) 대신 워커 스레드로 위임.
                 // pkt은 값 복사로 캡처 - 비동기 실행 시점까지 살아있어야 함.
-                metricStoreQueue.Push([storePtr, pkt]() { storePtr->Store(pkt); });
+                // 저장이 "실제로 끝난 뒤" 구독자에게 알려야 하므로, 알림도 같은 워커 람다 안에서
+                // Store() 다음에 건다. 단, broadcastServer.Notify()는 Asio 소켓을 건드리므로
+                // io_context 스레드에서만 호출 가능 - asio::post로 워커 스레드에서 io_context
+                // 스레드로 다시 넘긴다(이 파일의 cliThread -> flushToWebServer와 같은 패턴).
+                metricStoreQueue.Push([storePtr, pkt, &ioContext, &broadcastServer]()
+                {
+                    storePtr->Store(pkt);
+                    asio::post(ioContext, [&broadcastServer]() { broadcastServer.Notify(); });
+                });
 
                 pendingMetrics.push_back(pkt);
 

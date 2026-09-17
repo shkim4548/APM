@@ -62,6 +62,15 @@ void MetricsChartWidget::AppendLatest(const QVector<MetricsSample>& samples)
 
     // samples[0]이 최신값(FetchLatestMetrics가 "ORDER BY rowid DESC"로 가져오므로).
     const MetricsSample& latest = samples.first();
+
+    // 2026-09-14 : 이제 갱신이 Collector 푸시로 트리거되긴 하지만, 수동 "새로고침" 버튼이
+    // 여전히 있어서 "갱신 이벤트 발생"과 "실제 새 데이터"가 100% 같다는 보장은 없다(사용자가
+    // 짚은 지점). 같은 행(id)을 또 받으면 조용히 무시 - 의도("실제 새 샘플 1개당 점 1개")를
+    // 갱신 트리거 방식과 무관하게 항상 지킨다.
+    if (latest.id == _lastSeenId)
+        return;
+    _lastSeenId = latest.id;
+
     const double memPercent = latest.memTotalBytes > 0
         ? latest.memUsedBytes * 100.0 / latest.memTotalBytes
         : 0.0;

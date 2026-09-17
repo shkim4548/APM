@@ -11524,3 +11524,1623 @@ target_link_libraries(Agent PRIVATE APM_Common APM_Storage)
 ### 결정 사항
 
 문서 제안만 — `APM_Agent/`의 실제 소스는 사용자가 직접 작성(원칙 2, [[feedback_claude_md_rule2_scope]]). 작성 중 나오는 오타/컴파일 에러는 요청 시 수정 지원. 완료되면 `WORK_STATUS.md`/`Docs/QT_MFC_PORTFOLIO_PLAN.md` 갱신 후 커밋. 이어서 Qt 쪽 2′~7′단계(Collector DB+Agent DB 2개를 대상으로 재작업)로 넘어감.
+
+
+## 2026-09-14 — Qt/MFC 트랙 6′ 설계·코드 제안: Agent 알림 표시 + 연결 상태 인디케이터
+
+### 배경
+
+`Docs/QT_MFC_PORTFOLIO_PLAN.md` §6 새 표의 6′("Agent 로컬 알림 판단 결과 표시 + Agent↔Collector 연결 상태 인디케이터")를 사용자가 직접 검토 후 승인 — 소스는 사용자가 직접 작성(원칙 2, [[feedback_claude_md_rule2_scope]]).
+
+**핵심 판단 두 가지**:
+1. **연결 상태를 IPC 조회가 아니라 "상태 파일에 쓰고 Qt가 읽기"로 처리** — 지금까지 Qt는 전부 로컬 파일 읽기 패턴(IPC는 명령 전송 전용)이었다. 여기에 "상태를 물어보는 요청-응답"을 추가하면 통신 방식이 두 갈래로 늘어난다. Agent가 자기 연결 상태를 `agent_alerts.db`에 한 행으로 계속 덮어쓰고, Qt는 그 파일을 읽기만 하면 기존 패턴이 유지된다.
+2. **"Agent 자체가 죽었는지"와 "Agent는 살았는데 Collector와만 끊겼는지"를 구분** — 상태 행만 읽으면 Agent 프로세스가 죽어도 마지막 값이 그대로 남아있어 구분이 안 된다. 매 수집 주기(5초)마다 상태 행을 갱신시켜(하트비트 겸용) "마지막 갱신이 오래됐으면 Agent 자체가 죽은 것"으로 판단한다.
+
+**기존 자산 재사용**: `AlertSample`/`AlertsTableModel`(Qt, 이미 완성돼 있었지만 미사용 상태)이 `local_alerts` 스키마와 컬럼 구성이 거의 1:1로 맞아 그대로 재사용한다. `ResilientSender`의 `ConnectionStateCallback`은 이번엔 안 씀 — 대신 이미 5초마다 도는 `MetricScheduler` 콜백 안에서 상태를 갱신해 별도 콜백 배선을 늘리지 않는다.
+
+### 제안 — Storage/AgentAlertStore.h (수정, `APM_Agent/Storage/`)
+
+**수정 전** (파일 전문):
+```cpp
+#pragma once
+#include "pch.h"
+#include <sqlite3.h>
+#include <optional>
+#include "../Agent/ThresholdSet.h"
+
+// step Phase A : Agent 전용 알림 이력 저장소. apm_metrics.db(Collector 소유, 지표)와는
+// 완전히 별개의 파일이다 - Agent는 Collector의 DB에 절대 손대지 않는다(프로세스 경계 존중,
+// 2026-09-14 사용자 지적: "Collector가 알림판단까지 하는건 Agent의 역할을 침해하는 것").
+struct LocalAlertRecord
+{
+    long long id = 0;
+    int metricType = 0;
+    double thresholdValue = 0.0;
+    double triggerValue = 0.0;
+    long long openedAt = 0;     // epoch seconds
+};
+
+class AgentAlertStore
+{
+public:
+    explicit AgentAlertStore(const String& dbPath);
+    ~AgentAlertStore();
+
+    // 열림 상태의 알림이 있으면 그 레코드를, 없으면 nullopt를 반환.
+    std::optional<LocalAlertRecord> FindOpen(AlertMetricType type) const;
+    // 새 알림을 연다.
+    void Open(AlertMetricType type, double thresholdValue, double triggerValue);
+    // id로 지정된 알림을 닫는다(resolved_value 기록).
+    void Resolve(long long id, double resolvedValue);
+
+private:
+    sqlite3* _db = nullptr;
+    sqlite3_stmt* _findOpenStmt = nullptr;
+    sqlite3_stmt* _openStmt = nullptr;
+    sqlite3_stmt* _resolveStmt = nullptr;
+};
+```
+
+**수정 후**:
+```cpp
+#pragma once
+#include "pch.h"
+#include <sqlite3.h>
+#include <optional>
+#include "../Agent/ThresholdSet.h"
+
+// step Phase A : Agent 전용 알림 이력 저장소. apm_metrics.db(Collector 소유, 지표)와는
+// 완전히 별개의 파일이다 - Agent는 Collector의 DB에 절대 손대지 않는다(프로세스 경계 존중,
+// 2026-09-14 사용자 지적: "Collector가 알림판단까지 하는건 Agent의 역할을 침해하는 것").
+struct LocalAlertRecord
+{
+    long long id = 0;
+    int metricType = 0;
+    double thresholdValue = 0.0;
+    double triggerValue = 0.0;
+    long long openedAt = 0;     // epoch seconds
+};
+
+class AgentAlertStore
+{
+public:
+    explicit AgentAlertStore(const String& dbPath);
+    ~AgentAlertStore();
+
+    // 열림 상태의 알림이 있으면 그 레코드를, 없으면 nullopt를 반환.
+    std::optional<LocalAlertRecord> FindOpen(AlertMetricType type) const;
+    // 새 알림을 연다.
+    void Open(AlertMetricType type, double thresholdValue, double triggerValue);
+    // id로 지정된 알림을 닫는다(resolved_value 기록).
+    void Resolve(long long id, double resolvedValue);
+
+    // step 6' : Agent<->Collector 연결 상태를 1행짜리 테이블에 계속 덮어쓴다.
+    // 매 수집 주기(5초)마다 호출되므로 하트비트도 겸한다 - Qt는 updated_at이 오래되면
+    // "Agent 자체가 죽었다"고 판단할 수 있다(연결은 됐는데 상태만 안 바뀐 것과 구분).
+    void UpdateStatus(bool connected);
+
+private:
+    sqlite3* _db = nullptr;
+    sqlite3_stmt* _findOpenStmt = nullptr;
+    sqlite3_stmt* _openStmt = nullptr;
+    sqlite3_stmt* _resolveStmt = nullptr;
+    sqlite3_stmt* _updateStatusStmt = nullptr;
+};
+```
+
+**변경 사유**: `UpdateStatus(bool)` 하나만 추가 — 열림/닫힘 알림과 마찬가지로 이 클래스가 "Agent 로컬 상태를 저장하는 곳"이라는 책임을 그대로 유지한다(Collector/Qt가 아니라 Agent 자신이 씀).
+
+### 제안 — Storage/AgentAlertStore.cpp (수정)
+
+**수정 전** (파일 전문 — 이미 `Docs/SESSION_LOG.md` 2026-09-14 "APM_Agent Phase A" 항목에 있음, 여기서는 바뀌는 지점만 발췌):
+
+`namespace` 블록의 SQL 상수들과 생성자, 소멸자.
+
+**수정 후 — namespace 블록** (SQL 상수 2개 추가):
+```cpp
+namespace
+{
+constexpr const char* CREATE_TABLE_SQL =
+    "CREATE TABLE IF NOT EXISTS local_alerts ("
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "  metric_type INTEGER NOT NULL,"
+    "  threshold_value REAL,"
+    "  trigger_value REAL,"
+    "  opened_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),"
+    "  resolved_value REAL,"
+    "  closed_at INTEGER"
+    ");";
+
+// step 6' : 상태는 항상 1행만 유지(id=1 고정) - Agent 프로세스 하나에 상태 하나.
+constexpr const char* CREATE_STATUS_TABLE_SQL =
+    "CREATE TABLE IF NOT EXISTS agent_status ("
+    "  id INTEGER PRIMARY KEY CHECK (id = 1),"
+    "  connected INTEGER NOT NULL,"
+    "  updated_at INTEGER NOT NULL"
+    ");";
+
+constexpr const char* FIND_OPEN_SQL =
+    "SELECT id, metric_type, threshold_value, trigger_value, opened_at "
+    "FROM local_alerts WHERE metric_type = ? AND closed_at IS NULL "
+    "ORDER BY id DESC LIMIT 1;";
+
+constexpr const char* OPEN_SQL =
+    "INSERT INTO local_alerts (metric_type, threshold_value, trigger_value) VALUES (?, ?, ?);";
+
+constexpr const char* RESOLVE_SQL =
+    "UPDATE local_alerts SET resolved_value = ?, closed_at = strftime('%s','now') WHERE id = ?;";
+
+// INSERT OR REPLACE로 1행을 계속 덮어쓴다(id=1 고정이라 매번 같은 행을 갱신).
+constexpr const char* UPDATE_STATUS_SQL =
+    "INSERT OR REPLACE INTO agent_status (id, connected, updated_at) "
+    "VALUES (1, ?, strftime('%s','now'));";
+
+int CapturePragmaResult(void* out, int columnCount, char** columnValues, char**)
+{
+    if (out && columnCount > 0 && columnValues[0])
+        *static_cast<String*>(out) = columnValues[0];
+    return 0;
+}
+}
+```
+
+**수정 후 — 생성자**(테이블 생성 + prepare 부분):
+```cpp
+AgentAlertStore::AgentAlertStore(const String& dbPath)
+{
+    if (::sqlite3_open(dbPath.c_str(), &_db) != SQLITE_OK)
+        throw std::runtime_error("AgentAlertStore - open failed: " + String(::sqlite3_errmsg(_db)));
+
+    String journalMode;
+    ::sqlite3_exec(_db, "PRAGMA journal_mode = WAL;", CapturePragmaResult, &journalMode, nullptr);
+    if (journalMode != "wal")
+        std::cerr << "[AgentAlertStore] WAL 모드 전환 실패 - 현재 journal_mode=" << journalMode << std::endl;
+    ::sqlite3_exec(_db, "PRAGMA synchronous = NORMAL;", nullptr, nullptr, nullptr);
+
+    char* errMsg = nullptr;
+    if (::sqlite3_exec(_db, CREATE_TABLE_SQL, nullptr, nullptr, &errMsg) != SQLITE_OK)
+    {
+        String err = errMsg ? errMsg : "unknown";
+        ::sqlite3_free(errMsg);
+        throw std::runtime_error("AgentAlertStore - CREATE TABLE failed: " + err);
+    }
+
+    if (::sqlite3_exec(_db, CREATE_STATUS_TABLE_SQL, nullptr, nullptr, &errMsg) != SQLITE_OK)
+    {
+        String err = errMsg ? errMsg : "unknown";
+        ::sqlite3_free(errMsg);
+        throw std::runtime_error("AgentAlertStore - CREATE STATUS TABLE failed: " + err);
+    }
+
+    if (::sqlite3_prepare_v2(_db, FIND_OPEN_SQL, -1, &_findOpenStmt, nullptr) != SQLITE_OK
+        || ::sqlite3_prepare_v2(_db, OPEN_SQL, -1, &_openStmt, nullptr) != SQLITE_OK
+        || ::sqlite3_prepare_v2(_db, RESOLVE_SQL, -1, &_resolveStmt, nullptr) != SQLITE_OK
+        || ::sqlite3_prepare_v2(_db, UPDATE_STATUS_SQL, -1, &_updateStatusStmt, nullptr) != SQLITE_OK)
+    {
+        throw std::runtime_error("AgentAlertStore - prepare failed: " + String(::sqlite3_errmsg(_db)));
+    }
+}
+```
+
+**수정 후 — 소멸자**:
+```cpp
+AgentAlertStore::~AgentAlertStore()
+{
+    if (_findOpenStmt) ::sqlite3_finalize(_findOpenStmt);
+    if (_openStmt) ::sqlite3_finalize(_openStmt);
+    if (_resolveStmt) ::sqlite3_finalize(_resolveStmt);
+    if (_updateStatusStmt) ::sqlite3_finalize(_updateStatusStmt);
+    if (_db) ::sqlite3_close(_db);
+}
+```
+
+**신규 함수 추가** (파일 끝):
+```cpp
+void AgentAlertStore::UpdateStatus(bool connected)
+{
+    ::sqlite3_reset(_updateStatusStmt);
+    ::sqlite3_bind_int(_updateStatusStmt, 1, connected ? 1 : 0);
+
+    if (::sqlite3_step(_updateStatusStmt) != SQLITE_DONE)
+        std::cerr << "[AgentAlertStore] status update failed: " << ::sqlite3_errmsg(_db) << std::endl;
+}
+```
+
+`FindOpen`/`Open`/`Resolve` 함수 본문은 변경 없음(2026-09-14 Phase A 항목 그대로).
+
+**변경 사유**: `agent_status` 테이블도 `local_alerts`와 똑같은 WAL+synchronous=NORMAL 설정을 공유(같은 파일이므로 자동). `id INTEGER PRIMARY KEY CHECK (id = 1)` 제약으로 "항상 1행"을 스키마 레벨에서 강제 — 애플리케이션 코드가 실수로 여러 행을 쌓을 수 없게 함.
+
+### 제안 — Common/ResilientSender.h / .cpp (수정)
+
+**수정 전** (public 섹션, `GetConnectionInfo()` 선언 부분 — 2026-09-14 Phase A 항목 기준):
+```cpp
+	// 현재 연결의 TCP 품질 조회. 연결 안 된 상태면 전부 0인 기본값.
+	TcpConnectionInfo GetConnectionInfo() const;
+
+	// step Phase A : Agent 제어 명령("시작/중지") 대응.
+```
+
+**수정 후**:
+```cpp
+	// 현재 연결의 TCP 품질 조회. 연결 안 된 상태면 전부 0인 기본값.
+	TcpConnectionInfo GetConnectionInfo() const;
+
+	// step 6' : 지금 Collector와 연결돼 있는지 조회(연결 상태 인디케이터용).
+	bool IsConnected() const { return _connected; }
+
+	// step Phase A : Agent 제어 명령("시작/중지") 대응.
+```
+
+**변경 사유**: `_connected`는 이미 있던 private 멤버 — 그냥 읽기 전용으로 노출만 한다. 헤더에 인라인으로 넣은 이유는 한 줄짜리 단순 getter라 `.cpp`에 따로 정의할 실익이 없어서(다른 getter들과 통일감은 떨어지지만, `GetConnectionInfo()`처럼 커널 조회가 필요한 것도 아니라 과한 형식).
+
+### 제안 — Agent/main.cpp (수정)
+
+**수정 전** (`MetricScheduler` 콜백 본문, 2026-09-14 Phase A 항목 기준):
+```cpp
+				// Collector 전송 "전에" 로컬 판단 먼저 - Agent<->Collector 연결이 끊긴
+				// 상태에서도 로컬 알림은 항상 최신 상태를 유지하도록.
+				alertEvaluator.OnNewMetric(pkt);
+				sender.Enqueue(pkt);
+			});
+```
+
+**수정 후**:
+```cpp
+				// Collector 전송 "전에" 로컬 판단 먼저 - Agent<->Collector 연결이 끊긴
+				// 상태에서도 로컬 알림은 항상 최신 상태를 유지하도록.
+				alertEvaluator.OnNewMetric(pkt);
+
+				// step 6' : 상태 갱신도 같은 자리에서 - 별도 타이머 없이 5초 주기를
+				// 그대로 하트비트로 재사용한다.
+				alertStore.UpdateStatus(sender.IsConnected());
+
+				sender.Enqueue(pkt);
+			});
+```
+
+**변경 사유**: 새 콜백을 안 만들고 이미 있는 5초 주기 콜백에 한 줄만 얹음 — `ResilientSender::ConnectionStateCallback`(연결 상태가 "바뀔 때만" 불리는 콜백)을 쓰지 않은 이유이기도 하다. 그걸 썼으면 "값이 안 바뀌면 안 불림 = 하트비트가 안 됨"이라 Agent가 죽었는지 판단할 수 없었을 것.
+
+### 제안 — AgentAlertRepository.h (신규, `APM_QtDashboard/`)
+
+```cpp
+#pragma once
+#include <QMetaType>
+#include <QString>
+#include <QVector>
+#include <qglobal.h>
+
+#include "MetricsRepository.h"   // AlertSample 재사용
+
+// step 6' : Agent의 agent_alerts.db(local_alerts + agent_status)를 읽는다.
+// MetricsRepository(Collector의 apm_metrics.db)와는 완전히 다른 파일/커넥션 -
+// 두 리포지토리를 하나로 합치지 않는다(프로세스 경계가 다르므로 파일도 다름).
+struct AgentStatus
+{
+    bool connected = false;
+    qlonglong updatedAt = 0;   // epoch seconds
+    bool valid = false;        // agent_status에 행이 아직 없으면 false(Agent가 한 번도 안 씀)
+};
+
+Q_DECLARE_METATYPE(AgentStatus)
+
+class AgentAlertRepository
+{
+public:
+    explicit AgentAlertRepository(const QString& dbPath);
+    ~AgentAlertRepository();
+
+    bool Open();
+    bool IsOpen() const;
+
+    QVector<AlertSample> FetchOpenAlerts(int limit) const;
+    AgentStatus FetchStatus() const;
+
+private:
+    QString _dbPath;
+    QString _connectionName;
+};
+```
+
+### 제안 — AgentAlertRepository.cpp (신규)
+
+```cpp
+#include "AgentAlertRepository.h"
+
+#include <QDateTime>
+#include <QDebug>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QSqlError>
+
+namespace
+{
+    constexpr const char* kConnectionName = "apm_agent_alerts_ro";
+}
+
+AgentAlertRepository::AgentAlertRepository(const QString& dbPath)
+    : _dbPath(dbPath), _connectionName(kConnectionName)
+{
+}
+
+AgentAlertRepository::~AgentAlertRepository()
+{
+    if (QSqlDatabase::contains(_connectionName))
+    {
+        QSqlDatabase::removeDatabase(_connectionName);
+    }
+}
+
+bool AgentAlertRepository::Open()
+{
+    auto db = QSqlDatabase::addDatabase("QSQLITE", _connectionName);
+    db.setDatabaseName(_dbPath);
+    db.setConnectOptions("QSQLITE_OPEN_READONLY");
+
+    if (!db.open())
+    {
+        qWarning() << "AgentAlertRepository : failed to Open" << _dbPath << db.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+bool AgentAlertRepository::IsOpen() const
+{
+    return QSqlDatabase::database(_connectionName, false).isOpen();
+}
+
+QVector<AlertSample> AgentAlertRepository::FetchOpenAlerts(int limit) const
+{
+    QVector<AlertSample> result;
+
+    QSqlQuery query(QSqlDatabase::database(_connectionName));
+    query.prepare(
+        "SELECT id, metric_type, threshold_value, trigger_value, opened_at "
+        "FROM local_alerts WHERE closed_at IS NULL ORDER BY id DESC LIMIT ?");
+    query.addBindValue(limit);
+
+    if (!query.exec())
+    {
+        qWarning() << "AgentAlertRepository::FetchOpenAlerts failed : " << query.lastError().text();
+        return result;
+    }
+
+    while (query.next())
+    {
+        AlertSample sample;
+        sample.id = query.value(0).toLongLong();
+        sample.metricType = query.value(1).toInt();
+        sample.thresholdValue = query.value(2).toDouble();
+        sample.triggerValue = query.value(3).toDouble();
+        qint64 epochSeconds = query.value(4).toLongLong();
+        sample.openedAt = QDateTime::fromSecsSinceEpoch(epochSeconds).toString("yyyy-MM-dd HH:mm:ss");
+        result.push_back(sample);
+    }
+    return result;
+}
+
+AgentStatus AgentAlertRepository::FetchStatus() const
+{
+    AgentStatus status;
+
+    QSqlQuery query(QSqlDatabase::database(_connectionName));
+    query.prepare("SELECT connected, updated_at FROM agent_status WHERE id = 1");
+
+    if (!query.exec())
+    {
+        qWarning() << "AgentAlertRepository::FetchStatus failed : " << query.lastError().text();
+        return status;
+    }
+
+    if (query.next())
+    {
+        status.connected = query.value(0).toInt() != 0;
+        status.updatedAt = query.value(1).toLongLong();
+        status.valid = true;
+    }
+    // 행이 없으면(Agent가 아직 한 번도 UpdateStatus를 안 부름) valid=false인 채로 반환.
+
+    return status;
+}
+```
+
+**변경 사유**: `MetricsRepository`와 거의 같은 패턴(읽기 전용 named connection, prepared statement 없이 매번 `prepare()`)을 그대로 재사용 — 다만 커넥션 이름(`apm_agent_alerts_ro`)과 대상 파일(`agent_alerts.db`)이 다르다. `FetchOpenAlerts`는 `id`로 정렬(이 저장소 전체의 "자동증가 정수로 정렬" 관례). `FetchStatus`가 행이 아예 없는 경우(Agent가 한 번도 안 켜졌던 경우)를 `valid=false`로 구분해서, Qt 쪽에서 "연결 끊김"과 "애초에 알 수 없음"을 다르게 표시할 수 있게 한다.
+
+### 제안 — MetricsWorker.h / .cpp (수정)
+
+**수정 전** (파일 전문, 2단계~5′ 항목 기준):
+```cpp
+#pragma once
+#include <QObject>
+#include <QString>
+#include <QVector>
+
+#include "MetricsRepository.h"
+
+// Sqlite3 조회를 UI 스레드에서 분리한다
+class MetricsWorker : public QObject
+{
+    Q_OBJECT
+public :
+    explicit MetricsWorker(const QString& dbPath, QObject* parent = nullptr);
+
+public slots:
+    // move to thread 이후 워커쓰레드에서 실행한다.
+    void Initialize();
+    // 최신 지표를 조회해서 결과를 시그널로 남긴다.
+    // 2026-09-14 : 알림 조회(AlertsReady)는 뺐다 - Collector의 apm_metrics.db엔 알림
+    // 테이블이 없음(알림 판단은 이제 Agent가 로컬로 함, agent_alerts.db). §6 단계에서
+    // 그 DB를 보는 별도 워커/리포지토리로 다시 연결할 예정.
+    void Refresh();
+
+signals:
+    void Initialized(bool ok);
+    void MetricsReady(const QVector<MetricsSample>& samples);
+    void RefreshFailed(const QString& reason);
+
+private:
+    MetricsRepository _repository;
+    bool _ready = false;  
+};
+```
+
+**수정 후**:
+```cpp
+#pragma once
+#include <QObject>
+#include <QString>
+#include <QVector>
+
+#include "MetricsRepository.h"
+#include "AgentAlertRepository.h"
+
+// Sqlite3 조회를 UI 스레드에서 분리한다
+class MetricsWorker : public QObject
+{
+    Q_OBJECT
+public :
+    explicit MetricsWorker(const QString& metricsDbPath, const QString& alertsDbPath, QObject* parent = nullptr);
+
+public slots:
+    // move to thread 이후 워커쓰레드에서 실행한다.
+    void Initialize();
+    // 최신 지표 + 열린 알림 + Agent 상태를 조회해서 결과를 시그널로 남긴다.
+    // 2026-09-14(§6) : Collector DB(지표)와 Agent DB(알림/상태)를 같은 5초 주기로 같이
+    // 읽는다 - 갱신 주기가 같아서 워커를 따로 안 두고 하나로 합쳤다.
+    void Refresh();
+
+signals:
+    void Initialized(bool metricsOk);
+    void MetricsReady(const QVector<MetricsSample>& samples);
+    void AlertsReady(const QVector<AlertSample>& alerts);
+    void StatusReady(const AgentStatus& status);
+    void RefreshFailed(const QString& reason);
+
+private:
+    MetricsRepository _repository;
+    AgentAlertRepository _alertRepository;
+    bool _ready = false;
+};
+```
+
+**수정 후** (`.cpp` 전문):
+```cpp
+#include "MetricsWorker.h"
+
+#include <QDebug>
+
+namespace
+{
+    constexpr int kFetchLimit = 20;
+}
+
+MetricsWorker::MetricsWorker(const QString& metricsDbPath, const QString& alertsDbPath, QObject* parent)
+    : QObject(parent), _repository(metricsDbPath), _alertRepository(alertsDbPath)
+{
+}
+
+void MetricsWorker::Initialize()
+{
+    // QSqlDatabase 연결은 만든 쓰레드에서만 쓸 수 있으므로 Open()을 이 슬롯에서 호출한다
+    _ready = _repository.Open();
+
+    // 알림 DB는 지표 DB와 별개 파일이라 실패해도 지표 표시 자체는 계속 동작해야 한다
+    // (Agent가 아직 안 떠 있어도 Collector 지표는 볼 수 있어야 함) - 그래서 실패해도
+    // Initialized(false)로 전체를 막지 않고 경고만 남긴다.
+    if (!_alertRepository.Open())
+        qWarning() << "MetricsWorker: alert repository open failed (지표는 계속 조회됨)";
+
+    emit Initialized(_ready);
+}
+
+void MetricsWorker::Refresh()
+{
+    if(!_ready)
+    {
+        emit RefreshFailed("Repository not open");
+        return;
+    }
+
+    emit MetricsReady(_repository.FetchLatestMetrics(kFetchLimit));
+
+    if (_alertRepository.IsOpen())
+    {
+        emit AlertsReady(_alertRepository.FetchOpenAlerts(kFetchLimit));
+        emit StatusReady(_alertRepository.FetchStatus());
+    }
+}
+```
+
+**변경 사유**: 생성자가 경로 2개를 받도록 바뀜(호출부 `MainWindow`도 같이 바뀜, 아래). `Initialize()`에서 알림 DB open 실패를 "치명적이지 않은 경고"로 처리 — Phase A/6′를 나눠 만든 이유(Agent가 없어도 Collector 지표는 별개로 동작해야 함)를 Qt 쪽에서도 그대로 지킨다. `Refresh()`도 `_alertRepository.IsOpen()`일 때만 알림/상태를 조회 — Agent가 나중에 뜨면 다음 `Refresh()`부터 자동으로 다시 채워지진 않음(재시도 로직은 없음, 지금 범위 밖 — 필요하면 `Initialize()`를 주기적으로 재시도하는 걸 나중에 고려).
+
+### 제안 — MainWindow.h (수정)
+
+**수정 전** (파일 전문, 2′~5′ 항목 기준):
+```cpp
+#pragma once
+#include <QMainWindow>
+#include <QVector>
+#include <QThread>
+
+#include "MetricsRepository.h"
+
+class QLabel;
+class QPushButton;
+class QTableView;
+class QTimer;
+class MetricsWorker;
+class MetricsTableModel;
+class MetricsChartWidget;
+
+// step 2~5 (2026-09-14 재작업) : 대상 DB를 APM_Console(중앙)에서 Collector(그 장비
+// 로컬)로 교체 + QTimer 자동 갱신 + 실시간 차트(MetricsChartWidget) 추가.
+// 알림/Agent 제어(§6~7)는 별도로 검토 중이라 이번엔 손대지 않음.
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+public:
+    explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
+
+signals:
+    // 워커 스레드의 Refresh() 슬롯에 큐 연결된다. emit 후 즉시 반환한다.
+    void RefreshRequested();
+
+private slots:
+    void OnRefreshClicked();
+    void OnWorkerInitialized(bool ok);
+    void OnRefreshFailed(const QString& reason);
+    void PopulateMetricsTable(const QVector<MetricsSample>& samples);
+
+private:
+    void SetStatus(const QString& text);
+
+private:
+    QThread _workerThread;
+    MetricsWorker* _worker = nullptr;
+    QTimer* _refreshTimer = nullptr;
+
+    MetricsTableModel* _metricsModel = nullptr;
+    QTableView* _metricsView = nullptr;
+    MetricsChartWidget* _chartWidget = nullptr;
+    QPushButton* _refreshButton = nullptr;
+    QLabel* _statusLabel = nullptr;
+};
+```
+
+**수정 후**:
+```cpp
+#pragma once
+#include <QMainWindow>
+#include <QVector>
+#include <QThread>
+
+#include "MetricsRepository.h"
+#include "AgentAlertRepository.h"
+
+class QLabel;
+class QPushButton;
+class QTableView;
+class QTimer;
+class MetricsWorker;
+class MetricsTableModel;
+class AlertsTableModel;
+class MetricsChartWidget;
+
+// step 2~6' (2026-09-14 재작업) : Collector 로컬 DB(지표) + Agent 로컬 DB(알림/상태)
+// 둘 다 읽는다. Agent 제어(§7)는 아직 손대지 않음.
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+public:
+    explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
+
+signals:
+    // 워커 스레드의 Refresh() 슬롯에 큐 연결된다. emit 후 즉시 반환한다.
+    void RefreshRequested();
+
+private slots:
+    void OnRefreshClicked();
+    void OnWorkerInitialized(bool metricsOk);
+    void OnRefreshFailed(const QString& reason);
+    void PopulateMetricsTable(const QVector<MetricsSample>& samples);
+    void PopulateAlertTable(const QVector<AlertSample>& alerts);
+    void UpdateAgentStatus(const AgentStatus& status);
+
+private:
+    void SetStatus(const QString& text);
+
+private:
+    QThread _workerThread;
+    MetricsWorker* _worker = nullptr;
+    QTimer* _refreshTimer = nullptr;
+
+    MetricsTableModel* _metricsModel = nullptr;
+    AlertsTableModel* _alertsModel = nullptr;
+    QTableView* _metricsView = nullptr;
+    QTableView* _alertsView = nullptr;
+    MetricsChartWidget* _chartWidget = nullptr;
+    QPushButton* _refreshButton = nullptr;
+    QLabel* _statusLabel = nullptr;
+    QLabel* _agentStatusLabel = nullptr;
+};
+```
+
+**변경 사유**: `AlertsTableModel` 전방 선언과 `_alertsModel`/`_alertsView` 복귀(2′~5′에서 뺐던 것 — §6 검토 완료로 다시 연결). `_agentStatusLabel`을 기존 `_statusLabel`(조회 상태 표시용)과 별개로 둠 — 하나는 "방금 새로고침이 잘 됐는지", 다른 하나는 "Agent가 지금 살아있고 Collector에 붙어있는지"로 의미가 다르므로 같은 라벨에 욱여넣지 않음. `AgentAlertRepository.h`를 include(멤버 타입이 아니라 `AgentStatus`를 시그널/슬롯 시그니처에 쓰므로 전방 선언으로는 부족 — `MetricsRepository` include와 같은 이유).
+
+### 제안 — MainWindow.cpp (수정, 전문)
+
+**수정 전**: `Docs/SESSION_LOG.md` 2026-09-14 "Qt track: point at Collector's local DB" 항목의 "수정 후" 그대로(현재 디스크 상태).
+
+**수정 후** (전문):
+```cpp
+#include "MainWindow.h"
+
+#include <QAbstractItemView>
+#include <QDateTime>
+#include <QHeaderView>
+#include <QLabel>
+#include <QPushButton>
+#include <QTableView>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <QWidget>
+
+#include "AlertsTableModel.h"
+#include "MetricsChartWidget.h"
+#include "MetricsTableModel.h"
+#include "MetricsWorker.h"
+
+namespace
+{
+// Collector가 만드는 apm_metrics.db(지표) - 상대경로("apm_metrics.db")로 만들어지므로
+// 실제 위치는 Collector를 어느 디렉터리에서 실행했는지에 달려있다. 이 체크아웃에서는
+// APM_Agent/ 안에서 실행하는 관례(APM_Viewer의 기존 하드코딩과 동일)를 그대로 따름.
+const QString kCollectorDbPath = "/home/shkim/dev/APM/APM_Agent/apm_metrics.db";
+
+// step 6' : Agent가 만드는 agent_alerts.db(알림 + 연결 상태). Agent도 같은 디렉터리
+// 관례로 실행한다고 가정.
+const QString kAgentAlertsDbPath = "/home/shkim/dev/APM/APM_Agent/agent_alerts.db";
+
+// Agent의 수집 주기(APM_Agent/Agent/main.cpp의 MetricScheduler)와 맞춘다 -
+// 더 뜸하면 새 데이터 반영이 늦고, 더 잦으면 같은 데이터를 헛되이 반복 조회한다.
+constexpr int kRefreshIntervalMs = 5000;
+
+// step 6' : agent_status.updated_at이 이보다 오래되면 "Agent 응답 없음"으로 본다.
+// 수집 주기(5초)의 3배 - 한두 번 갱신을 놓쳐도 바로 "죽음"으로 오判定하지 않기 위한 여유.
+constexpr qint64 kAgentStaleSeconds = 15;
+}
+
+MainWindow::MainWindow(QWidget* parent)
+    : QMainWindow(parent)
+{
+    setWindowTitle("APM Qt Dashboard - step 2~6' (Collector+Agent 로컬 DB, 알림/상태 포함)");
+
+    auto* central = new QWidget(this);
+    auto* layout = new QVBoxLayout(central);
+
+    _refreshButton = new QPushButton("새로고침", central);
+    _statusLabel = new QLabel("초기화 중...", central);
+    _agentStatusLabel = new QLabel("Agent 상태: 확인 중...", central);
+
+    _chartWidget = new MetricsChartWidget(central);
+
+    _metricsModel = new MetricsTableModel(this);
+    _metricsView = new QTableView(central);
+    _metricsView->setModel(_metricsModel);
+    _metricsView->horizontalHeader()->setStretchLastSection(true);
+    _metricsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    _alertsModel = new AlertsTableModel(this);
+    _alertsView = new QTableView(central);
+    _alertsView->setModel(_alertsModel);
+    _alertsView->horizontalHeader()->setStretchLastSection(true);
+    _alertsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    layout->addWidget(_refreshButton);
+    layout->addWidget(_statusLabel);
+    layout->addWidget(_agentStatusLabel);
+    layout->addWidget(_chartWidget);
+    layout->addWidget(_metricsView);
+    layout->addWidget(_alertsView);
+    setCentralWidget(central);
+
+    connect(_refreshButton, &QPushButton::clicked, this, &MainWindow::OnRefreshClicked);
+
+    // 워커를 만들고 워커 스레드로 옮긴다. 이 시점 이후 워커의 슬롯은 워커 스레드에서 실행된다.
+    _worker = new MetricsWorker(kCollectorDbPath, kAgentAlertsDbPath);
+    _worker->moveToThread(&_workerThread);
+
+    // 스레드가 끝나면 워커를 그 스레드에서 안전하게 삭제한다.
+    connect(&_workerThread, &QThread::finished, _worker, &QObject::deleteLater);
+
+    // UI → 워커 (스레드가 다르므로 자동으로 Queued Connection)
+    connect(this, &MainWindow::RefreshRequested, _worker, &MetricsWorker::Refresh);
+
+    // 워커 → UI (역시 Queued. 슬롯 본문은 UI 스레드에서 실행됨)
+    connect(_worker, &MetricsWorker::Initialized, this, &MainWindow::OnWorkerInitialized);
+    connect(_worker, &MetricsWorker::MetricsReady, this, &MainWindow::PopulateMetricsTable);
+    // 시그널 팬아웃 - 같은 MetricsReady를 차트도 받아서, 최신 값 1개만 누적한다.
+    connect(_worker, &MetricsWorker::MetricsReady, _chartWidget, &MetricsChartWidget::AppendLatest);
+    connect(_worker, &MetricsWorker::AlertsReady, this, &MainWindow::PopulateAlertTable);
+    connect(_worker, &MetricsWorker::StatusReady, this, &MainWindow::UpdateAgentStatus);
+    connect(_worker, &MetricsWorker::RefreshFailed, this, &MainWindow::OnRefreshFailed);
+
+    _refreshTimer = new QTimer(this);
+    _refreshTimer->setInterval(kRefreshIntervalMs);
+    connect(_refreshTimer, &QTimer::timeout, this, &MainWindow::OnRefreshClicked);
+
+    _workerThread.start();
+
+    // 워커가 워커 스레드로 옮겨진 뒤 Initialize()가 그 스레드에서 실행되도록 큐에 넣는다.
+    QMetaObject::invokeMethod(_worker, "Initialize", Qt::QueuedConnection);
+}
+
+MainWindow::~MainWindow()
+{
+    // 워커 스레드의 이벤트 루프를 멈추고, 실제로 끝날 때까지 기다린다.
+    // 이걸 빼면 프로세스 종료 시 "QThread: Destroyed while thread is still running" 경고/크래시.
+    _workerThread.quit();
+    _workerThread.wait();
+}
+
+void MainWindow::OnRefreshClicked()
+{
+    SetStatus("불러오는 중...");
+    emit RefreshRequested();
+}
+
+void MainWindow::OnWorkerInitialized(bool metricsOk)
+{
+    if (!metricsOk)
+    {
+        SetStatus("DB 열기 실패 - stderr 확인");
+        return;
+    }
+    SetStatus("연결됨");
+    emit RefreshRequested();
+    _refreshTimer->start();
+}
+
+void MainWindow::OnRefreshFailed(const QString& reason)
+{
+    SetStatus("조회 실패: " + reason);
+}
+
+void MainWindow::SetStatus(const QString& text)
+{
+    _statusLabel->setText(text);
+}
+
+void MainWindow::PopulateMetricsTable(const QVector<MetricsSample>& samples)
+{
+    _metricsModel->SetSamples(samples);
+    SetStatus(QString("갱신 완료 %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
+}
+
+void MainWindow::PopulateAlertTable(const QVector<AlertSample>& alerts)
+{
+    _alertsModel->SetAlerts(alerts);
+}
+
+void MainWindow::UpdateAgentStatus(const AgentStatus& status)
+{
+    if (!status.valid)
+    {
+        _agentStatusLabel->setText("Agent 상태: 알 수 없음(agent_alerts.db에 상태 없음)");
+        return;
+    }
+
+    qint64 ageSeconds = QDateTime::currentSecsSinceEpoch() - status.updatedAt;
+
+    if (ageSeconds > kAgentStaleSeconds)
+        _agentStatusLabel->setText(QString("Agent 상태: 응답 없음 (마지막 갱신 %1초 전)").arg(ageSeconds));
+    else if (status.connected)
+        _agentStatusLabel->setText("Agent 상태: Collector에 연결됨");
+    else
+        _agentStatusLabel->setText("Agent 상태: Collector 연결 끊김(재시도 중)");
+}
+```
+
+**변경 사유**: `_worker` 생성자 호출에 `kAgentAlertsDbPath` 인자 추가. `_alertsModel`/`_alertsView`를 2′~5′ 이전(4단계) 코드에서 그대로 복원 + 배선. `_agentStatusLabel`을 레이아웃에 추가(상태 라벨 바로 아래). `UpdateAgentStatus`가 3단계 판정(응답 없음/연결됨/끊김-재시도중)을 구현 — §6 계획에서 정한 staleness 임계값(15초=수집 주기 3배) 그대로.
+
+### 제안 — CMakeLists.txt (수정, `APM_QtDashboard/`)
+
+**수정 전**:
+```cmake
+add_executable(APM_QtDashboard
+    main.cpp
+    MainWindow.cpp
+    MainWindow.h
+    MetricsRepository.cpp
+    MetricsRepository.h
+    MetricsWorker.cpp
+    MetricsWorker.h
+    MetricsTableModel.cpp
+    MetricsTableModel.h
+    AlertsTableModel.cpp
+    AlertsTableModel.h
+    MetricsChartWidget.cpp
+    MetricsChartWidget.h
+)
+```
+
+**수정 후**:
+```cmake
+add_executable(APM_QtDashboard
+    main.cpp
+    MainWindow.cpp
+    MainWindow.h
+    MetricsRepository.cpp
+    MetricsRepository.h
+    MetricsWorker.cpp
+    MetricsWorker.h
+    MetricsTableModel.cpp
+    MetricsTableModel.h
+    AlertsTableModel.cpp
+    AlertsTableModel.h
+    MetricsChartWidget.cpp
+    MetricsChartWidget.h
+    AgentAlertRepository.cpp
+    AgentAlertRepository.h
+)
+```
+
+**변경 사유**: 신규 파일 2개 추가. `find_package`/`target_link_libraries`는 변경 없음(Qt SQL 모듈은 이미 링크돼 있고, `AgentAlertRepository`도 `MetricsRepository`와 같은 `QSqlDatabase` API만 씀).
+
+### 제안 — main.cpp (수정)
+
+**수정 전**:
+```cpp
+#include <QApplication>
+
+#include "MainWindow.h"
+
+int main(int argc, char* argv[])
+{
+    QApplication app(argc, argv);
+
+    // 워커 쓰레드에서 UI 쓰레드로 결과를 큐 연결로 넘기기 전에 컨테이너 타입 등록
+    qRegisterMetaType<QVector<MetricsSample>>("QVector<MetricsSample>");
+    qRegisterMetaType<QVector<AlertSample>>("QVector<AlertSample>");
+
+    MainWindow window;
+    window.resize(720, 480);
+    window.show();
+
+    return app.exec();
+}
+```
+
+**수정 후**:
+```cpp
+#include <QApplication>
+
+#include "AgentAlertRepository.h"
+#include "MainWindow.h"
+
+int main(int argc, char* argv[])
+{
+    QApplication app(argc, argv);
+
+    // 워커 쓰레드에서 UI 쓰레드로 결과를 큐 연결로 넘기기 전에 컨테이너 타입 등록
+    qRegisterMetaType<QVector<MetricsSample>>("QVector<MetricsSample>");
+    qRegisterMetaType<QVector<AlertSample>>("QVector<AlertSample>");
+    qRegisterMetaType<AgentStatus>("AgentStatus");
+
+    MainWindow window;
+    window.resize(720, 480);
+    window.show();
+
+    return app.exec();
+}
+```
+
+**변경 사유**: `StatusReady(const AgentStatus&)`도 워커→UI 큐 연결로 건너오는 시그널이라 `AgentStatus`도 메타타입 등록이 필요(3단계 `<QMetaType>` 사고 이후의 교훈 그대로 적용).
+
+### 검증 (미검증 — 사용자가 직접 작성/빌드 후 확인)
+
+1. 클린 빌드 성공(`AgentAlertRepository` 신규 컴파일 포함).
+2. `Agent` 실행 후 5초 이상 지나면 `agent_alerts.db`에 `agent_status` 테이블이 생기고 `id=1` 행 하나만 유지되는지(`python3 -c "import sqlite3; ..."`로 확인 — 2번째 이상 갱신에도 행 개수가 안 늘어나는지).
+3. Qt 실행 → 상태 라벨이 "확인 중..." → "Collector에 연결됨"으로 바뀌는지(Agent+Collector 둘 다 뜬 상태).
+4. Collector만 죽이면 → 다음 갱신 주기 내에 "Collector 연결 끊김(재시도 중)"으로 바뀌는지.
+5. Agent까지 죽이면 → 15초 후 "Agent 응답 없음"으로 바뀌는지(Collector가 살아있어도 지표 테이블/차트는 계속 갱신되지만 Agent 상태만 별도로 죽었다고 표시돼야 함 - 두 상태가 서로 독립적으로 동작하는지가 핵심 검증 포인트).
+6. Agent를 아예 한 번도 안 띄운 상태(agent_alerts.db 자체가 없음)에서 Qt를 실행 → "지표는 정상 표시되고 Agent 상태만 알 수 없음/오류"로 뜨는지(Collector만으로도 부분 동작해야 함).
+7. 알림 테이블에 실제 열린 알림이 있을 때(임계치 초과 상황을 인위로 만들어) 정상 표시되는지 - CPU 부하 등으로 재현.
+
+### 결정 사항
+
+문서 제안만 — `APM_Agent/`/`APM_QtDashboard/`의 실제 소스는 사용자가 직접 작성(원칙 2, [[feedback_claude_md_rule2_scope]]). 작성 중 나오는 오타/컴파일 에러는 요청 시 수정 지원. 완료되면 `WORK_STATUS.md`/`Docs/QT_MFC_PORTFOLIO_PLAN.md` 갱신 후 커밋+push. 이어서 §7(Agent 제어 UI, `QLocalSocket`)로 넘어감.
+
+
+## 2026-09-14 — Qt/MFC 트랙: 차트 갱신을 폴링→발행-구독(Collector→Qt 푸시)으로 재설계
+
+### 배경
+
+`MetricsChartWidget::AppendLatest`가 "새 데이터가 생겼을 때"가 아니라 "갱신 이벤트가 발생할 때"마다 한 점을 찍는다는 문제(수동 새로고침 버튼과 자동 타이머가 같은 슬롯을 타므로, 실제로 새 지표가 없어도 중복 점이 찍힐 수 있음)를 사용자와 논의 → "Collector가 각자에게 쏴줘도 된다"는 제안 → 발행-구독(pub/sub) 패턴으로 재설계하기로 확정(AskUserQuestion).
+
+**설계 방향(사용자 확인 완료)**:
+- Collector가 **발행자(Publisher)**, Qt가 **구독자(Subscriber)**. 로컬 Unix domain socket 위의 최소 pub/sub — 브로커 없음, 토픽 1개("새 지표 생김"), 구독자가 그 순간 없으면 유실(재생 없음).
+- **페이로드 없음, 핑만 보낸다** — Collector가 실제 지표 값을 JSON으로 실어 보내지 않고 `{"event":"new_metric"}` 한 줄만 보낸다. Qt는 신호를 받으면 기존 SQL 조회(`MetricsRepository::FetchLatestMetrics`)를 그대로 다시 돈다. 이유: 지표 스키마를 "SQL"과 "푸시 JSON" 두 군데서 유지보수하지 않기 위해 — SQL이 여전히 유일한 데이터 원본.
+- 전송 계층은 Agent 제어 채널(`AgentControlServer`)과 완전히 동일(Unix domain socket) — 다른 건 통신 패턴(요청-응답 vs 발행-구독)뿐. **ICMP 아님**(네트워크 계층 프로토콜과 무관, 애플리케이션 계층의 일반 텍스트 메시지).
+- `QTimer`는 "주 트리거"에서 "안전망"으로 격하 — 푸시 연결이 끊겨도 완전히 멈추지 않도록 긴 주기(30초)로 유지.
+- **이건 "Collector 코어 무수정" 원칙을 두 번째로 깨는 지점**이다(첫 번째는 Agent Phase A). Collector에 신규 파일 1개 + `main.cpp` 수정이 필요함. Console은 여전히 전혀 안 건드림. Qt가 상대하는 채널이 이제 3개(Agent 제어 IPC / Collector 지표 파일 읽기 / Collector 푸시 IPC)로 늘어남 — 의식하고 진행.
+
+### 제안 — Collector/MetricsBroadcastServer.h (신규, `APM_Agent/Collector/`)
+
+```cpp
+#pragma once
+#include "pch.h"
+
+// 2026-09-14(§6 후속) : Collector가 새 지표를 저장할 때마다 로컬로 붙어있는 구독자(Qt)에게
+// "뭔가 새로 생겼다"는 핑만 보낸다(발행-구독, 페이로드 없음 - 실제 값은 구독자가 기존
+// SQL 조회로 알아서 다시 읽는다). Unix domain socket, 여러 구독자 동시 지원.
+class MetricsBroadcastServer
+{
+public:
+    explicit MetricsBroadcastServer(asio::io_context& ioContext, const String& socketPath);
+    ~MetricsBroadcastServer();
+
+    void Start();
+
+    // 연결된 모든 구독자에게 핑 한 줄을 보낸다. 반드시 io_context 스레드에서 호출해야
+    // 한다(Asio 소켓은 스레드 안전하지 않음) - 다른 스레드에서 부를 땐 asio::post로 넘길 것
+    // (아래 Collector/main.cpp 변경 참고).
+    void Notify();
+
+private:
+    void AcceptNext();
+
+private:
+    asio::io_context& _ioContext;
+    String _socketPath;
+    asio::local::stream_protocol::acceptor _acceptor;
+    std::vector<std::shared_ptr<asio::local::stream_protocol::socket>> _subscribers;
+    bool _running = false;
+};
+```
+
+### 제안 — Collector/MetricsBroadcastServer.cpp (신규)
+
+```cpp
+#include "pch.h"
+#include "MetricsBroadcastServer.h"
+
+// TODO(Windows 지원 시): ::unlink는 POSIX 전용(Agent의 AgentControlServer.cpp와 같은 제약,
+// Linux/WSL 우선 - Docs/QT_MFC_PORTFOLIO_PLAN.md §8).
+#include <unistd.h>
+
+MetricsBroadcastServer::MetricsBroadcastServer(asio::io_context& ioContext, const String& socketPath)
+    : _ioContext(ioContext), _socketPath(socketPath), _acceptor(ioContext)
+{
+    ::unlink(_socketPath.c_str());
+
+    asio::local::stream_protocol::endpoint endpoint(_socketPath);
+    _acceptor.open(endpoint.protocol());
+    _acceptor.bind(endpoint);
+    _acceptor.listen();
+}
+
+MetricsBroadcastServer::~MetricsBroadcastServer()
+{
+    ::unlink(_socketPath.c_str());
+}
+
+void MetricsBroadcastServer::Start()
+{
+    _running = true;
+    AcceptNext();
+}
+
+void MetricsBroadcastServer::AcceptNext()
+{
+    auto socket = std::make_shared<asio::local::stream_protocol::socket>(_ioContext);
+    _acceptor.async_accept(*socket,
+        [this, socket](const asio::error_code& ec)
+        {
+            if (!ec)
+            {
+                std::cout << "[MetricsBroadcastServer] subscriber connected (총 "
+                    << (_subscribers.size() + 1) << "개)" << std::endl;
+                _subscribers.push_back(socket);
+            }
+            if (_running)
+                AcceptNext();
+        });
+}
+
+void MetricsBroadcastServer::Notify()
+{
+    static const String kPingLine = "{\"event\":\"new_metric\"}\n";
+
+    // 끊긴 구독자는 지워가면서 순회 - erase-remove 관용구.
+    for (auto it = _subscribers.begin(); it != _subscribers.end(); )
+    {
+        auto socket = *it;
+        asio::error_code ec;
+        asio::write(*socket, asio::buffer(kPingLine), ec);
+
+        if (ec)
+            it = _subscribers.erase(it);
+        else
+            ++it;
+    }
+}
+```
+
+**변경 사유**: `Notify()`가 동기(블로킹) `asio::write`를 쓴다 — 로컬 소켓+수십 바이트짜리 페이로드라 OS 파이프 버퍼에 사실상 즉시 들어가고, 5초에 한 번(Agent 수집 주기)만 불리는 빈도라 비동기로 안 만든 의도적 단순화다. 구독자 수가 아주 많아지거나(이 프로젝트 범위 밖) 페이로드가 커지면(지금은 고정 문자열) 재검토 필요 — 지금 범위에선 과설계라고 판단.
+
+### 제안 — Collector/main.cpp (수정)
+
+**수정 전** (관련 부분 발췌 — 현재 디스크 상태):
+```cpp
+#include "Protocol/Metric.pb.h"
+#include "Storage/MetricStoreFactory.h"
+#include <thread>
+```
+```cpp
+        IMetricStore* storePtr = store.get();
+        WorkerQueue metricStoreQueue;
+```
+```cpp
+        PacketHandler::Register<apm::Metric>(
+            [storePtr, &metricStoreQueue, &pendingMetrics, &consoleLogQueue](const apm::Metric& pkt)
+            {
+                APM_TRACE_SCOPE("Collector.HandleMetricPacket");
+
+                // store->Store(pkt) 직접 호출(동기, fdatasync 블로킹 포함) 대신 워커 스레드로 위임.
+                // pkt은 값 복사로 캡처 - 비동기 실행 시점까지 살아있어야 함.
+                metricStoreQueue.Push([storePtr, pkt]() { storePtr->Store(pkt); });
+
+                pendingMetrics.push_back(pkt);
+```
+
+**수정 후**:
+```cpp
+#include "Protocol/Metric.pb.h"
+#include "Storage/MetricStoreFactory.h"
+#include "MetricsBroadcastServer.h"
+#include <thread>
+```
+```cpp
+        IMetricStore* storePtr = store.get();
+        WorkerQueue metricStoreQueue;
+
+        // 2026-09-14(§6 후속) : 지표를 저장할 때마다 로컬 구독자(Qt)에게 핑을 쏜다.
+        constexpr const char* METRICS_PUBSUB_SOCKET_PATH = "/tmp/apm_collector.sock";
+        MetricsBroadcastServer broadcastServer(ioContext, METRICS_PUBSUB_SOCKET_PATH);
+        broadcastServer.Start();
+```
+```cpp
+        PacketHandler::Register<apm::Metric>(
+            [storePtr, &metricStoreQueue, &pendingMetrics, &consoleLogQueue, &ioContext, &broadcastServer](const apm::Metric& pkt)
+            {
+                APM_TRACE_SCOPE("Collector.HandleMetricPacket");
+
+                // store->Store(pkt) 직접 호출(동기, fdatasync 블로킹 포함) 대신 워커 스레드로 위임.
+                // pkt은 값 복사로 캡처 - 비동기 실행 시점까지 살아있어야 함.
+                // 저장이 "실제로 끝난 뒤" 구독자에게 알려야 하므로, 알림도 같은 워커 람다 안에서
+                // Store() 다음에 건다. 단, broadcastServer.Notify()는 Asio 소켓을 건드리므로
+                // io_context 스레드에서만 호출 가능 - asio::post로 워커 스레드에서 io_context
+                // 스레드로 다시 넘긴다(이 파일의 cliThread -> flushToWebServer와 같은 패턴).
+                metricStoreQueue.Push([storePtr, pkt, &ioContext, &broadcastServer]()
+                {
+                    storePtr->Store(pkt);
+                    asio::post(ioContext, [&broadcastServer]() { broadcastServer.Notify(); });
+                });
+
+                pendingMetrics.push_back(pkt);
+```
+
+**주의 — 선언 순서**: 현재 `Collector/main.cpp`는 `IMetricStore* storePtr = store.get(); WorkerQueue metricStoreQueue;`(54~55번째 줄)가 `asio::io_context ioContext;`(65번째 줄) **보다 먼저** 나온다. `MetricsBroadcastServer`의 생성자는 `ioContext` 참조를 받으므로, `broadcastServer` 선언은 반드시 **`ioContext` 선언(65번째 줄) 다음**에 와야 한다 — `storePtr`/`metricStoreQueue` 블록 바로 다음이 아니라, `ioContext` 선언 직후에 넣을 것. (위 "수정 전/후" 발췌는 논리적 인접성 때문에 `storePtr`/`metricStoreQueue` 옆에 나란히 적었지만, 실제 삽입 지점은 `ioContext` 선언 이후다.)
+
+**변경 사유**: 새 스레드/타이머를 안 만들고, 이미 지표 하나를 처리하는 그 자리에 알림을 얹었다 — `consoleLogQueue`에 로그를 위임하는 것과 같은 이유(네트워크 스레드가 직접 블로킹 작업을 하지 않게). `asio::post`로 스레드를 다시 넘기는 이유는 Asio 소켓이 스레드 안전하지 않아서 — 이 파일에 이미 있는 "cliThread(별도 스레드) → `asio::post(ioContext, flushToWebServer)`" 패턴을 그대로 재사용한 것이지 새 관용구를 만든 게 아니다.
+
+### 제안 — CMakeLists.txt 변경 (`APM_Agent/CMakeLists.txt`)
+
+**수정 전** (`Collector` 타겟 부분):
+```cmake
+add_executable(Collector
+    Collector/main.cpp
+    Collector/CollectorConfig.cpp
+    pch.cpp
+)
+target_include_directories(Collector PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+target_link_libraries(Collector PRIVATE APM_Common APM_Storage)
+```
+
+**수정 후**:
+```cmake
+add_executable(Collector
+    Collector/main.cpp
+    Collector/CollectorConfig.cpp
+    Collector/MetricsBroadcastServer.cpp
+    pch.cpp
+)
+target_include_directories(Collector PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+target_link_libraries(Collector PRIVATE APM_Common APM_Storage)
+```
+
+**변경 사유**: 신규 파일 추가뿐 — 새 외부 의존성 없음(Asio는 이미 `APM_Common` 경유로 링크돼 있음).
+
+---
+
+### 제안 — Qt: MetricsPushClient.h (신규, `APM_QtDashboard/`)
+
+```cpp
+#pragma once
+#include <QObject>
+#include <QString>
+
+class QLocalSocket;
+class QTimer;
+
+// 2026-09-14(§6 후속) : Collector의 MetricsBroadcastServer에 구독자로 붙는다. 페이로드는
+// 안 보고 "뭔가 왔다"는 사실만으로 NewMetricAvailable()을 낸다 - 실제 값은 기존 SQL
+// 경로(MetricsWorker::Refresh)로 다시 읽는다. 연결이 끊기면 재시도한다(Agent의
+// ResilientSender와 같은 발상이지만 훨씬 단순 - 큐잉/재전송이 필요 없는 단방향 알림이라).
+class MetricsPushClient : public QObject
+{
+    Q_OBJECT
+public:
+    explicit MetricsPushClient(const QString& socketPath, QObject* parent = nullptr);
+
+public slots:
+    void Start();
+
+signals:
+    void NewMetricAvailable();
+
+private slots:
+    void OnReadyRead();
+    void OnDisconnected();
+    void TryConnect();
+
+private:
+    QString _socketPath;
+    QLocalSocket* _socket = nullptr;
+    QTimer* _reconnectTimer = nullptr;
+};
+```
+
+### 제안 — Qt: MetricsPushClient.cpp (신규)
+
+```cpp
+#include "MetricsPushClient.h"
+
+#include <QLocalSocket>
+#include <QTimer>
+
+namespace
+{
+constexpr int kReconnectIntervalMs = 3000;
+}
+
+MetricsPushClient::MetricsPushClient(const QString& socketPath, QObject* parent)
+    : QObject(parent), _socketPath(socketPath)
+{
+    _socket = new QLocalSocket(this);
+    connect(_socket, &QLocalSocket::readyRead, this, &MetricsPushClient::OnReadyRead);
+    connect(_socket, &QLocalSocket::disconnected, this, &MetricsPushClient::OnDisconnected);
+
+    _reconnectTimer = new QTimer(this);
+    _reconnectTimer->setInterval(kReconnectIntervalMs);
+    connect(_reconnectTimer, &QTimer::timeout, this, &MetricsPushClient::TryConnect);
+}
+
+void MetricsPushClient::Start()
+{
+    TryConnect();
+    _reconnectTimer->start();
+}
+
+void MetricsPushClient::TryConnect()
+{
+    if (_socket->state() == QLocalSocket::ConnectedState)
+        return;
+
+    _socket->connectToServer(_socketPath);
+}
+
+void MetricsPushClient::OnReadyRead()
+{
+    // 줄 단위로 읽되 내용은 실제로 안 본다 - "뭔가 왔다"는 사실 자체가 신호다.
+    while (_socket->canReadLine())
+    {
+        _socket->readLine();
+        emit NewMetricAvailable();
+    }
+}
+
+void MetricsPushClient::OnDisconnected()
+{
+    // 별도 처리 없음 - _reconnectTimer가 주기적으로 TryConnect()를 계속 시도한다.
+}
+```
+
+**변경 사유**: `QLocalSocket::connectToServer(fullPath)`는 경로에 `/`가 포함되면 Qt가 그 경로를 그대로 OS의 Unix domain socket 경로로 써서 `connect()`한다 — Collector의 Asio 소켓(같은 OS 레벨 메커니즘)에 라이브러리 무관하게 붙을 수 있다(이전 세션에서 Python `socket.AF_UNIX`로 Asio 소켓에 직접 접속해본 것과 같은 원리). `_reconnectTimer`(3초 간격)는 `ResilientSender`의 재연결 타이머(5초)보다 짧게 잡았다 — 이쪽은 큐잉된 데이터를 잃을 걱정이 없는 단방향 신호라 더 공격적으로 재시도해도 부담이 적음.
+
+### 제안 — MetricsChartWidget.h / .cpp (수정) — 중복 점 방지
+
+**수정 전** (`.h` 멤버 목록 부분):
+```cpp
+private:
+    QChartView* _chartView;
+    QLineSeries* _cpuSeries;
+    QLineSeries* _memSeries;
+    QValueAxis* _axisX;
+    QValueAxis* _axisY;
+    qint64 _nextX = 0;
+};
+```
+
+**수정 후**:
+```cpp
+private:
+    QChartView* _chartView;
+    QLineSeries* _cpuSeries;
+    QLineSeries* _memSeries;
+    QValueAxis* _axisX;
+    QValueAxis* _axisY;
+    qint64 _nextX = 0;
+    qlonglong _lastSeenId = -1;   // 2026-09-14 : 중복 점 방지(아래 .cpp 참고)
+};
+```
+
+**수정 전** (`.cpp`의 `AppendLatest` 함수 전문):
+```cpp
+void MetricsChartWidget::AppendLatest(const QVector<MetricsSample>& samples)
+{
+    if (samples.isEmpty())
+        return;
+
+    // samples[0]이 최신값(FetchLatestMetrics가 "ORDER BY rowid DESC"로 가져오므로).
+    const MetricsSample& latest = samples.first();
+    const double memPercent = latest.memTotalBytes > 0
+        ? latest.memUsedBytes * 100.0 / latest.memTotalBytes
+        : 0.0;
+
+    _cpuSeries->append(_nextX, latest.cpuUsagePercent);
+    _memSeries->append(_nextX, memPercent);
+    ++_nextX;
+
+    if (_cpuSeries->count() > kMaxPoints)
+    {
+        _cpuSeries->removePoints(0, _cpuSeries->count() - kMaxPoints);
+        _memSeries->removePoints(0, _memSeries->count() - kMaxPoints);
+    }
+
+    // 스크롤하는 것처럼 보이도록 X축 범위를 항상 "최근 kMaxPoints개" 구간으로 맞춘다.
+    const qint64 rangeStart = std::max<qint64>(0, _nextX - kMaxPoints);
+    _axisX->setRange(rangeStart, rangeStart + kMaxPoints);
+}
+```
+
+**수정 후**:
+```cpp
+void MetricsChartWidget::AppendLatest(const QVector<MetricsSample>& samples)
+{
+    if (samples.isEmpty())
+        return;
+
+    // samples[0]이 최신값(FetchLatestMetrics가 "ORDER BY rowid DESC"로 가져오므로).
+    const MetricsSample& latest = samples.first();
+
+    // 2026-09-14 : 이제 갱신이 Collector 푸시로 트리거되긴 하지만, 수동 "새로고침" 버튼이
+    // 여전히 있어서 "갱신 이벤트 발생"과 "실제 새 데이터"가 100% 같다는 보장은 없다(사용자가
+    // 짚은 지점). 같은 행(id)을 또 받으면 조용히 무시 - 의도("실제 새 샘플 1개당 점 1개")를
+    // 갱신 트리거 방식과 무관하게 항상 지킨다.
+    if (latest.id == _lastSeenId)
+        return;
+    _lastSeenId = latest.id;
+
+    const double memPercent = latest.memTotalBytes > 0
+        ? latest.memUsedBytes * 100.0 / latest.memTotalBytes
+        : 0.0;
+
+    _cpuSeries->append(_nextX, latest.cpuUsagePercent);
+    _memSeries->append(_nextX, memPercent);
+    ++_nextX;
+
+    if (_cpuSeries->count() > kMaxPoints)
+    {
+        _cpuSeries->removePoints(0, _cpuSeries->count() - kMaxPoints);
+        _memSeries->removePoints(0, _memSeries->count() - kMaxPoints);
+    }
+
+    // 스크롤하는 것처럼 보이도록 X축 범위를 항상 "최근 kMaxPoints개" 구간으로 맞춘다.
+    const qint64 rangeStart = std::max<qint64>(0, _nextX - kMaxPoints);
+    _axisX->setRange(rangeStart, rangeStart + kMaxPoints);
+}
+```
+
+**변경 사유**: 푸시로 바꿔도 수동 버튼이 여전히 같은 트리거 경로(`RefreshRequested`)를 타므로 "이벤트 발생 = 새 데이터"가 100% 보장되진 않는다 — 방어 코드를 남겨두는 게 맞다고 판단(지난 대화에서 사용자에게 설명한 그대로).
+
+### 제안 — MainWindow.h / .cpp (수정)
+
+**수정 전** (`.h` 전방 선언 + 멤버 부분, 2026-09-14 6′ 제안 기준):
+```cpp
+class QLabel;
+class QPushButton;
+class QTableView;
+class QTimer;
+class MetricsWorker;
+class MetricsTableModel;
+class AlertsTableModel;
+class MetricsChartWidget;
+```
+```cpp
+private:
+    QThread _workerThread;
+    MetricsWorker* _worker = nullptr;
+    QTimer* _refreshTimer = nullptr;
+
+    MetricsTableModel* _metricsModel = nullptr;
+    AlertsTableModel* _alertsModel = nullptr;
+    QTableView* _metricsView = nullptr;
+    QTableView* _alertsView = nullptr;
+    MetricsChartWidget* _chartWidget = nullptr;
+    QPushButton* _refreshButton = nullptr;
+    QLabel* _statusLabel = nullptr;
+    QLabel* _agentStatusLabel = nullptr;
+};
+```
+
+**수정 후**:
+```cpp
+class QLabel;
+class QPushButton;
+class QTableView;
+class QTimer;
+class MetricsWorker;
+class MetricsTableModel;
+class AlertsTableModel;
+class MetricsChartWidget;
+class MetricsPushClient;
+```
+```cpp
+private:
+    QThread _workerThread;
+    MetricsWorker* _worker = nullptr;
+    QTimer* _refreshTimer = nullptr;           // 이제 "안전망"(주 트리거는 _pushClient)
+    MetricsPushClient* _pushClient = nullptr;  // 2026-09-14 : Collector 푸시 구독, 주 트리거
+
+    MetricsTableModel* _metricsModel = nullptr;
+    AlertsTableModel* _alertsModel = nullptr;
+    QTableView* _metricsView = nullptr;
+    QTableView* _alertsView = nullptr;
+    MetricsChartWidget* _chartWidget = nullptr;
+    QPushButton* _refreshButton = nullptr;
+    QLabel* _statusLabel = nullptr;
+    QLabel* _agentStatusLabel = nullptr;
+};
+```
+
+**수정 사유**: `MetricsPushClient` 전방 선언 + 멤버 추가. `_refreshTimer`는 지우지 않고 역할만 "주 트리거→안전망"으로 바뀐다(생성자에서 interval을 늘림, 아래).
+
+**수정 전** (`.cpp`, 생성자 안 include와 워커/타이머 배선 부분, 6′ 제안 기준):
+```cpp
+#include "AlertsTableModel.h"
+#include "MetricsChartWidget.h"
+#include "MetricsTableModel.h"
+#include "MetricsWorker.h"
+
+namespace
+{
+const QString kCollectorDbPath = "/home/shkim/dev/APM/APM_Agent/apm_metrics.db";
+const QString kAgentAlertsDbPath = "/home/shkim/dev/APM/APM_Agent/agent_alerts.db";
+constexpr int kRefreshIntervalMs = 5000;
+constexpr qint64 kAgentStaleSeconds = 15;
+}
+```
+```cpp
+    _refreshTimer = new QTimer(this);
+    _refreshTimer->setInterval(kRefreshIntervalMs);
+    connect(_refreshTimer, &QTimer::timeout, this, &MainWindow::OnRefreshClicked);
+
+    _workerThread.start();
+```
+
+**수정 후**:
+```cpp
+#include "AlertsTableModel.h"
+#include "MetricsChartWidget.h"
+#include "MetricsPushClient.h"
+#include "MetricsTableModel.h"
+#include "MetricsWorker.h"
+
+namespace
+{
+const QString kCollectorDbPath = "/home/shkim/dev/APM/APM_Agent/apm_metrics.db";
+const QString kAgentAlertsDbPath = "/home/shkim/dev/APM/APM_Agent/agent_alerts.db";
+
+// 2026-09-14 : Collector의 MetricsBroadcastServer 소켓 경로(Collector/main.cpp의
+// METRICS_PUBSUB_SOCKET_PATH와 반드시 같아야 함).
+const QString kCollectorPushSocketPath = "/tmp/apm_collector.sock";
+
+// 2026-09-14 : 이제 "주 트리거"가 아니라 "안전망" - 푸시 연결이 끊겨 있어도 이 주기마다는
+// 갱신되게 한다. 너무 짧으면 안전망의 존재 의미가 없고(푸시랑 다를 바 없어짐), 너무 길면
+// 푸시가 끊긴 동안 화면이 오래 정체된다 - 30초(수집 주기의 6배)로 절충.
+constexpr int kFallbackRefreshIntervalMs = 30000;
+constexpr qint64 kAgentStaleSeconds = 15;
+}
+```
+```cpp
+    _refreshTimer = new QTimer(this);
+    _refreshTimer->setInterval(kFallbackRefreshIntervalMs);
+    connect(_refreshTimer, &QTimer::timeout, this, &MainWindow::OnRefreshClicked);
+    _refreshTimer->start();
+
+    // 2026-09-14 : Collector 푸시 구독 - 새 지표 알림을 받으면 기존 트리거(OnRefreshClicked)를
+    // 그대로 재사용한다(새 갱신 로직을 안 만듦, 트리거 경로만 하나 더 생기는 것).
+    _pushClient = new MetricsPushClient(kCollectorPushSocketPath, this);
+    connect(_pushClient, &MetricsPushClient::NewMetricAvailable, this, &MainWindow::OnRefreshClicked);
+    _pushClient->Start();
+
+    _workerThread.start();
+```
+
+**변경 사유**: `_refreshTimer`는 이제 `OnWorkerInitialized`가 아니라 **생성자에서 바로 `start()`** — 안전망이라는 성격상 Worker 초기화 성공 여부와 무관하게 항상 돌아야 한다(초기화가 실패해도 30초마다 재시도하는 셈이 되어 오히려 자연스러운 복구 경로가 됨). `_pushClient`도 마찬가지로 생성자에서 바로 `Start()` — 연결 자체가 실패해도 내부 재연결 타이머가 알아서 계속 시도하므로 특별한 실패 처리가 필요 없다. `OnWorkerInitialized`의 `emit RefreshRequested()`(최초 1회 로드)는 그대로 유지(아래는 변경 없음, 참고로만 표시):
+```cpp
+void MainWindow::OnWorkerInitialized(bool metricsOk)
+{
+    if (!metricsOk)
+    {
+        SetStatus("DB 열기 실패 - stderr 확인");
+        return;
+    }
+    SetStatus("연결됨");
+    emit RefreshRequested();
+    // _refreshTimer->start() 호출은 위로 이동(생성자에서 즉시 시작) - 이 함수에서는 제거.
+}
+```
+
+### 제안 — CMakeLists.txt 변경 (`APM_QtDashboard/CMakeLists.txt`)
+
+**수정 전**:
+```cmake
+find_package(Qt6 REQUIRED COMPONENTS Widgets Sql Charts)
+
+add_executable(APM_QtDashboard
+    main.cpp
+    MainWindow.cpp
+    MainWindow.h
+    MetricsRepository.cpp
+    MetricsRepository.h
+    MetricsWorker.cpp
+    MetricsWorker.h
+    MetricsTableModel.cpp
+    MetricsTableModel.h
+    AlertsTableModel.cpp
+    AlertsTableModel.h
+    MetricsChartWidget.cpp
+    MetricsChartWidget.h
+    AgentAlertRepository.cpp
+    AgentAlertRepository.h
+)
+
+target_link_libraries(APM_QtDashboard PRIVATE Qt6::Widgets Qt6::Sql Qt6::Charts)
+```
+
+**수정 후**:
+```cmake
+find_package(Qt6 REQUIRED COMPONENTS Widgets Sql Charts Network)
+
+add_executable(APM_QtDashboard
+    main.cpp
+    MainWindow.cpp
+    MainWindow.h
+    MetricsRepository.cpp
+    MetricsRepository.h
+    MetricsWorker.cpp
+    MetricsWorker.h
+    MetricsTableModel.cpp
+    MetricsTableModel.h
+    AlertsTableModel.cpp
+    AlertsTableModel.h
+    MetricsChartWidget.cpp
+    MetricsChartWidget.h
+    AgentAlertRepository.cpp
+    AgentAlertRepository.h
+    MetricsPushClient.cpp
+    MetricsPushClient.h
+)
+
+target_link_libraries(APM_QtDashboard PRIVATE Qt6::Widgets Qt6::Sql Qt6::Charts Qt6::Network)
+```
+
+**변경 사유**: 신규 파일 2개 추가. `QLocalSocket`은 `Qt6::Widgets`만으로는 못 쓴다 — 직접 최소 재현 프로젝트로 확인함(`#include <QLocalSocket>`만 있는 파일을 `Widgets`만 링크해서 빌드 → `fatal error: QLocalSocket: No such file or directory`, `Network` 컴포넌트 추가 후 정상 빌드). `Qt6::Network`를 `find_package`/`target_link_libraries` 양쪽에 추가해야 한다 — 2단계 때 `Sql` 컴포넌트를 빠뜨렸던 것과 같은 종류의 실수를 이번엔 제안 단계에서 미리 검증해서 방지.
+
+### 검증 (미검증 — 사용자가 직접 작성/빌드 후 확인)
+
+1. 클린 빌드 성공(Collector에 `MetricsBroadcastServer` 추가, Qt에 `MetricsPushClient` 추가 — `Qt6::Network` 링크는 이미 별도로 검증 완료).
+2. Collector+Agent+Qt를 순서대로 띄우고, Qt 로그/상태에서 푸시 소켓 연결이 되는지(가장 쉬운 확인: Collector 콘솔에 "subscriber connected" 로그가 뜨는지).
+3. 5초마다 Agent가 지표를 보낼 때, 수동 새로고침 버튼을 **누르지 않아도** 차트/테이블이 자동으로 갱신되는지(폴링 없이 푸시만으로 동작 확인).
+4. 새로고침 버튼을 푸시 갱신 직후 연타 — 차트에 중복 점이 **안** 찍히는지(`_lastSeenId` 방어 확인).
+5. Collector를 죽였다 다시 띄우기 — Qt의 `MetricsPushClient`가 재연결 타이머(3초)로 자동 재구독하는지, Collector 콘솔에 "subscriber connected"가 다시 뜨는지.
+6. 푸시 소켓 자체를 막아둔 상태(예: Collector가 구버전이라 `MetricsBroadcastServer`가 없는 경우를 흉내) — `_refreshTimer`(30초 안전망)만으로도 결국 갱신되는지.
+
+### 결정 사항
+
+문서 제안만 — `APM_Agent/`/`APM_QtDashboard/`의 실제 소스는 사용자가 직접 작성(원칙 2, [[feedback_claude_md_rule2_scope]]). 작성 중 나오는 오타/컴파일 에러는 요청 시 수정 지원. 완료되면 `WORK_STATUS.md`/`Docs/QT_MFC_PORTFOLIO_PLAN.md` 갱신 후 커밋+push.
+
+
+## 2026-09-17 — 발행-구독 재설계: 남은 변경사항 직접 적용 + 발견한 문제 브리핑
+
+### 배경
+
+사용자 "남은 변경사항은 직접 해주고" 요청(원칙 2 예외) — 디스크 재확인(원칙 7) 결과, 사용자가 이미 일부를 직접 작성해뒀으나(3일 공백 후 이어지는 세션) 완성되지 않은/버그가 있는 상태였음. 여기서는 **무엇을 발견했고 무엇을 어떻게 고쳤는지**를 정리한다.
+
+### 발견 1 — `Collector/MetricsBroadcastServer.h/.cpp` (사용자 작성분): 컴파일 불가 상태였음
+
+**`.h`에서 발견한 문제**:
+- `asio::io_context _ioContext;` — **참조가 아니라 값으로 선언됨**. `asio::io_context`는 복사 불가능한 타입(복사 생성자가 `delete`)이라, 생성자 초기화 목록에서 `_ioContext(ioContext)`로 참조를 넘겨 값 멤버를 초기화하려는 시도 자체가 "use of deleted function" 컴파일 에러로 이어진다. **설계 의도(Collector의 진짜 `ioContext`를 공유해야 `asio::post`로 스레드 전환이 의미 있음) 자체가 깨지는 버그**였다 — 값으로 복사됐다면(컴파일이 됐다 하더라도) 이 서버 전용의 별도 `io_context`가 생겨서 `ioContext.run()`을 아무도 안 돌리는 죽은 객체가 됐을 것.
+- `void Notify();` **선언이 헤더에서 통째로 빠져 있었음** — `.cpp`엔 `MetricsBroadcastServer::Notify()` 정의가 있는데 헤더 선언이 없으면 "out-of-line definition does not match any declaration" 컴파일 에러.
+
+**`.cpp`에서 발견한 오타 5건**(전부 컴파일 에러 유발):
+1. 생성자 안 `_socektPath` — `_socketPath`의 오타, 존재하지 않는 이름.
+2. 소멸자 `MetircsBroadcastServer::~MetricsBroadcastServer()` — 스코프 지정자 오타("Metircs"), 클래스 이름과 안 맞아 "정의가 어떤 선언과도 안 맞음" 에러.
+3. `Start()`도 같은 스코프 지정자 오타(`MetircsBroadcastServer::Start()`).
+4. `aiso::write(...)` — `asio::write`의 오타.
+5. `it = _subscribers.erase()` — `erase()`에 반드시 필요한 이터레이터 인자가 빠짐, 그리고 바로 다음 줄 `++t;`도 `++it;`의 오타(`t`라는 이름 자체가 없음).
+
+**수정**: 위 문제를 전부 고친 버전으로 두 파일을 다시 작성(`_ioContext`를 참조로, `Notify()` 선언 추가, 오타 5건 정정) — `Docs/SESSION_LOG.md` 2026-09-14 "차트 갱신을 폴링→발행-구독" 항목에 있던 원안과 동일한 최종 형태.
+
+### 발견 2 — `Collector/main.cpp`: `#include`만 있고 실제 배선이 하나도 안 됨
+
+`#include "MetricsBroadcastServer.h"`만 추가돼 있었고, `MetricsBroadcastServer` 인스턴스 생성/`Start()` 호출/`PacketHandler::Register<apm::Metric>` 람다 안의 `Notify()` 호출이 전부 빠져 있었다 — 사실상 헤더만 끌어오고 아무 동작도 안 하는 상태.
+
+**수정**: 제안서 그대로 3곳 추가 — `asio::io_context ioContext;` 선언 직후에 `broadcastServer` 생성+`Start()`, `PacketHandler::Register` 람다의 캡처 목록에 `&ioContext, &broadcastServer` 추가, `metricStoreQueue.Push(...)` 안에서 `storePtr->Store(pkt)` 다음에 `asio::post(ioContext, [&broadcastServer]() { broadcastServer.Notify(); })` 추가.
+
+### 발견 3 — `APM_QtDashboard/MetricsPushClient.cpp`: 생성자 껍데기만 있고 나머지 전부 미구현
+
+`connect()` 3개(readyRead/disconnected/reconnectTimer), `Start()`, `TryConnect()`, `OnReadyRead()`, `OnDisconnected()` 전부 본문이 없었다(선언은 `.h`에 있지만 정의가 아예 없어 링크 에러가 났을 것).
+
+**수정**: 제안서 원안 그대로 전체 구현.
+
+### 발견 4 — `MainWindow`는 아직 "6′ 이전(2′~5′)" 상태였음
+
+지난 SESSION_LOG의 6′(알림+연결상태) 제안은 실제로 적용된 적이 없다는 것도 이번에 재확인(§6 관련 파일 `AgentAlertRepository.*` 자체가 디스크에 없음, `AlertsTableModel`은 CMakeLists에 남아있지만 `MainWindow`에서 미배선). **이번 푸시 재설계는 6′를 건너뛰고 2′~5′ 위에 바로 적용했다** — 6′는 여전히 별도로 남아있는 작업.
+
+**적용한 것**: `MainWindow.h`에 `MetricsPushClient` 전방 선언 + 멤버 추가. `MainWindow.cpp`에 `kCollectorPushSocketPath`/`kFallbackRefreshIntervalMs` 상수 추가, `_refreshTimer`를 생성자에서 즉시 `start()`(안전망 30초)하도록 변경(기존엔 `OnWorkerInitialized` 안에서 `start()`했었음 — 이제 초기화 성공 여부와 무관하게 항상 돌아야 안전망 역할을 함), `_pushClient` 생성+구독+`Start()`, `OnWorkerInitialized`에서 중복된 `_refreshTimer->start()` 호출 제거.
+
+### 적용한 것 — 나머지(제안서 원안 그대로)
+
+- `MetricsChartWidget.h/.cpp`에 `_lastSeenId` 중복 방지 추가.
+- `APM_Agent/CMakeLists.txt`: `Collector/MetricsBroadcastServer.cpp`를 `Collector` 타겟에 추가(사용자가 이미 정확히 해뒀던 부분 — 이건 문제 없었음).
+- `APM_QtDashboard/CMakeLists.txt`: `Qt6::Network` 컴포넌트 + `MetricsPushClient.cpp/.h` 추가.
+
+### 검증 (직접, 실제 Collector+Agent+Qt 3개 프로세스 실행)
+
+- `APM_Agent`(Collector/Agent) + `APM_QtDashboard` 클린 빌드 전부 성공.
+- 실제로 Collector→Agent→Qt를 순서대로 띄우고 8초 관찰:
+  - Collector 로그에 **`[MetricsBroadcastServer] subscriber connected (총 1개)`** — Qt의 `MetricsPushClient`(`QLocalSocket`)가 Collector의 Asio Unix domain socket에 실제로 접속 성공(서로 다른 라이브러리 간 로컬 소켓 상호운용이 실제로 동작함을 확인).
+  - Collector가 지표 2건을 실제로 수신/저장(`[Collector] metric received: ...` x2).
+  - Qt 헤드리스 실행 로그에 경고/에러 없음(메타타입 오류, 소켓 오류 등 전혀 없음).
+- 테스트 후 `apm_metrics.db`/`agent_alerts.db`/소켓 파일/잔류 프로세스 전부 정리.
+
+### 결정 사항
+
+요청대로 전부 직접 적용 완료. 커밋은 사용자 요청 시 진행.
