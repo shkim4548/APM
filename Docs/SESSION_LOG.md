@@ -14582,3 +14582,37 @@ target_link_libraries(APM_QtDashboard PRIVATE Qt6::Widgets Qt6::Sql Qt6::Charts 
 ### 결정 사항
 
 §7(Agent 제어 UI) 전체 적용+검증 완료 — 이로써 `Docs/QT_MFC_PORTFOLIO_PLAN.md`가 정의한 Qt/MFC 포트폴리오 트랙의 2′~7′ 단계가 전부 끝났다. 커밋/push는 사용자 요청 시(이번 요청엔 "적용"만 있었고 커밋 지시는 없었음 — 6′ 때와 달리 이번엔 별도 확인 필요).
+
+
+## 2026-09-17 — 포트폴리오(html light) 갱신: Qt 로컬 대시보드 신규 섹션 추가
+
+### 배경
+
+사용자 "배포판 구성은 필요없다 이제 기존의 포트폴리오를 이에 맞게 수정하는 것이 더 중요하다" — §7까지 끝난 Qt/MFC 트랙 성과를 기존 포트폴리오에 반영. 대상/범위를 먼저 확인(AskUserQuestion): **대상 파일 = `Docs/portfolio_apm_light.html`만 이번에 반영**(dark 버전인 `portfolio_apm.html`, 두 PPTX는 이번 범위 밖 — 사용자가 "html light와 최신 PPTX가 필요한데, 우선 html만 반영해라"라고 명시), **반영 범위 = 신규 섹션 하나 추가**(기존 아키텍처 다이어그램/기술스택 텍스트를 다시 쓰는 대신, 새 섹션으로 분리).
+
+### 적용 내역
+
+1. **신규 섹션 `#qt-track`** 추가(`<!-- SCALE TESTING -->` 앞, `features`와 `scale` 사이에 삽입) — 기존 `decision-card`(문제/판단/해결 3행) 포맷을 그대로 재사용해 4개 카드 작성:
+   - **01** 아키텍처 대전환 — Console 클라이언트 → Agent 전용 로컬 대시보드(Collector 1:1 배치가 코드 변경 없이 가능했다는 발견 포함)
+   - **02** 알림 판단 위치 — Collector가 아니라 Agent(역할 침해 문제 + 다운 시나리오 검증 중 발견한 버그 1건 언급)
+   - **03** 차트 갱신 — 폴링 중복점 버그 → 발행-구독 재설계(Asio↔QLocalSocket 상호운용 실증 포함)
+   - **04** Agent 원격 제어 — 로컬 IPC(연결당 명령 1개 제약, 실패 경로 검증 포함)
+2. **실제 스크린샷 1장 추가**(`Docs/screenshots/qt_dashboard.png`) — 기존 "실제 실행 화면" 섹션의 원칙(실제 촬영, 목업 아님)을 그대로 따름. Collector+Agent+Qt를 실제로 띄우고 헤드리스로 캡처(`APM_QtDashboard/main.cpp`에 임시 캡처 코드를 넣었다가 촬영 후 완전히 원복 — `git diff` 확인 결과 무변경, 클린 빌드로 재확인). 제어판/상태 라벨/차트/지표 표/알림 표가 전부 한 화면에 보이도록 창 크기를 일시적으로 키워서 촬영.
+3. **nav 링크**에 `#qt-track` 앵커 추가(`기능`과 `스케일 테스트` 사이).
+4. **기술 스택 섹션**에 `// 로컬 데스크톱 (Qt)` 그룹 신규 추가(Qt6 모듈, QThread, Model/View, QLocalSocket 상호운용, 발행-구독).
+
+### 건드리지 않은 것(의도적)
+
+- `portfolio_apm.html`(dark), `portfolio_apm_light.pptx`, `김서현_APM_포트폴리오_v1.pptx` — 이번 범위 밖(사용자 확인).
+- Hero 섹션의 기존 수치(27 테스트/300 동시접속/버그 10건 등) — Console/Agent/Collector 파이프라인 고유의 이미 검증된 수치라, Qt 트랙과 섞으면 서사가 혼동될 수 있어 그대로 둠.
+- `arch`(전체 시스템 구조) 섹션의 다이어그램 — 여전히 정확한 설명(Console 웹 경로는 안 바뀜)이라 무수정.
+
+### 검증
+
+- `<section>`/`</section>` 태그 수 일치(12/12) 확인, 삽입 지점 전후 들여쓰기/닫힘 구조 육안 확인.
+- 스크린샷 파일 실제 존재 확인(`Docs/screenshots/qt_dashboard.png`), `img src` 상대경로가 같은 `Docs/` 하위라 정상 동작.
+- 헤드리스 브라우저가 없어 렌더링 스크린샷으로는 재확인 못 함 — 기존 섹션과 동일한 CSS 클래스(`decision-grid`/`decision-card`/`decision-row`/`screenshot-caption`)를 그대로 재사용해 구조적으로 깨질 여지를 최소화.
+
+### 결정 사항
+
+`portfolio_apm_light.html`만 이번에 반영 완료. **다음 할 일**: `portfolio_apm.html`(dark)과 `portfolio_apm_light.pptx` 갱신은 사용자가 다음에 별도 요청할 것(이번엔 범위 밖으로 명시적으로 제외됨). 커밋/push는 사용자 요청 시.
