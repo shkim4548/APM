@@ -14,6 +14,18 @@ constexpr const char* CREATE_TABLE_SQL =
     "  closed_at INTEGER"
     ");";
 
+// step 6' : 1행만 쓰는 상태 테이블 - id를 1로 고정(CHECK)해서 항상 그 한 행만 UPSERT한다.
+constexpr const char* CREATE_STATUS_TABLE_SQL =
+    "CREATE TABLE IF NOT EXISTS agent_status ("
+    "  id INTEGER PRIMARY KEY CHECK (id = 1),"
+    "  connected INTEGER NOT NULL,"
+    "  updated_at INTEGER NOT NULL"
+    ");";
+
+constexpr const char* UPDATE_STATUS_SQL =
+    "INSERT INTO agent_status (id, connected, updated_at) VALUES (1, ?, strftime('%s','now')) "
+    "ON CONFLICT(id) DO UPDATE SET connected = excluded.connected, updated_at = excluded.updated_at;";
+
 constexpr const char* FIND_OPEN_SQL =
     "SELECT id, metric_type, threshold_value, trigger_value, opened_at "
     "FROM local_alerts WHERE metric_type = ? AND closed_at IS NULL "
@@ -53,10 +65,17 @@ AgentAlertStore::AgentAlertStore(const String& dbPath)
         ::sqlite3_free(errMsg);
         throw std::runtime_error("AgentAlertStore - CREATE TABLE failed: " + err);
     }
+    if (::sqlite3_exec(_db, CREATE_STATUS_TABLE_SQL, nullptr, nullptr, &errMsg) != SQLITE_OK)
+    {
+        String err = errMsg ? errMsg : "unknown";
+        ::sqlite3_free(errMsg);
+        throw std::runtime_error("AgentAlertStore - CREATE agent_status TABLE failed: " + err);
+    }
 
     if (::sqlite3_prepare_v2(_db, FIND_OPEN_SQL, -1, &_findOpenStmt, nullptr) != SQLITE_OK
         || ::sqlite3_prepare_v2(_db, OPEN_SQL, -1, &_openStmt, nullptr) != SQLITE_OK
-        || ::sqlite3_prepare_v2(_db, RESOLVE_SQL, -1, &_resolveStmt, nullptr) != SQLITE_OK)
+        || ::sqlite3_prepare_v2(_db, RESOLVE_SQL, -1, &_resolveStmt, nullptr) != SQLITE_OK
+        || ::sqlite3_prepare_v2(_db, UPDATE_STATUS_SQL, -1, &_updateStatusStmt, nullptr) != SQLITE_OK)
     {
         throw std::runtime_error("AgentAlertStore - prepare failed: " + String(::sqlite3_errmsg(_db)));
     }
@@ -67,6 +86,7 @@ AgentAlertStore::~AgentAlertStore()
     if (_findOpenStmt) ::sqlite3_finalize(_findOpenStmt);
     if (_openStmt) ::sqlite3_finalize(_openStmt);
     if (_resolveStmt) ::sqlite3_finalize(_resolveStmt);
+    if (_updateStatusStmt) ::sqlite3_finalize(_updateStatusStmt);
     if (_db) ::sqlite3_close(_db);
 }
 
@@ -106,4 +126,13 @@ void AgentAlertStore::Resolve(long long id, double resolvedValue)
 
     if (::sqlite3_step(_resolveStmt) != SQLITE_DONE)
         std::cerr << "[AgentAlertStore] resolve failed: " << ::sqlite3_errmsg(_db) << std::endl;
+}
+
+void AgentAlertStore::UpdateStatus(bool connected)
+{
+    ::sqlite3_reset(_updateStatusStmt);
+    ::sqlite3_bind_int(_updateStatusStmt, 1, connected ? 1 : 0);
+
+    if (::sqlite3_step(_updateStatusStmt) != SQLITE_DONE)
+        std::cerr << "[AgentAlertStore] update status failed: " << ::sqlite3_errmsg(_db) << std::endl;
 }

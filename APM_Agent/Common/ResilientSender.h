@@ -58,6 +58,9 @@ public:
 	// 현재 연결의 TCP 품질 조회. 연결 안 된 상태면 전부 0인 기본값.
 	TcpConnectionInfo GetConnectionInfo() const;
 
+	// step 6' : Agent<->Collector 연결 상태(Qt에 보여줄 agent_status 기록용).
+	bool IsConnected() const { return _connected; }
+
 	// step Phase A : Agent 제어 명령("시작/중지") 대응.
 	// Pause(): 지금 연결을 끊고, 재연결 시도 자체를 멈춘다(Resume() 전까지 조용히 대기).
 	// Resume(): 멈춰 있던 상태에서 다시 연결을 시도한다.

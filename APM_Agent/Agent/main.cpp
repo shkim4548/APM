@@ -51,7 +51,7 @@ int main()
 		LocalAlertEvaluator alertEvaluator(thresholds, alertStore);
 
 		MetricScheduler scheduler(ioContext, std::chrono::seconds(5),
-			[&sender, &alertEvaluator](const SystemMetrics& metrics)
+			[&sender, &alertEvaluator, &alertStore](const SystemMetrics& metrics)
 			{
 				apm::Metric pkt;
 				pkt.set_cpu_usage_percent(metrics.cpuUsagePercent);
@@ -72,6 +72,8 @@ int main()
 				// Collector 전송 "전에" 로컬 판단 먼저 - Agent<->Collector 연결이 끊긴
 				// 상태에서도 로컬 알림은 항상 최신 상태를 유지하도록.
 				alertEvaluator.OnNewMetric(pkt);
+				// step 6' : Qt가 agent_alerts.db만 보고도 연결 상태를 알 수 있게 매 수집 주기마다 기록.
+				alertStore.UpdateStatus(sender.IsConnected());
 				sender.Enqueue(pkt);
 			});
 		scheduler.Start();
