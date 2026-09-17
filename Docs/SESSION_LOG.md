@@ -13942,3 +13942,643 @@ qRegisterMetaType<AgentStatus>("AgentStatus");
 ### 결정 사항
 
 6′(알림+연결상태) 3가지 다운 시나리오 전부 실측 검증 완료, 버그 1건 발견+수정. 커밋은 사용자 요청 시. 이제 §7(Agent 제어 UI, `QLocalSocket`)로 넘어갈 수 있음.
+
+
+## 2026-09-17 — §7(Agent 제어 UI) 설계·코드 제안
+
+### 배경
+
+6′(알림+연결상태) 적용+검증+커밋 완료 후, 사용자가 §7 설계를 미리 준비해달라고 요청. Agent 쪽 `AgentControlServer`(`APM_Agent/Agent/AgentControlServer.h/.cpp`, Phase A에서 이미 완성)는 그대로 재사용 — 이번 작업은 전부 Qt 쪽 신규 코드다.
+
+**Agent 프로토콜 재확인(변경 없음, 그대로 재사용)**: Unix domain socket(`/tmp/apm_agent.sock`), 줄바꿈으로 구분된 JSON 한 줄 = 명령 하나.
+```
+{"cmd":"start"} / {"cmd":"stop"} / {"cmd":"reconnect"} / {"cmd":"set_log_level","level":3}
+-> {"ok":true} 또는 {"ok":false,"error":"..."}
+```
+**핵심 제약**: `AgentControlServer::HandleConnection()`이 `async_read_until`로 한 줄 읽고, `Dispatch()` 응답을 쓴 뒤 그걸로 끝 — 같은 연결에서 두 번째 명령을 또 읽으려는 루프가 없다(`AgentControlServer.cpp` 55~68행). 그래서 Qt 쪽 클라이언트가 소켓을 계속 재사용하면 **두 번째 명령부터 응답이 영영 안 온다** — 반드시 **명령마다 새로 연결**해야 한다. `MetricsPushClient`(발행-구독, 계속 열어두는 구독용 소켓)와는 성격이 달라서 그 클래스를 재사용하지 않고 새로 만든다.
+
+### 설계 — `AgentControlClient` (Qt, 신규)
+
+명령 4종(`Start/Stop/Reconnect/SetLogLevel`)을 공개 메서드로 노출하고, 내부에서 JSON 프로토콜 조립/파싱을 전담한다 — `MainWindow`가 JSON 문자열을 직접 다루지 않게 한다(`AgentAlertRepository`가 SQL을 캡슐화한 것과 같은 이유).
+
+매 명령마다 `QLocalSocket`을 새로 만들고(`this`를 부모로 둬서 수명 관리), `connected`에서 명령을 쓰고, `readyRead`에서 응답 한 줄을 읽어 파싱 후 `deleteLater()`로 정리한다. `QJsonDocument`/`QJsonObject`는 `Qt6::Core`에 이미 포함돼 있어 CMake에 모듈을 추가할 필요가 없다(파싱에 `nlohmann/json`을 또 안 씀 — Qt 쪽엔 이미 `QJson*`이 있는데 굳이 서드파티를 더 끌어올 이유가 없음).
+
+### 제안 — AgentControlClient.h (신규, `APM_QtDashboard/`)
+
+```cpp
+#pragma once
+#include <QObject>
+#include <QString>
+
+// step 7' : Agent의 AgentControlServer(APM_Agent/Agent/AgentControlServer.h/.cpp)에
+// 제어 명령을 보내는 전용 클라이언트. 서버가 연결 하나당 명령 하나만 처리하고 끝나므로
+// (HandleConnection이 한 줄 읽고 응답 쓰고 끝 - 루프 없음), 매 호출마다 새로 연결한다.
+// MetricsPushClient(발행-구독, 계속 열어두는 구독 소켓)와는 성격이 달라 별개 클래스로 둠.
+class AgentControlClient : public QObject
+{
+    Q_OBJECT
+public:
+    explicit AgentControlClient(const QString& socketPath, QObject* parent = nullptr);
+
+public slots:
+    void Start();
+    void Stop();
+    void Reconnect();
+    void SetLogLevel(int level);
+
+signals:
+    // 명령 1개에 대한 결과 - AgentControlServer의 {"ok":true}/{"ok":false,"error":"..."} 그대로.
+    // 명령 종류는 안 실어보낸다 - MainWindow가 호출 시점에 이미 어떤 명령인지 알고 있고,
+    // 버튼 4개가 동시에 눌릴 일이 없다는 전제(버튼 클릭 -> 즉시 이 신호 하나로 결과 표시).
+    void CommandResult(bool ok, const QString& error);
+
+private:
+    void SendCommand(const QString& cmdLine);
+
+private:
+    QString _socketPath;
+};
+```
+
+### 제안 — AgentControlClient.cpp (신규)
+
+```cpp
+#include "AgentControlClient.h"
+
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLocalSocket>
+
+AgentControlClient::AgentControlClient(const QString& socketPath, QObject* parent)
+    : QObject(parent), _socketPath(socketPath)
+{
+}
+
+void AgentControlClient::Start() { SendCommand(QStringLiteral(R"({"cmd":"start"})")); }
+void AgentControlClient::Stop() { SendCommand(QStringLiteral(R"({"cmd":"stop"})")); }
+void AgentControlClient::Reconnect() { SendCommand(QStringLiteral(R"({"cmd":"reconnect"})")); }
+
+void AgentControlClient::SetLogLevel(int level)
+{
+    QJsonObject obj{ {"cmd", "set_log_level"}, {"level", level} };
+    SendCommand(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact)));
+}
+
+void AgentControlClient::SendCommand(const QString& cmdLine)
+{
+    // 명령마다 새 소켓 - "배경"에 적은 대로 AgentControlServer는 연결 하나당 명령 하나만
+    // 처리하고 끝난다. this를 부모로 둬서, MainWindow가 먼저 파괴되면 Qt 부모-자식 체계가
+    // 이 소켓들도 같이 정리해준다.
+    auto* socket = new QLocalSocket(this);
+
+    connect(socket, &QLocalSocket::connected, socket, [socket, cmdLine]()
+    {
+        socket->write((cmdLine + "\n").toUtf8());
+    });
+
+    connect(socket, &QLocalSocket::readyRead, this, [this, socket]()
+    {
+        if (!socket->canReadLine())
+            return;
+
+        QByteArray line = socket->readLine().trimmed();
+        socket->disconnectFromServer();
+        socket->deleteLater();
+
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(line, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject())
+        {
+            emit CommandResult(false, "invalid response: " + QString::fromUtf8(line));
+            return;
+        }
+
+        QJsonObject obj = doc.object();
+        emit CommandResult(obj.value("ok").toBool(false), obj.value("error").toString());
+    });
+
+    connect(socket, &QLocalSocket::errorOccurred, this,
+        [this, socket](QLocalSocket::LocalSocketError)
+        {
+            emit CommandResult(false, socket->errorString());
+            socket->deleteLater();
+        });
+
+    socket->connectToServer(_socketPath);
+}
+```
+
+**변경 사유(신규 파일이라 "수정 전" 없음)**: `SendCommand()`가 private인 이유 - 외부에는 프로토콜을 감춘 4개 메서드(`Start/Stop/Reconnect/SetLogLevel`)만 노출한다. `errorOccurred`도 잡는 이유 - Agent 프로세스 자체가 안 떠 있으면(`/tmp/apm_agent.sock`이 없으면) `connected`가 아예 안 오고 이 시그널만 온다, 이 경우도 `CommandResult(false, ...)`로 통일해서 알려줘야 UI가 "무응답으로 멈춤" 상태에 안 빠진다.
+
+### 제안 — MainWindow.h (수정) — 수정 전은 현재 디스크(커밋 `866cd93`) 그대로
+
+**수정 전** (파일 전문):
+```cpp
+#pragma once
+#include <QMainWindow>
+#include <QVector>
+#include <QThread>
+
+#include "AgentAlertRepository.h"
+#include "MetricsRepository.h"
+
+class QLabel;
+class QPushButton;
+class QTableView;
+class QTimer;
+class MetricsWorker;
+class MetricsTableModel;
+class AlertsTableModel;
+class MetricsChartWidget;
+class MetricsPushClient;
+
+// step 2~6' (2026-09-17 재작업) : Collector 로컬 DB(지표) + Agent 로컬 DB(알림/상태)
+// 둘 다 읽는다. 알림/상태도 기존 지표 갱신 트리거(푸시+안전망)를 그대로 재사용 -
+// 별도 푸시 채널 없음(WORK_STATUS.md/SESSION_LOG.md 2026-09-17 참고). Agent 제어(§7)는
+// 아직 손대지 않음.
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+public:
+    explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
+
+signals:
+    // 워커 스레드의 Refresh() 슬롯에 큐 연결된다. emit 후 즉시 반환한다.
+    void RefreshRequested();
+
+private slots:
+    void OnRefreshClicked();
+    void OnWorkerInitialized(bool metricsOk);
+    void OnRefreshFailed(const QString& reason);
+    void PopulateMetricsTable(const QVector<MetricsSample>& samples);
+    void PopulateAlertTable(const QVector<AlertSample>& alerts);
+    void UpdateAgentStatus(const AgentStatus& status);
+
+private:
+    void SetStatus(const QString& text);
+
+private:
+    QThread _workerThread;
+    MetricsWorker* _worker = nullptr;
+    QTimer* _refreshTimer = nullptr;           // 안전망(주 트리거는 _pushClient)
+    MetricsPushClient* _pushClient = nullptr;  // Collector 푸시 구독, 주 트리거
+
+    MetricsTableModel* _metricsModel = nullptr;
+    AlertsTableModel* _alertsModel = nullptr;
+    QTableView* _metricsView = nullptr;
+    QTableView* _alertsView = nullptr;
+    MetricsChartWidget* _chartWidget = nullptr;
+    QPushButton* _refreshButton = nullptr;
+    QLabel* _statusLabel = nullptr;
+    QLabel* _agentStatusLabel = nullptr;
+};
+```
+
+**수정 후**:
+```cpp
+#pragma once
+#include <QMainWindow>
+#include <QVector>
+#include <QThread>
+
+#include "AgentAlertRepository.h"
+#include "MetricsRepository.h"
+
+class QComboBox;
+class QLabel;
+class QPushButton;
+class QTableView;
+class QTimer;
+class MetricsWorker;
+class MetricsTableModel;
+class AlertsTableModel;
+class MetricsChartWidget;
+class MetricsPushClient;
+class AgentControlClient;
+
+// step 2~7' (2026-09-17 재작업) : Collector 로컬 DB(지표) + Agent 로컬 DB(알림/상태) 조회
+// + Agent 로컬 소켓으로 제어 명령(시작/중지/재연결/로그레벨) 전송까지 전부 갖춘다.
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+public:
+    explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
+
+signals:
+    // 워커 스레드의 Refresh() 슬롯에 큐 연결된다. emit 후 즉시 반환한다.
+    void RefreshRequested();
+
+private slots:
+    void OnRefreshClicked();
+    void OnWorkerInitialized(bool metricsOk);
+    void OnRefreshFailed(const QString& reason);
+    void PopulateMetricsTable(const QVector<MetricsSample>& samples);
+    void PopulateAlertTable(const QVector<AlertSample>& alerts);
+    void UpdateAgentStatus(const AgentStatus& status);
+    void OnStartAgentClicked();
+    void OnStopAgentClicked();
+    void OnReconnectClicked();
+    void OnSetLogLevelClicked();
+    void OnControlCommandResult(bool ok, const QString& error);
+
+private:
+    void SetStatus(const QString& text);
+
+private:
+    QThread _workerThread;
+    MetricsWorker* _worker = nullptr;
+    QTimer* _refreshTimer = nullptr;           // 안전망(주 트리거는 _pushClient)
+    MetricsPushClient* _pushClient = nullptr;  // Collector 푸시 구독, 주 트리거
+    AgentControlClient* _controlClient = nullptr;  // step 7' : Agent 제어 명령 전용
+
+    MetricsTableModel* _metricsModel = nullptr;
+    AlertsTableModel* _alertsModel = nullptr;
+    QTableView* _metricsView = nullptr;
+    QTableView* _alertsView = nullptr;
+    MetricsChartWidget* _chartWidget = nullptr;
+    QPushButton* _refreshButton = nullptr;
+    QLabel* _statusLabel = nullptr;
+    QLabel* _agentStatusLabel = nullptr;
+
+    // step 7' : Agent 제어판.
+    QPushButton* _startAgentButton = nullptr;
+    QPushButton* _stopAgentButton = nullptr;
+    QPushButton* _reconnectButton = nullptr;
+    QComboBox* _logLevelCombo = nullptr;
+    QPushButton* _setLogLevelButton = nullptr;
+    QLabel* _controlStatusLabel = nullptr;
+};
+```
+
+**변경 사유**: `AgentControlClient` 전방 선언 + 멤버 추가, 버튼 4개(`시작/중지/재연결/로그레벨 적용`) + 콤보박스(로그 레벨) + 결과 표시용 라벨 1개 추가. 슬롯은 버튼 클릭당 1개씩(각자 다른 명령을 보내야 하니 공용 슬롯 하나로 묶지 않음) + 결과 공통 처리 슬롯 1개.
+
+### 제안 — MainWindow.cpp (수정, 생성자 관련 부분만 발췌 없이 전체 — 규칙 4)
+
+**수정 전**: 현재 디스크(커밋 `866cd93`) 상태 그대로(직전 SESSION_LOG 항목들에 이미 전문이 있음 — 아래 "수정 후"와 대조하면 바뀐 지점이 뚜렷함, 생략).
+
+**수정 후** (전문):
+```cpp
+#include "MainWindow.h"
+
+#include <QAbstractItemView>
+#include <QComboBox>
+#include <QDateTime>
+#include <QHeaderView>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QTableView>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <QWidget>
+
+#include "AgentControlClient.h"
+#include "AlertsTableModel.h"
+#include "MetricsChartWidget.h"
+#include "MetricsPushClient.h"
+#include "MetricsTableModel.h"
+#include "MetricsWorker.h"
+
+namespace
+{
+// 2026-09-14 : APM_Console(중앙) 대신 Collector(그 장비 로컬)가 만드는 apm_metrics.db를
+// 본다 - Qt는 이제 Console을 전혀 모른다(WORK_STATUS.md/QT_MFC_PORTFOLIO_PLAN.md §3-2
+// 아키텍처 대전환 참고). Collector가 상대경로("apm_metrics.db")로 파일을 만들기 때문에
+// 실제 위치는 Collector를 어느 디렉터리에서 실행했는지에 달려있다 - 이 체크아웃에서는
+// APM_Agent/ 안에서 실행하는 관례(APM_Viewer의 기존 하드코딩과 동일)를 그대로 따름.
+const QString kCollectorDbPath = "/home/shkim/dev/APM/APM_Agent/apm_metrics.db";
+
+// step 6' : Agent가 만드는 agent_alerts.db(알림 + 연결 상태). Agent도 같은 디렉터리
+// 관례로 실행한다고 가정.
+const QString kAgentAlertsDbPath = "/home/shkim/dev/APM/APM_Agent/agent_alerts.db";
+
+// 2026-09-14 : Collector의 MetricsBroadcastServer 소켓 경로(Collector/main.cpp의
+// METRICS_PUBSUB_SOCKET_PATH와 반드시 같아야 함).
+const QString kCollectorPushSocketPath = "/tmp/apm_collector.sock";
+
+// step 7' : Agent의 AgentControlServer 소켓 경로(Agent/main.cpp의
+// CONTROL_SOCKET_PATH와 반드시 같아야 함).
+const QString kAgentControlSocketPath = "/tmp/apm_agent.sock";
+
+// 2026-09-14 : 이제 "주 트리거"가 아니라 "안전망" - 푸시 연결이 끊겨 있어도(또는 §6'
+// 트레이드오프대로 Agent<->Collector가 끊겨 Collector가 아예 푸시를 못 하는 동안도) 이
+// 주기마다는 갱신되게 한다. 너무 짧으면 안전망의 존재 의미가 없고(푸시랑 다를 바 없어짐),
+// 너무 길면 푸시가 끊긴 동안 화면이 오래 정체된다 - 30초(수집 주기의 6배)로 절충.
+constexpr int kFallbackRefreshIntervalMs = 30000;
+
+// step 6' : agent_status.updated_at이 이보다 오래되면 "Agent 응답 없음"으로 본다.
+// Agent 수집 주기(5초)의 3배 - 한두 번 갱신을 놓쳐도 바로 "죽음"으로 오판정하지 않기 위한 여유.
+constexpr qint64 kAgentStaleSeconds = 15;
+}
+
+MainWindow::MainWindow(QWidget* parent)
+    : QMainWindow(parent)
+{
+    setWindowTitle("APM Qt Dashboard - step 2~7' (Collector+Agent 로컬 DB, 발행-구독 갱신, Agent 제어)");
+
+    auto* central = new QWidget(this);
+    auto* layout = new QVBoxLayout(central);
+
+    _refreshButton = new QPushButton("새로고침", central);
+    _statusLabel = new QLabel("초기화 중...", central);
+    _agentStatusLabel = new QLabel("Agent 상태: 확인 중...", central);
+
+    // step 7' : Agent 제어판 - 한 줄에 버튼 3개 + 로그레벨 콤보 + 적용 버튼.
+    auto* controlRow = new QWidget(central);
+    auto* controlLayout = new QHBoxLayout(controlRow);
+    controlLayout->setContentsMargins(0, 0, 0, 0);
+    _startAgentButton = new QPushButton("Agent 시작", controlRow);
+    _stopAgentButton = new QPushButton("Agent 중지", controlRow);
+    _reconnectButton = new QPushButton("강제 재연결", controlRow);
+    _logLevelCombo = new QComboBox(controlRow);
+    _logLevelCombo->addItem("Error", 0);
+    _logLevelCombo->addItem("Warning", 1);
+    _logLevelCombo->addItem("Info", 2);
+    _logLevelCombo->addItem("Debug", 3);
+    _setLogLevelButton = new QPushButton("로그레벨 적용", controlRow);
+    controlLayout->addWidget(_startAgentButton);
+    controlLayout->addWidget(_stopAgentButton);
+    controlLayout->addWidget(_reconnectButton);
+    controlLayout->addWidget(_logLevelCombo);
+    controlLayout->addWidget(_setLogLevelButton);
+    _controlStatusLabel = new QLabel("", central);
+
+    _chartWidget = new MetricsChartWidget(central);
+
+    _metricsModel = new MetricsTableModel(this);
+    _metricsView = new QTableView(central);
+    _metricsView->setModel(_metricsModel);
+    _metricsView->horizontalHeader()->setStretchLastSection(true);
+    _metricsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    _alertsModel = new AlertsTableModel(this);
+    _alertsView = new QTableView(central);
+    _alertsView->setModel(_alertsModel);
+    _alertsView->horizontalHeader()->setStretchLastSection(true);
+    _alertsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    layout->addWidget(_refreshButton);
+    layout->addWidget(_statusLabel);
+    layout->addWidget(_agentStatusLabel);
+    layout->addWidget(controlRow);
+    layout->addWidget(_controlStatusLabel);
+    layout->addWidget(_chartWidget);
+    layout->addWidget(_metricsView);
+    layout->addWidget(_alertsView);
+    setCentralWidget(central);
+
+    connect(_refreshButton, &QPushButton::clicked, this, &MainWindow::OnRefreshClicked);
+    connect(_startAgentButton, &QPushButton::clicked, this, &MainWindow::OnStartAgentClicked);
+    connect(_stopAgentButton, &QPushButton::clicked, this, &MainWindow::OnStopAgentClicked);
+    connect(_reconnectButton, &QPushButton::clicked, this, &MainWindow::OnReconnectClicked);
+    connect(_setLogLevelButton, &QPushButton::clicked, this, &MainWindow::OnSetLogLevelClicked);
+
+    // 워커를 만들고 워커 스레드로 옮긴다. 이 시점 이후 워커의 슬롯은 워커 스레드에서 실행된다.
+    _worker = new MetricsWorker(kCollectorDbPath, kAgentAlertsDbPath);
+    _worker->moveToThread(&_workerThread);
+
+    // 스레드가 끝나면 워커를 그 스레드에서 안전하게 삭제한다.
+    connect(&_workerThread, &QThread::finished, _worker, &QObject::deleteLater);
+
+    // UI → 워커 (스레드가 다르므로 자동으로 Queued Connection)
+    connect(this, &MainWindow::RefreshRequested, _worker, &MetricsWorker::Refresh);
+
+    // 워커 → UI (역시 Queued. 슬롯 본문은 UI 스레드에서 실행됨)
+    connect(_worker, &MetricsWorker::Initialized, this, &MainWindow::OnWorkerInitialized);
+    connect(_worker, &MetricsWorker::MetricsReady, this, &MainWindow::PopulateMetricsTable);
+    // 시그널 팬아웃 - 같은 MetricsReady를 차트도 받아서, 최신 값 1개만 누적한다.
+    connect(_worker, &MetricsWorker::MetricsReady, _chartWidget, &MetricsChartWidget::AppendLatest);
+    connect(_worker, &MetricsWorker::AlertsReady, this, &MainWindow::PopulateAlertTable);
+    connect(_worker, &MetricsWorker::StatusReady, this, &MainWindow::UpdateAgentStatus);
+    connect(_worker, &MetricsWorker::RefreshFailed, this, &MainWindow::OnRefreshFailed);
+
+    _refreshTimer = new QTimer(this);
+    _refreshTimer->setInterval(kFallbackRefreshIntervalMs);
+    connect(_refreshTimer, &QTimer::timeout, this, &MainWindow::OnRefreshClicked);
+    _refreshTimer->start();
+
+    // 2026-09-14 : Collector 푸시 구독 - 새 지표 알림을 받으면 기존 트리거(OnRefreshClicked)를
+    // 그대로 재사용한다(알림/상태도 이 트리거 한 번에 같이 조회됨 - MetricsWorker::Refresh() 참고).
+    _pushClient = new MetricsPushClient(kCollectorPushSocketPath, this);
+    connect(_pushClient, &MetricsPushClient::NewMetricAvailable, this, &MainWindow::OnRefreshClicked);
+    _pushClient->Start();
+
+    // step 7' : Agent 제어 클라이언트 - UI 스레드에서 바로 쓴다(워커 스레드로 안 옮김).
+    // QLocalSocket 비동기 시그널 기반이라 블로킹이 없고, 명령 자체가 사용자가 버튼을 눌러야만
+    // 나가는 드문 이벤트라 워커 스레드로 분리할 이유가 없음(지표 폴링과는 성격이 다름).
+    _controlClient = new AgentControlClient(kAgentControlSocketPath, this);
+    connect(_controlClient, &AgentControlClient::CommandResult, this, &MainWindow::OnControlCommandResult);
+
+    _workerThread.start();
+
+    // 워커가 워커 스레드로 옮겨진 뒤 Initialize()가 그 스레드에서 실행되도록 큐에 넣는다.
+    QMetaObject::invokeMethod(_worker, "Initialize", Qt::QueuedConnection);
+}
+
+MainWindow::~MainWindow()
+{
+    // 워커 스레드의 이벤트 루프를 멈추고, 실제로 끝날 때까지 기다린다.
+    // 이걸 빼면 프로세스 종료 시 "QThread: Destroyed while thread is still running" 경고/크래시.
+    _workerThread.quit();
+    _workerThread.wait();
+}
+
+void MainWindow::OnRefreshClicked()
+{
+    SetStatus("불러오는 중...");
+    emit RefreshRequested();
+}
+
+void MainWindow::OnWorkerInitialized(bool metricsOk)
+{
+    if (!metricsOk)
+    {
+        SetStatus("DB 열기 실패 - stderr 확인");
+        return;
+    }
+    SetStatus("연결됨");
+    emit RefreshRequested();
+}
+
+void MainWindow::OnRefreshFailed(const QString& reason)
+{
+    SetStatus("조회 실패: " + reason);
+}
+
+void MainWindow::SetStatus(const QString& text)
+{
+    _statusLabel->setText(text);
+}
+
+void MainWindow::PopulateMetricsTable(const QVector<MetricsSample>& samples)
+{
+    _metricsModel->SetSamples(samples);
+    SetStatus(QString("갱신 완료 %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
+}
+
+void MainWindow::PopulateAlertTable(const QVector<AlertSample>& alerts)
+{
+    _alertsModel->SetAlerts(alerts);
+}
+
+void MainWindow::UpdateAgentStatus(const AgentStatus& status)
+{
+    if (!status.valid)
+    {
+        _agentStatusLabel->setText("Agent 상태: 알 수 없음(agent_alerts.db에 상태 없음)");
+        return;
+    }
+
+    qint64 ageSeconds = QDateTime::currentSecsSinceEpoch() - status.updatedAt;
+
+    if (ageSeconds > kAgentStaleSeconds)
+        _agentStatusLabel->setText(QString("Agent 상태: 응답 없음 (마지막 갱신 %1초 전)").arg(ageSeconds));
+    else if (status.connected)
+        _agentStatusLabel->setText("Agent 상태: Collector에 연결됨");
+    else
+        _agentStatusLabel->setText("Agent 상태: Collector 연결 끊김(재시도 중)");
+}
+
+void MainWindow::OnStartAgentClicked()
+{
+    _controlStatusLabel->setText("명령 전송 중: 시작...");
+    _controlClient->Start();
+}
+
+void MainWindow::OnStopAgentClicked()
+{
+    _controlStatusLabel->setText("명령 전송 중: 중지...");
+    _controlClient->Stop();
+}
+
+void MainWindow::OnReconnectClicked()
+{
+    _controlStatusLabel->setText("명령 전송 중: 강제 재연결...");
+    _controlClient->Reconnect();
+}
+
+void MainWindow::OnSetLogLevelClicked()
+{
+    int level = _logLevelCombo->currentData().toInt();
+    _controlStatusLabel->setText(QString("명령 전송 중: 로그레벨=%1...").arg(level));
+    _controlClient->SetLogLevel(level);
+}
+
+void MainWindow::OnControlCommandResult(bool ok, const QString& error)
+{
+    if (ok)
+        _controlStatusLabel->setText(QString("명령 성공 (%1)").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
+    else
+        _controlStatusLabel->setText("명령 실패: " + error);
+}
+```
+
+**변경 사유**: 생성자에 제어판 5개 위젯(`controlRow` 안에 버튼 3개+콤보+버튼) + 결과 라벨 1개 추가, 각 버튼 클릭 시그널을 전용 슬롯에 연결, `_controlClient` 생성+`CommandResult` 연결. `OnStartAgentClicked` 등은 전송 중임을 먼저 표시해두고(응답이 비동기라 즉시 결과가 안 옴) `OnControlCommandResult`에서 최종 결과로 덮어쓴다. `_controlClient`는 워커 스레드로 옮기지 않고 UI 스레드에서 직접 씀 — 지표 폴링(주기적, DB I/O)과 달리 제어 명령은 사용자가 버튼을 눌러야만 드물게 나가는 이벤트이고 `QLocalSocket`은 완전 비동기(시그널 기반)라 UI를 블로킹하지 않으므로 별도 스레드로 분리할 이유가 없음(참고: 지표/알림 조회를 워커 스레드에 둔 이유는 `QSqlDatabase` 동기 API를 UI 스레드에서 직접 부르면 블로킹되기 때문이었음 - 여기는 그 이유가 없음).
+
+### 제안 — CMakeLists.txt (수정, `APM_QtDashboard/`)
+
+**수정 전** (현재 디스크):
+```cmake
+find_package(Qt6 REQUIRED COMPONENTS Widgets Sql Charts Network)
+
+add_executable(APM_QtDashboard
+    main.cpp
+    MainWindow.cpp
+    MainWindow.h
+    MetricsRepository.cpp
+    MetricsRepository.h
+    MetricsWorker.cpp
+    MetricsWorker.h
+    MetricsTableModel.cpp
+    MetricsTableModel.h
+    AlertsTableModel.cpp
+    AlertsTableModel.h
+    MetricsChartWidget.cpp
+    MetricsChartWidget.h
+    MetricsPushClient.cpp
+    MetricsPushClient.h
+    AgentAlertRepository.cpp
+    AgentAlertRepository.h
+)
+
+target_link_libraries(APM_QtDashboard PRIVATE Qt6::Widgets Qt6::Sql Qt6::Charts Qt6::Network)
+```
+
+**수정 후**:
+```cmake
+find_package(Qt6 REQUIRED COMPONENTS Widgets Sql Charts Network)
+
+add_executable(APM_QtDashboard
+    main.cpp
+    MainWindow.cpp
+    MainWindow.h
+    MetricsRepository.cpp
+    MetricsRepository.h
+    MetricsWorker.cpp
+    MetricsWorker.h
+    MetricsTableModel.cpp
+    MetricsTableModel.h
+    AlertsTableModel.cpp
+    AlertsTableModel.h
+    MetricsChartWidget.cpp
+    MetricsChartWidget.h
+    MetricsPushClient.cpp
+    MetricsPushClient.h
+    AgentAlertRepository.cpp
+    AgentAlertRepository.h
+    AgentControlClient.cpp
+    AgentControlClient.h
+)
+
+target_link_libraries(APM_QtDashboard PRIVATE Qt6::Widgets Qt6::Sql Qt6::Charts Qt6::Network)
+```
+
+**변경 사유**: 신규 파일 2개만 추가 — `QJsonDocument`/`QJsonObject`는 `Qt6::Core`에 이미 포함(`Qt6::Widgets`가 `Core`에 의존하므로 이미 링크돼 있음), `find_package`/링크 목록 변경 없음.
+
+### 검증 계획(미검증 — 작성/빌드 후 확인)
+
+1. 클린 빌드 성공(`AgentControlClient` 신규 컴파일 포함).
+2. Collector+Agent+Qt 다 띄운 상태에서 "Agent 중지" 클릭 → Agent 쪽 로그에 `[ResilientSender] paused` 출력 확인 + `agent_status.connected`가 결국 0이 되는지(Pause가 세션을 닫으므로) 확인, Qt 쪽엔 "명령 성공" 표시되는지.
+3. 이어서 "Agent 시작" 클릭 → Agent 재개, `agent_status.connected`가 다시 1로 돌아오는지, Qt 쪽 "명령 성공" 확인.
+4. "강제 재연결" 클릭 → Agent 로그에 `[ResilientSender] force reconnect` 확인.
+5. 로그레벨 콤보에서 "Debug" 선택 후 "로그레벨 적용" 클릭 → Agent 쪽 `SetLogLevel`이 실제로 호출되는지(현재 `LogLevel`은 `LocalAlertEvaluator`의 로그 한 곳에만 적용돼 있어 즉각적인 가시 효과는 제한적 - `LogLevel.h` 주석 참고, 확인 가능한 범위 안에서만).
+6. **Agent 프로세스 자체가 안 떠 있는 상태**에서 아무 버튼이나 클릭 → `errorOccurred`가 잡혀서 "명령 실패: ..."로 표시되는지(무응답으로 멈추지 않는지) - 이번 설계에서 가장 신경 쓴 실패 경로라 반드시 확인 필요.
+
+### 결정 사항
+
+문서 제안만 — 사용자가 "지금 §7 설계 제안 준비"를 선택(직접 적용은 아직 요청 안 함, 원칙 2). 적용 여부는 다음 지시에 따름.
+
+
+## 2026-09-17 — §7(Agent 제어 UI) 직접 적용 완료
+
+### 배경
+
+사용자 "이것도 그냥 바로 적용해주고 문서화에 신경써줘" 요청(원칙 2 예외). 바로 위 SESSION_LOG "§7(Agent 제어 UI) 설계·코드 제안" 항목을 실제 코드로 그대로 옮겼다 — 이번엔 제안과 적용 사이에 코드 편차가 없었다(6′ 때처럼 사용자가 미리 손댄 부분이 없어서, 설계 그대로 옮기면 됐음).
+
+### 적용 내역 (제안서 그대로, 코드 수정 없이 그대로 적용됨)
+
+- `APM_QtDashboard/AgentControlClient.h/.cpp` — 신규 파일, 제안서 원안 그대로.
+- `APM_QtDashboard/MainWindow.h/.cpp` — 제어판(버튼 3개+로그레벨 콤보+적용 버튼+결과 라벨) 추가, `AgentControlClient` 배선.
+- `APM_QtDashboard/CMakeLists.txt` — `AgentControlClient.cpp/.h` 추가(신규 Qt 모듈 없음 - `QJsonDocument`/`QJsonObject`는 이미 링크된 `Qt6::Core`에 포함).
+
+### 검증(직접, 실제 Collector+Agent+Qt 3개 프로세스 실행 + 헤드리스 UI 자동 조작)
+
+1. 클린 빌드 2회 성공(증분 빌드 1회, `rm -rf build` 후 전체 재구성 1회 — 둘 다 무경고).
+2. 버튼 클릭을 헤드리스로 재현하기 위해, `QMetaObject::invokeMethod(&window, "OnXxxClicked")`로 `MainWindow`의 private 슬롯을 이름으로 직접 호출하는 임시 계측 코드를 `main.cpp`에 넣어(검증 끝나고 완전히 원복, 아래 "정리" 참고) Collector+Agent+Qt 3개를 실제로 띄우고 순서대로 4개 명령을 자동 실행:
+   - **"Agent 중지"** → Agent 로그에 `[ResilientSender] paused (제어 명령: 중지)` 확인.
+   - **"Agent 시작"** → `[ResilientSender] resumed (제어 명령: 시작)` → 곧바로 재연결/TLS 핸드셰이크 성공 확인.
+   - **"강제 재연결"** → `[ResilientSender] force reconnect (제어 명령: 강제 재연결)` 확인.
+   - **"로그레벨 적용"**(기본값 Error=0) → Agent 쪽엔 이 레벨 변경 자체를 로그로 안 남기므로(`LogLevel.h` 설계상 `LocalAlertEvaluator` 한 곳에만 적용, 가시 로그 없음), Qt 화면 캡처로 확인.
+   - 4개 명령 전부 Qt 화면에 **"명령 성공 (HH:mm:ss)"**로 정확히 표시됨을 스크린샷으로 확인.
+3. **Agent가 안 떠 있는 상태**(Agent를 `kill -9`한 뒤, `/tmp/apm_agent.sock`이 소켓 파일로는 남아있지만 아무도 안 듣는 상태 — 크래시 재현에 가까운 시나리오)에서 아무 버튼이나 눌렀을 때 **"명령 실패: QLocalSocket::connectToServer: Connection refused"**로 즉시 표시되고 무응답으로 안 멈추는 것을 화면 캡처로 확인 — 이번 설계의 핵심 실패 경로가 의도대로 동작.
+4. Qt 헤드리스 로그에 경고/에러 전혀 없음(offscreen 플랫폼 플러그인의 무해한 안내 문구 외).
+
+### 정리
+
+검증용 임시 계측 코드(`main.cpp`의 스크린샷 타이머 + `invokeMethod` 시퀀스)는 확인 후 완전히 되돌리고, `rm -rf build` 후 처음부터 다시 클린 빌드해서 재확인(현재 `main.cpp`는 §7 본 변경분 없음 — 이 파일 자체는 6′에서 이미 완결됐고 §7은 `MainWindow`/`CMakeLists.txt`/신규 파일에만 손을 댐). 테스트 DB/소켓/스크린샷 파일과 프로세스(Collector/Agent/Qt) 전부 정리 완료.
+
+### 결정 사항
+
+§7(Agent 제어 UI) 전체 적용+검증 완료 — 이로써 `Docs/QT_MFC_PORTFOLIO_PLAN.md`가 정의한 Qt/MFC 포트폴리오 트랙의 2′~7′ 단계가 전부 끝났다. 커밋/push는 사용자 요청 시(이번 요청엔 "적용"만 있었고 커밋 지시는 없었음 — 6′ 때와 달리 이번엔 별도 확인 필요).

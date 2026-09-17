@@ -31,6 +31,8 @@ add_executable(APM_QtDashboard
     MetricsPushClient.h
     AgentAlertRepository.cpp
     AgentAlertRepository.h
+    AgentControlClient.cpp
+    AgentControlClient.h
 )
 
 target_link_libraries(APM_QtDashboard PRIVATE Qt6::Widgets Qt6::Sql Qt6::Charts Qt6::Network)

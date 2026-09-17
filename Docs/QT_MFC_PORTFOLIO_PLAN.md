@@ -211,20 +211,20 @@ Qt를 만들고 나면 자연스럽게 생기는 이야깃거리다.
 
 코드 전문은 `Docs/SESSION_LOG.md`(2026-09-07~13 항목들)에 보존. 1~5단계에서 배운 Qt 개념(signal/slot, QThread+moveToThread, Q_DECLARE_METATYPE, Model/View, QChart)은 새 방향에서도 그대로 재사용 가능 — 바뀌는 건 "무엇을 조회하는가"(Console DB → Agent 로컬 DB)와 "여기에 제어가 추가된다"는 점.
 
-### 새 표 (2026-09-14 확정, Agent 전용 로컬 대시보드+제어판 방향)
+### 새 표 (2026-09-14 확정, Agent 전용 로컬 대시보드+제어판 방향 — 2026-09-17 전 단계 완료)
 
-| 단계 | 내용 | 비고 |
-| --- | --- | --- |
-| 0~1 | (완료 그대로 유지) 빈 프로젝트 + Signal/Slot | 재작업 불필요 |
-| 2′ | SQLite로 초기 데이터 표시 — **대상을 Console DB에서 Agent 로컬 DB(`apm_metrics.db`)로 교체** | 스키마 재설계(snake_case, epoch 타임스탬프). `MetricsRepository` 재작성 |
-| 3′ | QThread 워커 분리 | 로직은 거의 그대로, 대상 DB만 바뀜 |
-| 4′ | QAbstractTableModel + TableView | 그대로 재사용 가능(모델 인터페이스는 스키마에 안 묶임) |
-| 5′ | QtCharts 실시간 갱신 | 그대로 재사용 가능 |
-| 6′ | Agent 로컬 알림 판단 결과 표시 + Agent↔Console 연결 상태 인디케이터 | Agent 쪽에 알림 판단/저장 로직 신규 필요(백엔드 작업, Qt 밖) |
-| 7′ | 로컬 IPC로 Agent 제어(시작/중지/재연결/로그레벨) | IPC 메커니즘 미정(§8). Qt 쪽엔 이 자체가 신규 학습 요소 |
-| 8 | 배포판 구성(동적 링크 확인) | 옛 계획과 동일하게 유지 |
+| 단계 | 내용 | 비고 | 상태 |
+| --- | --- | --- | --- |
+| 0~1 | (완료 그대로 유지) 빈 프로젝트 + Signal/Slot | 재작업 불필요 | ✅ 완료 |
+| 2′ | SQLite로 초기 데이터 표시 — **대상을 Console DB에서 Agent 로컬 DB(`apm_metrics.db`)로 교체** | 스키마 재설계(snake_case, epoch 타임스탬프). `MetricsRepository` 재작성 | ✅ 완료 |
+| 3′ | QThread 워커 분리 | 로직은 거의 그대로, 대상 DB만 바뀜 | ✅ 완료 |
+| 4′ | QAbstractTableModel + TableView | 그대로 재사용 가능(모델 인터페이스는 스키마에 안 묶임) | ✅ 완료 |
+| 5′ | QtCharts 실시간 갱신 | 그대로 재사용 가능. 이후 폴링→발행-구독(Collector→Qt 푸시)으로 갱신 트리거 재설계까지 완료 | ✅ 완료 |
+| 6′ | Agent 로컬 알림 판단 결과 표시 + Agent↔Collector 연결 상태 인디케이터 | Agent 쪽 `agent_status` 테이블/`UpdateStatus`/`IsConnected` 신규(백엔드), Qt 쪽 `AgentAlertRepository` 신규. 다운 시나리오 3가지 전부 실측 검증 완료(버그 1건 발견+수정) | ✅ 완료 (`866cd93`) |
+| 7′ | 로컬 IPC로 Agent 제어(시작/중지/재연결/로그레벨) | IPC 메커니즘은 Phase A에서 이미 확정(Unix domain socket, 줄바꿈 구분 JSON). Qt 쪽 신규 `AgentControlClient`(명령마다 새 연결) + `MainWindow` 제어판. 4개 명령 전부 실측 검증 완료 | ✅ 완료 (커밋 대기) |
+| 8 | 배포판 구성(동적 링크 확인) | 옛 계획과 동일하게 유지 | ⬜ 미착수 |
 
-**공수 시간은 아직 추정하지 않는다** — 2′/6′/7′ 모두 `APM_Agent`(그리고 6′/7′은 `Collector`/`Console`까지) 쪽 신규 백엔드 설계가 먼저 확정돼야 정확한 견적이 나온다(§8 "아직 미정인 것" 참고). 이 표는 "무엇을 다시 해야 하는가"의 목록이지 시간 견적표가 아니다.
+상세 설계/코드/검증 기록은 `Docs/SESSION_LOG.md` 2026-09-13~17 항목들(§ 표시로 검색) 참고. 공수 시간은 실측하지 않았다 — 이 표는 진행 현황 추적용이지 시간 견적표가 아니다.
 
 > 유일하게 유지하는 체크포인트: **환경 문제(빌드/설치)로 하루 넘게 못 넘어가면 일단 원인만 기록하고 다음 단계로 이동, 나중에 재시도**. 이건 스코프를 줄이자는 게 아니라 인프라 문제에 발이 묶이는 걸 막기 위한 것 — 구현 범위 자체는 계속 넓혀간다.
 
@@ -298,10 +298,10 @@ Qt ── SQLite 파일 읽기 ──→ Agent의 신규 agent_alerts.db (local_
 Qt ── 로컬 IPC(QLocalSocket) ──→ Agent (제어: 시작/중지/재연결/로그레벨)
 ```
 
-## 9. 진행 순서 (2026-09-14 재개정 — Phase A/B 분리 반영)
+## 9. 진행 순서 (2026-09-14 재개정 — Phase A/B 분리 반영, 2026-09-17 진행 상태 갱신)
 
-1. **`APM_Agent`에 Phase A 기능 설계 및 구현** — 로컬 알림 판단+`local_alerts` 저장(하드코딩 임계치), `QLocalSocket` 대응 로컬 IPC 서버(4개 명령 처리)
-2. **Qt 2′~5′단계 재작업** — 대상 DB를 Console→Agent 로컬로 교체(기존 Model/View/Chart 코드는 최대한 재사용)
-3. **Qt 6′~7′단계** — `local_alerts` 표시 + Agent 제어 UI(`QLocalSocket` 클라이언트)
-4. **8단계(배포판) + 인쇄용 1장 + 경력기술서 갱신**
+1. ✅ **`APM_Agent`에 Phase A 기능 설계 및 구현** — 로컬 알림 판단+`local_alerts` 저장(하드코딩 임계치), `QLocalSocket` 대응 로컬 IPC 서버(4개 명령 처리)
+2. ✅ **Qt 2′~5′단계 재작업** — 대상 DB를 Console→Agent 로컬로 교체 + 발행-구독 갱신 트리거까지 완료
+3. ✅ **Qt 6′~7′단계** — `local_alerts`+연결상태 표시 + Agent 제어 UI(`QLocalSocket` 클라이언트) 전부 완료(커밋 대기 — §6 표 참고)
+4. ⬜ **8단계(배포판) + 인쇄용 1장 + 경력기술서 갱신** — 다음 순서
 5. **(Phase B, 나중)** Console이 임계치 변경 시 Collector 경유로 Agent에 브로드캐스트 — ②④ 설계 후 착수

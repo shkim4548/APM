@@ -1,8 +1,10 @@
 #include "MainWindow.h"
 
 #include <QAbstractItemView>
+#include <QComboBox>
 #include <QDateTime>
 #include <QHeaderView>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QTableView>
@@ -10,6 +12,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include "AgentControlClient.h"
 #include "AlertsTableModel.h"
 #include "MetricsChartWidget.h"
 #include "MetricsPushClient.h"
@@ -33,6 +36,10 @@ const QString kAgentAlertsDbPath = "/home/shkim/dev/APM/APM_Agent/agent_alerts.d
 // METRICS_PUBSUB_SOCKET_PATH와 반드시 같아야 함).
 const QString kCollectorPushSocketPath = "/tmp/apm_collector.sock";
 
+// step 7' : Agent의 AgentControlServer 소켓 경로(Agent/main.cpp의
+// CONTROL_SOCKET_PATH와 반드시 같아야 함).
+const QString kAgentControlSocketPath = "/tmp/apm_agent.sock";
+
 // 2026-09-14 : 이제 "주 트리거"가 아니라 "안전망" - 푸시 연결이 끊겨 있어도(또는 §6'
 // 트레이드오프대로 Agent<->Collector가 끊겨 Collector가 아예 푸시를 못 하는 동안도) 이
 // 주기마다는 갱신되게 한다. 너무 짧으면 안전망의 존재 의미가 없고(푸시랑 다를 바 없어짐),
@@ -47,7 +54,7 @@ constexpr qint64 kAgentStaleSeconds = 15;
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
-    setWindowTitle("APM Qt Dashboard - step 2~6' (Collector+Agent 로컬 DB, 발행-구독 갱신)");
+    setWindowTitle("APM Qt Dashboard - step 2~7' (Collector+Agent 로컬 DB, 발행-구독 갱신, Agent 제어)");
 
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
@@ -55,6 +62,26 @@ MainWindow::MainWindow(QWidget* parent)
     _refreshButton = new QPushButton("새로고침", central);
     _statusLabel = new QLabel("초기화 중...", central);
     _agentStatusLabel = new QLabel("Agent 상태: 확인 중...", central);
+
+    // step 7' : Agent 제어판 - 한 줄에 버튼 3개 + 로그레벨 콤보 + 적용 버튼.
+    auto* controlRow = new QWidget(central);
+    auto* controlLayout = new QHBoxLayout(controlRow);
+    controlLayout->setContentsMargins(0, 0, 0, 0);
+    _startAgentButton = new QPushButton("Agent 시작", controlRow);
+    _stopAgentButton = new QPushButton("Agent 중지", controlRow);
+    _reconnectButton = new QPushButton("강제 재연결", controlRow);
+    _logLevelCombo = new QComboBox(controlRow);
+    _logLevelCombo->addItem("Error", 0);
+    _logLevelCombo->addItem("Warning", 1);
+    _logLevelCombo->addItem("Info", 2);
+    _logLevelCombo->addItem("Debug", 3);
+    _setLogLevelButton = new QPushButton("로그레벨 적용", controlRow);
+    controlLayout->addWidget(_startAgentButton);
+    controlLayout->addWidget(_stopAgentButton);
+    controlLayout->addWidget(_reconnectButton);
+    controlLayout->addWidget(_logLevelCombo);
+    controlLayout->addWidget(_setLogLevelButton);
+    _controlStatusLabel = new QLabel("", central);
 
     _chartWidget = new MetricsChartWidget(central);
 
@@ -73,12 +100,18 @@ MainWindow::MainWindow(QWidget* parent)
     layout->addWidget(_refreshButton);
     layout->addWidget(_statusLabel);
     layout->addWidget(_agentStatusLabel);
+    layout->addWidget(controlRow);
+    layout->addWidget(_controlStatusLabel);
     layout->addWidget(_chartWidget);
     layout->addWidget(_metricsView);
     layout->addWidget(_alertsView);
     setCentralWidget(central);
 
     connect(_refreshButton, &QPushButton::clicked, this, &MainWindow::OnRefreshClicked);
+    connect(_startAgentButton, &QPushButton::clicked, this, &MainWindow::OnStartAgentClicked);
+    connect(_stopAgentButton, &QPushButton::clicked, this, &MainWindow::OnStopAgentClicked);
+    connect(_reconnectButton, &QPushButton::clicked, this, &MainWindow::OnReconnectClicked);
+    connect(_setLogLevelButton, &QPushButton::clicked, this, &MainWindow::OnSetLogLevelClicked);
 
     // 워커를 만들고 워커 스레드로 옮긴다. 이 시점 이후 워커의 슬롯은 워커 스레드에서 실행된다.
     _worker = new MetricsWorker(kCollectorDbPath, kAgentAlertsDbPath);
@@ -109,6 +142,12 @@ MainWindow::MainWindow(QWidget* parent)
     _pushClient = new MetricsPushClient(kCollectorPushSocketPath, this);
     connect(_pushClient, &MetricsPushClient::NewMetricAvailable, this, &MainWindow::OnRefreshClicked);
     _pushClient->Start();
+
+    // step 7' : Agent 제어 클라이언트 - UI 스레드에서 바로 쓴다(워커 스레드로 안 옮김).
+    // QLocalSocket 비동기 시그널 기반이라 블로킹이 없고, 명령 자체가 사용자가 버튼을 눌러야만
+    // 나가는 드문 이벤트라 워커 스레드로 분리할 이유가 없음(지표 폴링과는 성격이 다름).
+    _controlClient = new AgentControlClient(kAgentControlSocketPath, this);
+    connect(_controlClient, &AgentControlClient::CommandResult, this, &MainWindow::OnControlCommandResult);
 
     _workerThread.start();
 
@@ -178,4 +217,37 @@ void MainWindow::UpdateAgentStatus(const AgentStatus& status)
         _agentStatusLabel->setText("Agent 상태: Collector에 연결됨");
     else
         _agentStatusLabel->setText("Agent 상태: Collector 연결 끊김(재시도 중)");
+}
+
+void MainWindow::OnStartAgentClicked()
+{
+    _controlStatusLabel->setText("명령 전송 중: 시작...");
+    _controlClient->Start();
+}
+
+void MainWindow::OnStopAgentClicked()
+{
+    _controlStatusLabel->setText("명령 전송 중: 중지...");
+    _controlClient->Stop();
+}
+
+void MainWindow::OnReconnectClicked()
+{
+    _controlStatusLabel->setText("명령 전송 중: 강제 재연결...");
+    _controlClient->Reconnect();
+}
+
+void MainWindow::OnSetLogLevelClicked()
+{
+    int level = _logLevelCombo->currentData().toInt();
+    _controlStatusLabel->setText(QString("명령 전송 중: 로그레벨=%1...").arg(level));
+    _controlClient->SetLogLevel(level);
+}
+
+void MainWindow::OnControlCommandResult(bool ok, const QString& error)
+{
+    if (ok)
+        _controlStatusLabel->setText(QString("명령 성공 (%1)").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
+    else
+        _controlStatusLabel->setText("명령 실패: " + error);
 }
