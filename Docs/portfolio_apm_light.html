@@ -385,7 +385,7 @@
         <span class="hero-stat-label">OS 빌드+실행 검증(Linux, Windows)</span>
       </div>
       <div class="hero-stat">
-        <span class="hero-stat-val">10</span>
+        <span class="hero-stat-val">13</span>
         <span class="hero-stat-label">실행 검증 중 발견·수정한 버그</span>
       </div>
     </div>
@@ -792,7 +792,7 @@
         </div>
         <div class="decision-row">
           <span class="decision-label">해결</span>
-          <span class="decision-text resolved">Metrics 30일 / 알림 이력 180일(사건 기록이라 더 길게). 실제 실행 검증 중 EF Core+SQLite 조합이 시간 비교를 SQL로 못 옮기는 버그를 발견해 수정(아래 "버그 발견" Bug #3 참고).</span>
+          <span class="decision-text resolved">Metrics 30일 / 알림 이력 180일(사건 기록이라 더 길게). 실제 실행 검증 중 EF Core+SQLite 조합이 시간 비교를 SQL로 못 옮기는 버그를 발견해 수정(아래 "버그 발견" Bug #5 참고).</span>
         </div>
       </div>
 
@@ -826,7 +826,7 @@
         </div>
         <div class="decision-row">
           <span class="decision-label">해결</span>
-          <span class="decision-text resolved">실제 실행 검증 중 "복합 인덱스가 이 쿼리에 맞는다"던 설계 당시 전제가, 실제로는 인덱스를 탈 수조차 없었다는 걸 발견(아래 "버그 발견" Bug #3와 같은 원인) — 설계 문서의 가정과 실제 동작이 다를 수 있음을 보여준 사례.</span>
+          <span class="decision-text resolved">실제 실행 검증 중 "복합 인덱스가 이 쿼리에 맞는다"던 설계 당시 전제가, 실제로는 인덱스를 탈 수조차 없었다는 걸 발견(아래 "버그 발견" Bug #5와 같은 원인) — 설계 문서의 가정과 실제 동작이 다를 수 있음을 보여준 사례.</span>
         </div>
       </div>
     </div>
@@ -1284,9 +1284,9 @@ metricStoreQueue.Push([storePtr, pkt]() { storePtr-&gt;Store(pkt); });</pre>
       </div>
     </div>
 
-    <!-- Bug #3 -->
+    <!-- Bug #5 -->
     <div style="font-family:'Fira Code'; font-size:0.78rem; color:var(--text-2); margin-bottom:0.75rem; margin-top:0.5rem;">
-      // Bug #3 — EF Core + SQLite가 DateTimeOffset 비교를 SQL로 못 옮김
+      // Bug #5 — EF Core + SQLite가 DateTimeOffset 비교를 SQL로 못 옮김
     </div>
 
     <div class="bug-block">
@@ -1318,6 +1318,57 @@ metricStoreQueue.Push([storePtr, pkt]() { storePtr-&gt;Store(pkt); });</pre>
         수정 후 <code style="font-family:'Fira Code'">/apm/traces</code>에서 <strong>같은 원인의 500 에러</strong>를 하나 더 발견 — 고친 즉시 "같은 패턴을 쓴 다른 코드가 더 있는가"를 능동적으로 재검색했고,
         알림 컨트롤러는 동등 비교(<code style="font-family:'Fira Code'">== null</code>)만 써서 이 버그의 영향을 안 받는다는 것도 함께 확인했다.
         재빌드 후 클린 상태로 다시 띄워 크래시 없음을 확인하고, 임계치를 실제로 낮춰 알림이 열리고 렌더링되는 것까지 실 트래픽으로 재검증(<code style="font-family:'Fira Code'">dotnet test</code> 18/18 통과, 회귀 없음).
+      </div>
+    </div>
+
+    <!-- Bug #6 -->
+    <div style="font-family:'Fira Code'; font-size:0.78rem; color:var(--text-2); margin-bottom:0.75rem; margin-top:0.5rem;">
+      // Bug #6 — "확인 중..."에 영원히 멈추는 Agent 상태 라벨 (Qt 트랙)
+    </div>
+
+    <div class="bug-block">
+      <div class="bug-header">문제 — Agent를 한 번도 안 띄운 상태에서 Qt를 열면 상태 라벨이 안 바뀜</div>
+      <p style="font-size:0.83rem; color:var(--text-2); margin-bottom:0.75rem;">
+        Agent 다운/Collector 다운/Agent 미기동 3가지 장애 시나리오를 실제로 재현해 화면 캡처로 검증하던 중 발견 —
+        Agent가 한 번도 실행된 적이 없어 <code style="font-family:'Fira Code'">agent_alerts.db</code> 파일 자체가 없으면,
+        "Agent 상태" 라벨이 "알 수 없음"이 아니라 생성자 초기 문구("확인 중...")에 영원히 멈춰 있었다.
+        <code style="font-family:'Fira Code'">MetricsWorker::Refresh()</code>가 <code style="font-family:'Fira Code'">_alertRepository.IsOpen()</code>일 때만
+        <code style="font-family:'Fira Code'">AlertsReady</code>/<code style="font-family:'Fira Code'">StatusReady</code>를 쏘도록 가드돼 있었는데,
+        읽기 전용 모드라 파일이 없으면 <code style="font-family:'Fira Code'">Open()</code>이 영원히 실패해 <code style="font-family:'Fira Code'">IsOpen()</code>도 영원히 false —
+        이 시그널이 한 번도 안 나가 상태 갱신 슬롯 자체가 호출되지 않았다.
+      </p>
+      <div class="code-block">
+        <pre><span class="c-key">void</span> <span class="c-type">MetricsWorker</span>::<span class="c-fn">Refresh</span>()
+{
+    <span class="c-comment">// ...</span>
+    emit MetricsReady(_repository.FetchLatestMetrics(kFetchLimit));
+
+    <span class="c-key">if</span> (_alertRepository.IsOpen())  <span class="c-comment">// DB 파일이 없으면 영원히 false</span>
+    {
+        emit AlertsReady(_alertRepository.FetchOpenAlerts(kFetchLimit));
+        emit StatusReady(_alertRepository.FetchStatus());  <span class="c-comment">// → 한 번도 안 불림</span>
+    }
+}</pre>
+      </div>
+    </div>
+
+    <div class="fix-block">
+      <div class="fix-header">수정 — 가드 제거, 항상 조회를 시도(내부에서 이미 실패를 안전하게 처리)</div>
+      <div class="code-block">
+        <pre><span class="c-key">void</span> <span class="c-type">MetricsWorker</span>::<span class="c-fn">Refresh</span>()
+{
+    <span class="c-comment">// ...</span>
+    emit MetricsReady(_repository.FetchLatestMetrics(kFetchLimit));
+
+    <span class="c-comment">// Fetch*는 연결이 안 열려 있어도 QSqlQuery::exec() 실패를 내부에서 잡아
+    // 빈 결과/valid=false를 안전하게 반환하도록 이미 설계돼 있음 - 가드 불필요</span>
+    emit AlertsReady(_alertRepository.FetchOpenAlerts(kFetchLimit));
+    emit StatusReady(_alertRepository.FetchStatus());
+}</pre>
+      </div>
+      <div class="spotlight-note">
+        수정 후 화면 캡처로 재검증 — "Agent 상태: 알 수 없음(agent_alerts.db에 상태 없음)"으로 정상 표시됨을 확인.
+        빌드/단위테스트만으로는 못 잡는, <strong>실제 화면으로 시나리오를 재현해야만</strong> 드러나는 유형의 버그 — 이 포트폴리오 전체를 관통하는 주제("실제 실행/렌더링으로 검증")와 같은 패턴이 Qt 트랙에서도 그대로 재현됐다.
       </div>
     </div>
 
@@ -1370,6 +1421,18 @@ metricStoreQueue.Push([storePtr, pkt]() { storePtr-&gt;Store(pkt); });</pre>
           <td class="before">진단 로그 자체가 스레드 간 문자 단위로 뒤섞임</td>
           <td>여러 스레드가 같은 std::cout에 동시 접근 + sync_with_stdio(false)가 안전장치 제거(위 "스케일 테스트" Round 5 참고)</td>
           <td class="after">콘솔 출력을 전용 워커 스레드 하나로 전부 위임 — 성능 지표 불변 재확인</td>
+        </tr>
+        <tr>
+          <td>MetricsBroadcastServer(Qt 트랙)</td>
+          <td class="before">컴파일 불가 + 설계 의도 파괴 위험</td>
+          <td>asio::io_context를 참조가 아니라 값으로 선언(복사 불가 타입) + Notify() 선언 누락 + 오타 5건(경로명/스코프 지정자/함수명/이터레이터 인자)</td>
+          <td class="after">참조로 수정 + 누락 선언 추가 + 오타 전부 정정 후 클린 빌드로 재검증</td>
+        </tr>
+        <tr>
+          <td>Agent/main.cpp(Qt 트랙 §7)</td>
+          <td class="before">컴파일 불가</td>
+          <td>스케줄러 콜백 람다의 캡처 목록에 &amp;alertStore 누락</td>
+          <td class="after">캡처 추가 후 재빌드로 확인</td>
         </tr>
       </tbody>
     </table>
