@@ -1004,3 +1004,34 @@ Qt ── 로컬 IPC(QLocalSocket) ──→ Agent (제어 4종)
 - 결과: `origin/main` == `origin/master` == 로컬 `master` == `90d5223` "Note the previous commit in WORK_STATUS.md"로 전부 일치. 브랜치 불일치 이슈 해소.
 
 **남은 것**: Windows PC 등 다른 체크아웃은 다음에 이 저장소를 받을 때 `origin/main`의 히스토리가 재작성됐으므로 기존 로컬 브랜치를 그대로 `pull`하면 충돌 — `git fetch` 후 `git reset --hard origin/main`(또는 새로 clone) 필요. 사용자에게 이 점 안내 필요.
+
+---
+
+### 9순위(신규 트랙) — 포트폴리오 마감 + 면접 학습 자료 🟡 진행 중(2026-09-28)
+
+**포트폴리오 마감 판단(2026-09-28)**: 사용자 요청으로 `Docs/portfolio_apm_light.html` 전문을 다시 읽고 제출 가능 여부를 판단 → **"이대로 마감 가능(합격)"**으로 결론. 근거는 (1) 실행 화면·수치가 전부 실측이고 불리한 결과까지 기록되어 있어 신뢰도가 높음, (2) "전 직장 도메인 중복" 우려는 해소(자료 반출 없음, 고유 명칭/화면/기능 모방 없음, 셸 원격 제어는 코드에 아예 없고 고정 명령 4개뿐 — `Agent/AgentControlServer.cpp:78-92`로 확인), (3) 남은 위험("적힌 내용을 설명하지 못함")은 문서 수정이 아니라 학습으로 해결할 문제. 제목 변경("장비 모니터링·관제 시스템")과 분량 축소는 **선택 사항으로만 남김 — 사용자 요청 없으면 착수 금지**.
+
+**면접 학습 자료 트랙 시작**: 포트폴리오에 적힌 주장을 사용자가 직접 방어할 수 있게 만드는 것이 목적. 형태는 **개념 설명 + 예상 질문/답변 결합**(사용자 선택), 주제당 문서 1개씩 순차 작성.
+
+| # | 주제 | 문서 | 상태 |
+|---|---|---|---|
+| 1 | 성능 측정(strace, 백분위, 병목 분석) | `Docs/STUDY_PERF_MEASUREMENT.md` | ✅ 작성 완료(2026-09-28) |
+| 2 | 동시성(WorkerQueue, 데이터 레이스, Lock.cpp) | `Docs/STUDY_CONCURRENCY.md` | ✅ 작성 완료(2026-09-29) |
+| 3 | SQLite(저널 모드, WAL 내부, 인덱스) | 미작성 | ⬜ 대기 |
+| 4 | 암호화(TLS, AES-GCM, nonce, replay) | 미작성 | ⬜ 대기 |
+| 5 | 비동기 I/O(Asio, proactor/reactor) | 미작성 | ⬜ 대기 |
+| 6 | Qt(스레드 친화성, Model/View, 시그널/슬롯) | 미작성 | ⬜ 대기 |
+
+**1번 작성 중 새로 확인한 사실(문서에 반영됨)**:
+- `LoadTester`의 지연시간은 "Enqueue → 전송 완료 콜백"이다(`LoadTester/SimulatedAgent.cpp:81-91`) — 서버 응답까지의 종단 간 지연이 아님. 면접 시 이 한계를 먼저 밝히는 편이 안전.
+- `LoadTester`는 `_ioContext.run()` 단일 호출(`LoadTester/LoadTester.cpp:33`) — 300개 시뮬레이션 에이전트가 한 스레드에서 돌아가므로, 300-agent 구간 수치엔 생성기 쪽 지연이 섞였을 가능성을 배제 못 함. **이 실험의 가장 큰 약점이라 답변 준비 필요.**
+- 백분위 계산이 C++(`LoadTestStats.cpp`, 보간 없이 `p*(n-1)` 인덱스 버림)과 C#(Console, 선형 보간)에서 서로 다름 — 같은 프로젝트 안에 두 정의가 공존.
+- 100-agent p99가 1,010ms인 이유는 **미규명**. 재연결 타이머는 5초(`Common/ResilientSender.cpp:67`)라 그건 아님. 확인하려면 지연시간 분포 히스토그램 필요.
+
+**다음 할 일**: 사용자가 1번 자료를 읽고 형태가 맞는지 확인 → 맞으면 2번(동시성)부터 같은 형식으로 순차 작성.
+
+**1편 검토 결과 반영(2026-09-29)**: 사용자 요청으로 1편 사실관계를 코드/실측 파일과 대조해 오류 4건 수정(futex 57%가 드러난 라운드 번호, 워커 스레드 수 3개→2개, `fcntl` +437%가 시간 기준인데 호출 수에 붙여 적은 것, `notify_one` 설명). 같은 검토에서 `Docs/PROJECT_TECHNICAL_REVIEW.md` 645행의 "워커 스레드를 1개→3개" 오류를 발견해 **수정 완료**(실제 워커는 2개 — `Collector/main.cpp:56,61`, 전체 스레드 4개). 포트폴리오 HTML에는 워커 개수 언급이 없어 무수정.
+
+**추가 확인 사항**: `loadtest_results/`에 WAL 적용(07-28 12:21)과 로깅 수정(07-29 00:43) 사이의 100-agent 실행이 **없음** — 포트폴리오 표의 "Round 3(WAL) → 100/100" 칸은 직접 측정값이 아니라 앞 라운드에서 이어진 값이다(결과 자체는 앞뒤 모두 100/100이라 틀린 건 아님). 면접에서 "WAL 후 전체 매트릭스를 다시 돌렸나"라는 질문에는 "WAL 라운드는 300-agent `strace -f`로만 재측정했다"가 정확한 답.
+
+**2편 작성 중 새로 발견한 잠재 결함 → ✅ 수정 완료(2026-09-29)**: `Collector/main.cpp`의 선언 순서가 `metricStoreQueue`(56행) → `ioContext`(67행)라서, 소멸은 역순이므로 **`ioContext`가 워커 큐보다 먼저 소멸**한다. `metricStoreQueue` 소멸자는 남은 job을 다 비우는데 그 job 안에 `asio::post(ioContext, ...)`가 있어(89~105행), 정상 종료 경로가 생기면 소멸된 `ioContext`에 post하게 된다. 현재는 `ioContext.run()`이 무한 루프이고 시그널로만 종료돼 `main()` 스코프 종료에 도달하지 않으므로 **실제 발생하지는 않음**. 사용자 승인(2026-09-29)으로 `asio::io_context ioContext;` 선언을 두 `WorkerQueue` 선언보다 위로 이동. 새 소멸 순서는 `broadcastServer` → `pendingMetrics` → `consoleLogQueue` → `metricStoreQueue` → `ioContext` → `store`. `broadcastServer`가 워커 큐보다 먼저 소멸하지만, 드레인 중의 `asio::post`는 핸들러를 큐에 넣을 뿐이고 실행 주체가 없어 그 핸들러가 절대 실행되지 않으므로(io_context 소멸자가 미실행 핸들러 파괴) 안전. **검증**: `cmake --build build -j4` 전체 성공, `ctest` 18/18 통과. 동작·성능 변화 없어 실측 재측정 불필요, 포트폴리오 무영향. 코드 전문은 `Docs/SESSION_LOG.md` 2026-09-29 항목.
