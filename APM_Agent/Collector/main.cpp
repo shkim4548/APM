@@ -49,6 +49,13 @@ int main()
 
         auto store = CreateMetricStore(STORAGE_CONNECTION_INFO, config.metricsRetentionDays);
 
+        // 아래 두 WorkerQueue보다 먼저 선언해야 한다 - 소멸은 선언의 역순이므로, ioContext가
+        // 워커 큐보다 뒤에 선언되면 워커 큐 소멸자가 남은 job을 비우는 시점에 ioContext가 이미
+        // 소멸돼 있다(metricStoreQueue의 job이 asio::post(ioContext, ...)를 호출함).
+        // 현재는 ioContext.run()이 무한 루프이고 시그널로만 종료돼 이 스코프 종료에 도달하지
+        // 않지만, 정상 종료 경로가 생기는 순간 문제가 되므로 선언 순서로 미리 막아둔다.
+        asio::io_context ioContext;
+
         // 1-7: SqliteMetricStore::Store()의 fdatasync가 네트워크 스레드를 막지 못하게, 저장 호출을
         // 전용 워커 스레드로 넘기는 큐. storePtr은 store(unique_ptr)가 main() 스코프 내내 살아있는
         // 것에 기대는 non-owning 포인터 - 워커 스레드도 main()이 끝나기 전까지만 존재하므로 안전.
@@ -62,8 +69,6 @@ int main()
 
         // Collector가 받은 뒤 아직 WebServer로 안 보낸 메트릭들 - 주기/CLI 트리거로 비워짐.
         std::vector<apm::Metric> pendingMetrics;
-
-        asio::io_context ioContext;
 
         // 2026-09-14(§6 후속) : 지표를 저장할 때마다 로컬 구독자(Qt)에게 핑을 쏜다.
         // ioContext 선언 다음이어야 함(생성자가 참조를 받음).
